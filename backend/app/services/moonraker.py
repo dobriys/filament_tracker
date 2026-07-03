@@ -1,0 +1,346 @@
+"""Клиент Moonraker (совместим с Rinkhals).
+
+Делает HTTP-запросы к Moonraker API и нормализует ответы. Парсеры вынесены
+отдельными функциями, чтобы их можно было тестировать без живого принтера.
+Аутентификация — заголовок X-Api-Key (если задан ключ).
+"""
+import httpx
+
+DEFAULT_TIMEOUT = 5.0
+
+
+def parse_printer_info(payload: dict) -> dict:
+    r = payload.get("result", payload) or {}
+    return {
+        "state": r.get("state"),
+        "state_message": r.get("state_message"),
+        "hostname": r.get("hostname"),
+        "software_version": r.get("software_version"),
+    }
+
+
+def parse_status(payload: dict) -> dict:
+    r = payload.get("result", payload) or {}
+    status = r.get("status", {}) or {}
+    ps = status.get("print_stats", {}) or {}
+    ds = status.get("display_status", {}) or {}
+    bed = status.get("heater_bed", {}) or {}
+    ext = status.get("extruder", {}) or {}
+    fan = status.get("fan", {}) or {}
+    gm = status.get("gcode_move", {}) or {}
+    box_fan = status.get("fan_generic box_fan", {}) or {}
+    air_fan = status.get("fan_generic air_filter_fan", {}) or {}
+    return {
+        "state": ps.get("state"),
+        "filename": ps.get("filename") or None,
+        "print_duration_sec": ps.get("print_duration"),
+        "total_duration_sec": ps.get("total_duration"),
+        "filament_used_mm": ps.get("filament_used"),
+        "progress": ds.get("progress"),
+        "nozzle_temp": ext.get("temperature"),
+        "nozzle_target": ext.get("target"),
+        "bed_temp": bed.get("temperature"),
+        "bed_target": bed.get("target"),
+        # телеметрия
+        "part_fan": fan.get("speed"),               # обдув модели, 0..1
+        "box_fan": box_fan.get("speed"),            # вентилятор корпуса, 0..1
+        "air_filter_fan": air_fan.get("speed"),     # фильтр воздуха, 0..1
+        "speed_factor": gm.get("speed_factor"),     # множитель скорости
+        "extrude_factor": gm.get("extrude_factor"), # множитель потока
+    }
+
+
+def parse_hub(payload: dict) -> list[dict]:
+    """Гейты ACE-хаба (ota_filament_hub → mmu): занятость, материал, цвет.
+
+    Гейты нумеруются с 0; физический слот принтера = gate + 1.
+    Цвет приходит как RGBA-hex (B81B0EFF) — обрезаем до #RRGGBB.
+    """
+    r = payload.get("result", payload) or {}
+    mmu = (r.get("status", {}) or {}).get("mmu", {}) or {}
+    n = mmu.get("num_gates") or 0
+    statuses = mmu.get("gate_status") or []
+    materials = mmu.get("gate_material") or []
+    colors = mmu.get("gate_color") or []
+    temps = mmu.get("gate_temperature") or []
+    gates = []
+    for i in range(n):
+        raw = (colors[i] if i < len(colors) else "") or ""
+        gates.append(
+            {
+                "gate": i,
+                "slot_index": i + 1,
+                "occupied": bool(statuses[i]) if i < len(statuses) else False,
+                "material": (materials[i] if i < len(materials) else None) or None,
+                "color_hex": f"#{raw[:6]}" if len(raw) >= 6 else None,
+                "temp": temps[i] if i < len(temps) else None,
+            }
+        )
+    return gates
+
+
+def parse_dryer(payload: dict) -> dict | None:
+    """Состояние сушки ACE (Rinkhals: mmu_machine.unit_N.dryer_*).
+
+    Возвращает первый юнит с данными: status ("stop"/"drying"/"heater_err"),
+    температуры, остаток в минутах, влажность. None — сушки нет (обычный принтер).
+    """
+    r = payload.get("result", payload) or {}
+    machine = (r.get("status", {}) or {}).get("mmu_machine", {}) or {}
+    units = []
+    for key, u in machine.items():
+        if not (isinstance(u, dict) and key.startswith("unit_")):
+            continue
+        if "dryer_status" not in u:
+            continue
+        units.append(
+            {
+                "unit": int(key.split("_")[1]),
+                "status": u.get("dryer_status", "stop"),
+                "temp": u.get("dryer_temp", 0),
+                "target_temp": u.get("dryer_target_temp", 0),
+                "remaining_min": u.get("dryer_remaining", 0),
+                "humidity": u.get("dryer_humidity", 0),
+            }
+        )
+    if not units:
+        return None
+    units.sort(key=lambda x: (x["status"] != "drying", x["unit"]))
+    return units[0]
+
+
+def parse_totals(payload: dict) -> dict:
+    """Статистика за всю жизнь принтера (/server/history/totals)."""
+    t = (payload.get("result", payload) or {}).get("job_totals", {}) or {}
+    return {
+        "total_jobs": int(t.get("total_jobs") or 0),
+        "total_print_time_sec": t.get("total_print_time"),
+        "total_time_sec": t.get("total_time"),
+        "total_filament_mm": t.get("total_filament_used"),
+        "longest_print_sec": t.get("longest_print"),
+    }
+
+
+def _norm_material(s: str | None) -> str:
+    return (s or "").upper().replace(" ", "")
+
+
+def _color_distance(a: str | None, b: str | None) -> float | None:
+    """Евклидово расстояние RGB (0..441); None, если один из цветов не задан."""
+    try:
+        a, b = a.lstrip("#"), b.lstrip("#")
+        av = [int(a[i : i + 2], 16) for i in (0, 2, 4)]
+        bv = [int(b[i : i + 2], 16) for i in (0, 2, 4)]
+        return sum((x - y) ** 2 for x, y in zip(av, bv)) ** 0.5
+    except Exception:
+        return None
+
+
+COLOR_MATCH_THRESHOLD = 60.0
+
+
+def match_gate(gate: dict, spool_material: str | None, spool_color: str | None) -> str:
+    """Сверка гейта хаба с катушкой из слота приложения.
+
+    Возвращает вердикт:
+      match      — материал и цвет согласуются;
+      mismatch   — принтер видит другой филамент (или слот пуст, а катушка назначена);
+      unassigned — филамент в принтере есть, катушка в приложении не привязана;
+      empty      — и гейт пуст, и катушки нет.
+    """
+    has_spool = bool(spool_material or spool_color)
+    if not gate.get("occupied"):
+        return "mismatch" if has_spool else "empty"
+    if not has_spool:
+        return "unassigned"
+    hub_m, sp_m = _norm_material(gate.get("material")), _norm_material(spool_material)
+    material_ok = not hub_m or not sp_m or hub_m in sp_m or sp_m in hub_m
+    dist = _color_distance(gate.get("color_hex"), spool_color)
+    color_ok = dist is None or dist <= COLOR_MATCH_THRESHOLD
+    return "match" if material_ok and color_ok else "mismatch"
+
+
+def parse_history(payload: dict) -> list[dict]:
+    r = payload.get("result", payload) or {}
+    jobs = r.get("jobs", []) or []
+    out = []
+    for j in jobs:
+        meta = j.get("metadata", {}) or {}
+        out.append(
+            {
+                "job_id": j.get("job_id"),
+                "filename": j.get("filename"),
+                "status": j.get("status"),
+                "start_time": j.get("start_time"),
+                "end_time": j.get("end_time"),
+                "print_duration_sec": j.get("print_duration"),
+                "total_duration_sec": j.get("total_duration"),
+                "filament_used_mm": j.get("filament_used"),
+                "filament_total_g": meta.get("filament_weight_total"),
+                "slicer": meta.get("slicer"),
+            }
+        )
+    return out
+
+
+def job_to_parsed(job: dict) -> dict:
+    """Конвертирует задание из истории Moonraker в наш формат print job.
+
+    Anycubic/Rinkhals кладут в metadata пофиловый расход в граммах
+    (filament_weights), материалы и цвета — этого достаточно для списания.
+    """
+    meta = job.get("metadata", {}) or {}
+    weights = meta.get("filament_weights") or []
+    types = [t.strip() for t in (meta.get("filament_type") or "").replace('"', "").split(";") if t.strip() != ""]
+    colors = meta.get("filament_colors") or meta.get("extruder_colors") or []
+    n = max(len(weights), len(types), len(colors))
+    tools = []
+    for i in range(n):
+        tools.append(
+            {
+                "tool_index": i,
+                "material": types[i] if i < len(types) else None,
+                "color_hex": colors[i] if i < len(colors) else None,
+                "used_g": weights[i] if i < len(weights) else None,
+                "used_mm": None,
+                "density_g_cm3": None,
+            }
+        )
+    est = meta.get("estimated_time")
+    jid = job.get("job_id")
+    return {
+        "file_name": job.get("filename"),
+        "file_hash": meta.get("uuid"),
+        "moonraker_job_id": str(jid) if jid is not None else None,
+        "slicer_name": meta.get("slicer"),
+        "slicer_version": meta.get("slicer_version"),
+        "diameter_mm": meta.get("nozzle_diameter"),
+        "estimated_print_time_sec": int(est) if est else None,
+        "filament_change_count": None,
+        "tool_count": n,
+        "total_filament_used_g": meta.get("filament_weight_total"),
+        "total_filament_used_mm": job.get("filament_used"),
+        "tools": tools,
+    }
+
+
+class MoonrakerClient:
+    def __init__(
+        self,
+        url: str,
+        api_key: str | None = None,
+        timeout: float = DEFAULT_TIMEOUT,
+        transport: httpx.BaseTransport | None = None,
+    ):
+        if not url:
+            raise ValueError("Moonraker URL не задан")
+        self.base = url.rstrip("/")
+        self.headers = {"X-Api-Key": api_key} if api_key else {}
+        self.timeout = timeout
+        self._transport = transport  # для тестов (httpx.MockTransport)
+
+    def _get(self, path: str) -> dict:
+        with httpx.Client(
+            timeout=self.timeout, headers=self.headers, transport=self._transport
+        ) as client:
+            resp = client.get(f"{self.base}{path}")
+            resp.raise_for_status()
+            return resp.json()
+
+    def test_connection(self) -> dict:
+        """Возвращает {ok, detail, info?} — никогда не бросает наружу."""
+        try:
+            info = parse_printer_info(self._get("/printer/info"))
+            state = info.get("state") or "unknown"
+            return {
+                "ok": True,
+                "detail": f"Подключено. Состояние: {state}",
+                "info": info,
+            }
+        except httpx.HTTPStatusError as e:
+            code = e.response.status_code
+            hint = " (проверьте API-ключ)" if code in (401, 403) else ""
+            return {"ok": False, "detail": f"HTTP {code}{hint}"}
+        except httpx.HTTPError as e:
+            return {"ok": False, "detail": f"Нет соединения: {type(e).__name__}"}
+        except Exception as e:  # pragma: no cover
+            return {"ok": False, "detail": f"Ошибка: {e}"}
+
+    def get_status(self) -> dict:
+        path = (
+            "/printer/objects/query?print_stats&display_status&heater_bed&extruder"
+            "&fan&gcode_move&fan_generic%20box_fan&fan_generic%20air_filter_fan"
+        )
+        return parse_status(self._get(path))
+
+    def get_hub(self) -> list[dict]:
+        """Гейты ACE-хаба; пустой список, если хаба нет (обычный принтер)."""
+        try:
+            return parse_hub(self._get("/printer/objects/query?ota_filament_hub"))
+        except Exception:
+            return []
+
+    def get_hub_data(self) -> dict:
+        """Гейты + состояние сушки одним запросом."""
+        try:
+            payload = self._get("/printer/objects/query?ota_filament_hub")
+            return {"gates": parse_hub(payload), "dryer": parse_dryer(payload)}
+        except Exception:
+            return {"gates": [], "dryer": None}
+
+    def _post(self, path: str, json_body: dict) -> dict:
+        with httpx.Client(
+            timeout=self.timeout, headers=self.headers, transport=self._transport
+        ) as client:
+            resp = client.post(f"{self.base}{path}", json=json_body)
+            resp.raise_for_status()
+            return resp.json()
+
+    def start_drying(self, *, temp_c: int, duration_min: int, unit: int = 0) -> dict:
+        """Включить сушку ACE (Rinkhals /server/filament_hub/start_drying)."""
+        return self._post(
+            "/server/filament_hub/start_drying",
+            {"id": unit, "temp": temp_c, "duration": duration_min, "fan_speed": 0},
+        )
+
+    def stop_drying(self, *, unit: int = 0) -> dict:
+        return self._post("/server/filament_hub/stop_drying", {"id": unit})
+
+    def get_totals(self) -> dict | None:
+        try:
+            return parse_totals(self._get("/server/history/totals"))
+        except Exception:
+            return None
+
+    def get_system(self) -> dict:
+        """Служебное: версии, CPU, ОС. Ошибки отдельных запросов не фатальны."""
+        out: dict = {}
+        try:
+            info = parse_printer_info(self._get("/printer/info"))
+            out["klipper_version"] = info.get("software_version")
+            out["hostname"] = info.get("hostname")
+        except Exception:
+            pass
+        try:
+            r = self._get("/server/info").get("result", {})
+            out["moonraker_version"] = r.get("moonraker_version")
+        except Exception:
+            pass
+        try:
+            si = (self._get("/machine/system_info").get("result", {}) or {}).get(
+                "system_info", {}
+            )
+            cpu = si.get("cpu_info", {}) or {}
+            out["cpu"] = cpu.get("cpu_desc") or cpu.get("model")
+            out["os"] = (si.get("distribution", {}) or {}).get("name")
+        except Exception:
+            pass
+        return out
+
+    def list_history(self, limit: int = 20) -> list[dict]:
+        return parse_history(self._get(f"/server/history/list?limit={limit}"))
+
+    def history_raw(self, limit: int = 50) -> list[dict]:
+        """Сырые задания истории (с metadata) — для импорта в списание."""
+        r = self._get(f"/server/history/list?limit={limit}")
+        return (r.get("result", r) or {}).get("jobs", []) or []

@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 360" font-family="Segoe UI, Roboto, Arial, sans-serif">
+  <rect width="860" height="360" rx="14" fill="#fafafb"/>
+  <text x="30" y="46" font-size="22" font-weight="700" fill="#171a1f">Filament Tracker — как всё связано</text>
+
+  <!-- User -->
+  <g>
+    <rect x="30" y="90" width="150" height="90" rx="12" fill="#eef2ff" stroke="#426ef0"/>
+    <text x="105" y="128" text-anchor="middle" font-size="26">🧑‍🔧</text>
+    <text x="105" y="158" text-anchor="middle" font-size="15" font-weight="600" fill="#171a1f">Вы (браузер)</text>
+  </g>
+
+  <!-- Frontend -->
+  <g>
+    <rect x="240" y="70" width="180" height="130" rx="12" fill="#ffffff" stroke="#dee1e6"/>
+    <text x="330" y="108" text-anchor="middle" font-size="15" font-weight="700" fill="#171a1f">Веб-интерфейс</text>
+    <text x="330" y="132" text-anchor="middle" font-size="12" fill="#6b7280">React + Vite</text>
+    <text x="330" y="158" text-anchor="middle" font-size="12" fill="#6b7280">порт 5173</text>
+    <text x="330" y="182" text-anchor="middle" font-size="12" fill="#6b7280">этикетки · QR · дашборд</text>
+  </g>
+
+  <!-- Backend -->
+  <g>
+    <rect x="480" y="70" width="180" height="130" rx="12" fill="#ffffff" stroke="#dee1e6"/>
+    <text x="570" y="108" text-anchor="middle" font-size="15" font-weight="700" fill="#171a1f">Сервер (API)</text>
+    <text x="570" y="132" text-anchor="middle" font-size="12" fill="#6b7280">FastAPI · порт 8000</text>
+    <text x="570" y="158" text-anchor="middle" font-size="12" fill="#6b7280">учёт · списание · PDF</text>
+    <text x="570" y="182" text-anchor="middle" font-size="12" fill="#6b7280">интеграция Moonraker</text>
+  </g>
+
+  <!-- DB + Redis -->
+  <g>
+    <rect x="710" y="70" width="120" height="60" rx="12" fill="#f0fdf4" stroke="#16a34a"/>
+    <text x="770" y="98" text-anchor="middle" font-size="13" font-weight="700" fill="#171a1f">PostgreSQL</text>
+    <text x="770" y="117" text-anchor="middle" font-size="11" fill="#6b7280">данные</text>
+    <rect x="710" y="140" width="120" height="60" rx="12" fill="#fff7ed" stroke="#ea580c"/>
+    <text x="770" y="168" text-anchor="middle" font-size="13" font-weight="700" fill="#171a1f">Redis</text>
+    <text x="770" y="187" text-anchor="middle" font-size="11" fill="#6b7280">очередь задач</text>
+  </g>
+
+  <!-- Printer -->
+  <g>
+    <rect x="480" y="250" width="180" height="80" rx="12" fill="#eef2ff" stroke="#426ef0"/>
+    <text x="570" y="286" text-anchor="middle" font-size="24">🖨️</text>
+    <text x="570" y="312" text-anchor="middle" font-size="13" font-weight="600" fill="#171a1f">Принтер (Moonraker)</text>
+  </g>
+
+  <!-- arrows -->
+  <g stroke="#98a2b3" stroke-width="2" fill="none" marker-end="url(#a)">
+    <path d="M180 135 H236"/>
+    <path d="M420 135 H476"/>
+    <path d="M660 120 H706"/>
+    <path d="M660 160 H706"/>
+    <path d="M570 250 V204"/>
+  </g>
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0 0 L8 3 L0 6 Z" fill="#98a2b3"/>
+    </marker>
+  </defs>
+  <text x="430" y="245" font-size="11" fill="#6b7280">HTTP по локальной сети</text>
+</svg>

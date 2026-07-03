@@ -1,0 +1,216 @@
+"""Создание печатей из распарсенного gcode и списание по слотам.
+
+Логика списания (раздел 7 ТЗ):
+  print_job_tool_usage -> по tool_index найти slot -> текущая катушка слота ->
+  проверить остаток -> создать print_job_spool_usage -> уменьшить вес ->
+  записать spool_event(print_usage).
+"""
+from datetime import datetime, timezone
+from decimal import Decimal
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import (
+    PrinterSlot,
+    PrintJob,
+    PrintJobSpoolUsage,
+    PrintJobToolUsage,
+    Spool,
+    User,
+)
+from app.services import settings_service, spool_service
+
+
+class ConsumptionError(Exception):
+    def __init__(self, problems: list[dict]):
+        self.problems = problems
+        super().__init__("Невозможно списать печать")
+
+
+def create_from_parsed(
+    db: Session, *, owner: User, printer_id, parsed: dict, source: str = "manual_upload"
+) -> PrintJob:
+    job = PrintJob(
+        owner_user_id=owner.id,
+        printer_id=printer_id,
+        source=source,
+        file_name=parsed.get("file_name"),
+        file_hash=parsed.get("file_hash"),
+        slicer_name=parsed.get("slicer_name"),
+        slicer_version=parsed.get("slicer_version"),
+        estimated_print_time_sec=parsed.get("estimated_print_time_sec"),
+        filament_change_count=parsed.get("filament_change_count"),
+        total_filament_used_g=parsed.get("total_filament_used_g"),
+        total_filament_used_mm=parsed.get("total_filament_used_mm"),
+        status="draft",
+        parsed_metadata={
+            k: parsed.get(k)
+            for k in ("slicer_name", "diameter_mm", "tool_count", "moonraker_job_id")
+        },
+    )
+    db.add(job)
+    db.flush()
+
+    for t in parsed.get("tools", []):
+        db.add(
+            PrintJobToolUsage(
+                print_job_id=job.id,
+                tool_index=t["tool_index"],
+                slot_index=None,
+                material=t.get("material"),
+                color_hex=t.get("color_hex"),
+                used_g=t.get("used_g"),
+                used_mm=t.get("used_mm"),
+                parsed_metadata={"density_g_cm3": t.get("density_g_cm3")},
+            )
+        )
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def jobs_cost(db: Session, job_ids: list) -> dict:
+    """Себестоимость печатей по фактическим списаниям.
+
+    Цена за грамм берётся из spool_service.price_per_gram (учитывает вес
+    катушки на момент заведения — початая катушка не занижает итог).
+    Возвращает {job_id: {cost, currency, partial}}, где partial=True — часть
+    списаний была с катушек без цены (итог занижен).
+    """
+    if not job_ids:
+        return {}
+    rows = db.execute(
+        select(
+            PrintJobSpoolUsage.print_job_id,
+            PrintJobSpoolUsage.spool_id,
+            PrintJobSpoolUsage.used_g,
+        ).where(PrintJobSpoolUsage.print_job_id.in_(job_ids))
+    ).all()
+    ppg = spool_service.price_per_gram(db, list({r[1] for r in rows}))
+    out: dict = {}
+    for jid, spool_id, used_g in rows:
+        entry = out.setdefault(jid, {"cost": 0.0, "currency": None, "partial": False})
+        p = ppg.get(spool_id)
+        if p is None:
+            entry["partial"] = True
+            continue
+        entry["cost"] += float(used_g) * p[0]
+        entry["currency"] = entry["currency"] or p[1]
+    # печати, где ни одной катушки с ценой, — цены нет вовсе
+    return {k: v for k, v in out.items() if v["currency"] is not None}
+
+
+def tool_usage(db: Session, job: PrintJob) -> list[PrintJobToolUsage]:
+    return list(
+        db.scalars(
+            select(PrintJobToolUsage)
+            .where(PrintJobToolUsage.print_job_id == job.id)
+            .order_by(PrintJobToolUsage.tool_index)
+        )
+    )
+
+
+def confirm_usage(
+    db: Session,
+    job: PrintJob,
+    *,
+    user: User,
+    mappings: list[dict],  # [{tool_index, slot_id}]
+    allow_negative_requested: bool = False,
+) -> PrintJob:
+    if job.status not in ("draft", "ready_to_consume"):
+        raise ConsumptionError(
+            [{"detail": f"Печать в статусе '{job.status}' нельзя списать"}]
+        )
+
+    map_by_tool = {m["tool_index"]: m for m in mappings}
+    allow_negative = allow_negative_requested and (
+        user.role == "admin" or settings_service.get_bool(db, settings_service.ALLOW_NEGATIVE_KEY)
+    )
+
+    rows = tool_usage(db, job)
+    plan = []  # (tool_row, slot, spool, used_g)
+    problems = []
+
+    for row in rows:
+        used = Decimal(row.used_g or 0)
+        if used <= 0:
+            continue
+        m = map_by_tool.get(row.tool_index)
+        spool_id = m.get("spool_id") if m else None
+        slot_id = m.get("slot_id") if m else None
+        slot = None
+        spool = None
+        if spool_id:
+            # прямая привязка к катушке из инвентаря
+            spool = db.get(Spool, spool_id)
+            if spool is None or spool.owner_user_id != user.id:
+                problems.append({"tool_index": row.tool_index, "detail": "Катушка не найдена"})
+                continue
+            if slot_id:
+                slot = db.get(PrinterSlot, slot_id)
+        elif slot_id:
+            slot = db.get(PrinterSlot, slot_id)
+            if slot is None or slot.current_spool_id is None:
+                problems.append({"tool_index": row.tool_index, "detail": "В слоте нет катушки"})
+                continue
+            spool = db.get(Spool, slot.current_spool_id)
+        else:
+            problems.append({"tool_index": row.tool_index, "detail": "Не выбран филамент"})
+            continue
+        left = Decimal(spool.current_weight_g)
+        if left < used and not allow_negative:
+            problems.append(
+                {
+                    "tool_index": row.tool_index,
+                    "detail": "Недостаточно остатка",
+                    "needed_g": float(used),
+                    "available_g": float(left),
+                }
+            )
+            continue
+        plan.append((row, slot, spool, used))
+
+    if problems:
+        raise ConsumptionError(problems)
+
+    now = datetime.now(timezone.utc)
+    for row, slot, spool, used in plan:
+        row.slot_index = slot.slot_index if slot else None
+        spool_service.consume(
+            db,
+            spool,
+            used_g=used,
+            user=user,
+            reason=f"Печать {job.file_name or job.id}",
+            metadata={"print_job_id": str(job.id), "tool_index": row.tool_index},
+            commit=False,
+        )
+        db.add(
+            PrintJobSpoolUsage(
+                print_job_id=job.id,
+                spool_id=spool.id,
+                printer_slot_id=slot.id if slot else None,
+                tool_index=row.tool_index,
+                used_g=used,
+                used_mm=row.used_mm,
+                confirmed_by_user_id=user.id,
+                confirmed_at=now,
+            )
+        )
+
+    job.status = "consumed"
+    job.completed_at = now
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def cancel(db: Session, job: PrintJob) -> PrintJob:
+    if job.status == "consumed":
+        raise ConsumptionError([{"detail": "Списанную печать нельзя отменить"}])
+    job.status = "cancelled"
+    db.commit()
+    db.refresh(job)
+    return job

@@ -1,0 +1,93 @@
+# Filament Tracker — единый compose для всех сценариев:
+#   ./setup.sh или docker compose up -d  — тянет готовые образы из GHCR;
+#   Portainer: вставьте этот файл в Web editor и задайте переменные стека;
+#   сборка из исходников: ./build.sh (или раскомментируйте build: ниже).
+# Переменные берутся из .env рядом с файлом или из окружения (Portainer).
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-filament}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-filament}
+      POSTGRES_DB: ${POSTGRES_DB:-filament_tracker}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-filament} -d ${POSTGRES_DB:-filament_tracker}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: ghcr.io/dobriys/filament_tracker/backend:${FT_VERSION:-latest}
+    # Для сборки из исходников: docker compose -f docker-compose.yml build
+    # не нужен — выполните ./build.sh или раскомментируйте строку ниже.
+    # build: ./backend
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-filament}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-filament}
+      POSTGRES_DB: ${POSTGRES_DB:-filament_tracker}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      # Адреса по умолчанию определяются автоматически по адресу в браузере.
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-}
+      MOONRAKER_POLL_INTERVAL: ${MOONRAKER_POLL_INTERVAL:-30}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  worker:
+    image: ghcr.io/dobriys/filament_tracker/backend:${FT_VERSION:-latest}
+    # build: ./backend
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-filament}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-filament}
+      POSTGRES_DB: ${POSTGRES_DB:-filament_tracker}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      MOONRAKER_POLL_INTERVAL: ${MOONRAKER_POLL_INTERVAL:-30}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m app.workers.poller
+
+  frontend:
+    image: ghcr.io/dobriys/filament_tracker/frontend:${FT_VERSION:-latest}
+    # build: ./frontend
+    restart: unless-stopped
+    environment:
+      # Пусто = фронтенд сам берёт хост из адресной строки (порт API 8000)
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+
+volumes:
+  postgres_data:

@@ -1,0 +1,439 @@
+import time
+import uuid
+
+from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.security import decrypt_secret, encrypt_secret
+from app.db.session import get_db
+from app.deps import get_current_user
+from app.models import AppSetting, Printer, PrintJob, User
+from app.services.moonraker import MoonrakerClient
+from app.schemas.printer import (
+    PrinterCreate,
+    PrinterOut,
+    PrinterUpdate,
+    TestConnectionResult,
+)
+from app.schemas.slot import SlotCreate, SlotOut
+from app.services import settings_service, slot_service
+
+router = APIRouter(prefix="/printers", tags=["printers"])
+
+
+def _own(db: Session, user: User, printer_id: uuid.UUID) -> Printer:
+    printer = db.get(Printer, printer_id)
+    if printer is None or printer.owner_user_id != user.id:
+        raise HTTPException(status_code=404, detail="Принтер не найден")
+    return printer
+
+
+def _to_out(printer: Printer) -> dict:
+    return {
+        "id": printer.id,
+        "owner_user_id": printer.owner_user_id,
+        "name": printer.name,
+        "integration_type": printer.integration_type,
+        "moonraker_url": printer.moonraker_url,
+        "is_active": printer.is_active,
+        "notes": printer.notes,
+        "has_moonraker_key": bool(printer.moonraker_api_key_encrypted),
+        "created_at": printer.created_at,
+        "updated_at": printer.updated_at,
+    }
+
+
+@router.get("", response_model=list[PrinterOut])
+def list_printers(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    printers = db.scalars(
+        select(Printer).where(Printer.owner_user_id == user.id).order_by(Printer.name)
+    )
+    return [_to_out(p) for p in printers]
+
+
+@router.post("", response_model=PrinterOut, status_code=status.HTTP_201_CREATED)
+def create_printer(
+    data: PrinterCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    printer = Printer(
+        owner_user_id=user.id,
+        name=data.name,
+        integration_type=data.integration_type,
+        moonraker_url=data.moonraker_url,
+        moonraker_api_key_encrypted=(
+            encrypt_secret(data.moonraker_api_key) if data.moonraker_api_key else None
+        ),
+        is_active=data.is_active,
+        notes=data.notes,
+    )
+    db.add(printer)
+    db.flush()
+    for i in range(1, data.slot_count + 1):
+        slot_service.create_slot(
+            db, printer_id=printer.id, slot_index=i, name=None, is_active=True
+        )
+    db.commit()
+    db.refresh(printer)
+    return _to_out(printer)
+
+
+@router.get("/{printer_id}", response_model=PrinterOut)
+def get_printer(
+    printer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return _to_out(_own(db, user, printer_id))
+
+
+@router.patch("/{printer_id}", response_model=PrinterOut)
+def update_printer(
+    printer_id: uuid.UUID,
+    data: PrinterUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    printer = _own(db, user, printer_id)
+    payload = data.model_dump(exclude_unset=True)
+    if "moonraker_api_key" in payload:
+        key = payload.pop("moonraker_api_key")
+        printer.moonraker_api_key_encrypted = encrypt_secret(key) if key else None
+    for k, v in payload.items():
+        setattr(printer, k, v)
+    db.commit()
+    db.refresh(printer)
+    return _to_out(printer)
+
+
+@router.delete("/{printer_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_printer(
+    printer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    printer = _own(db, user, printer_id)
+    # Убираем зависимости в строгом порядке (core-запросы выполняются сразу),
+    # чтобы не упасть на внешних ключах.
+    from sqlalchemy import delete as sa_delete
+    from sqlalchemy import update as sa_update
+
+    from app.models import (
+        Printer as PrinterModel,
+        PrinterSlot,
+        PrintJob,
+        PrintJobSpoolUsage,
+        SlotAssignmentHistory,
+    )
+
+    slot_ids = list(
+        db.scalars(select(PrinterSlot.id).where(PrinterSlot.printer_id == printer.id))
+    )
+    if slot_ids:
+        db.execute(
+            sa_delete(SlotAssignmentHistory).where(
+                SlotAssignmentHistory.printer_slot_id.in_(slot_ids)
+            )
+        )
+        db.execute(
+            sa_update(PrintJobSpoolUsage)
+            .where(PrintJobSpoolUsage.printer_slot_id.in_(slot_ids))
+            .values(printer_slot_id=None)
+        )
+        db.execute(sa_delete(PrinterSlot).where(PrinterSlot.printer_id == printer.id))
+    # Печати оставляем в истории, только отвязываем от принтера.
+    db.execute(
+        sa_update(PrintJob).where(PrintJob.printer_id == printer.id).values(printer_id=None)
+    )
+    db.execute(sa_delete(PrinterModel).where(PrinterModel.id == printer.id))
+    db.commit()
+
+
+def _moonraker_client(printer: Printer) -> MoonrakerClient:
+    if printer.integration_type != "moonraker" or not printer.moonraker_url:
+        raise HTTPException(
+            status_code=400, detail="Принтер без интеграции Moonraker"
+        )
+    api_key = (
+        decrypt_secret(printer.moonraker_api_key_encrypted)
+        if printer.moonraker_api_key_encrypted
+        else None
+    )
+    return MoonrakerClient(printer.moonraker_url, api_key)
+
+
+@router.post("/{printer_id}/test-connection", response_model=TestConnectionResult)
+def test_connection(
+    printer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    printer = _own(db, user, printer_id)
+    if printer.integration_type == "manual":
+        return TestConnectionResult(ok=True, detail="Ручной принтер — проверка не требуется")
+    result = _moonraker_client(printer).test_connection()
+    return TestConnectionResult(ok=result["ok"], detail=result["detail"])
+
+
+@router.get("/{printer_id}/status")
+def printer_status(
+    printer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    printer = _own(db, user, printer_id)
+    try:
+        return _moonraker_client(printer).get_status()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Moonraker недоступен: {e}")
+
+
+def _annotate_consumption(db: Session, user: User, jobs: list[dict]) -> list[dict]:
+    """Помечает задания Moonraker признаком списания.
+
+    - `consumed_via="moonraker"` — по этому заданию уже создано списание из Moonraker;
+    - `consumed_via="manual"`    — файл с таким же именем уже списан вручную (из gcode).
+    Кнопка «Списать» на фронте выключается, когда `consumed=true`.
+    """
+    from app.services import print_job_service
+
+    pjs = list(db.scalars(select(PrintJob).where(PrintJob.owner_user_id == user.id)))
+    mr_by_id: dict[str, PrintJob] = {}
+    consumed_by_name: dict[str, PrintJob] = {}
+    for pj in pjs:
+        mid = (pj.parsed_metadata or {}).get("moonraker_job_id")
+        if pj.source == "moonraker" and mid:
+            mr_by_id[str(mid)] = pj
+        if pj.status == "consumed" and pj.file_name:
+            consumed_by_name[pj.file_name.split("/")[-1].strip().lower()] = pj
+    costs = print_job_service.jobs_cost(
+        db, [pj.id for pj in pjs if pj.status == "consumed"]
+    )
+    for j in jobs:
+        pj = mr_by_id.get(str(j.get("job_id")))
+        via = "moonraker" if (pj is not None and pj.status == "consumed") else None
+        cost_pj = pj if via else None
+        if via is None:
+            fn = (j.get("filename") or "").split("/")[-1].strip().lower()
+            if fn and fn in consumed_by_name:
+                via = "manual"
+                cost_pj = consumed_by_name[fn]
+        j["consumed"] = via is not None
+        j["consumed_via"] = via
+        j["print_job_id"] = str(pj.id) if pj is not None else None
+        c = costs.get(cost_pj.id) if cost_pj is not None else None
+        j["cost"] = round(c["cost"], 2) if c else None
+        j["cost_currency"] = c["currency"] if c else None
+    return jobs
+
+
+@router.get("/{printer_id}/overview")
+def printer_overview(
+    printer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Сводка принтера: статус, гейты ACE-хаба со сверкой со слотами приложения,
+    статистика за всю жизнь и служебная информация."""
+    from app.models import PrinterSlot, Spool
+    from app.services.moonraker import match_gate
+
+    printer = _own(db, user, printer_id)
+    client = _moonraker_client(printer)
+    try:
+        status_data = client.get_status()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Moonraker недоступен: {e}")
+
+    # гейты хаба + сверка со слотами приложения (gate N ↔ slot_index N+1)
+    slots = {
+        s.slot_index: s
+        for s in db.scalars(
+            select(PrinterSlot).where(PrinterSlot.printer_id == printer.id)
+        )
+    }
+    hub = client.get_hub_data()
+    gates = []
+    for g in hub["gates"]:
+        slot = slots.get(g["slot_index"])
+        spool = db.get(Spool, slot.current_spool_id) if slot and slot.current_spool_id else None
+        g["spool"] = (
+            {
+                "id": str(spool.id),
+                "label": spool.label,
+                "material": spool.material,
+                "color_hex": spool.color_hex,
+                "color_name": spool.color_name,
+            }
+            if spool
+            else None
+        )
+        g["verdict"] = match_gate(
+            g, spool.material if spool else None, spool.color_hex if spool else None
+        )
+        gates.append(g)
+
+    dryer = hub["dryer"]
+    if dryer and dryer.get("status") == "drying" and not dryer.get("remaining_min"):
+        # Rinkhals не отдаёт остаток времени — считаем сами по сушкам,
+        # запущенным из приложения (для запущенных с экрана принтера остатка нет).
+        row = db.get(AppSetting, f"dryer_session:{printer.id}")
+        sess = (row.value or {}).get("value") if row is not None else None
+        if isinstance(sess, dict) and sess.get("started"):
+            elapsed_min = (time.time() - sess["started"]) / 60
+            dryer["remaining_min"] = max(0, round(sess.get("duration_min", 0) - elapsed_min))
+
+    return {
+        "status": status_data,
+        "gates": gates,
+        "dryer": dryer,
+        "totals": client.get_totals(),
+        "system": client.get_system(),
+    }
+
+
+class DryerRequest(BaseModel):
+    action: str  # "start" | "stop"
+    temp_c: int | None = None
+    duration_min: int | None = None
+
+
+@router.post("/{printer_id}/dryer")
+def control_dryer(
+    printer_id: uuid.UUID,
+    data: DryerRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Включить/выключить сушку ACE (Rinkhals filament_hub API)."""
+    printer = _own(db, user, printer_id)
+    client = _moonraker_client(printer)
+    try:
+        if data.action == "start":
+            if not data.temp_c or not data.duration_min:
+                raise HTTPException(status_code=422, detail="Укажите температуру и время сушки")
+            if not (35 <= data.temp_c <= 70):
+                raise HTTPException(status_code=422, detail="Температура сушки: 35–70°C")
+            if not (1 <= data.duration_min <= 24 * 60):
+                raise HTTPException(status_code=422, detail="Время сушки: от 1 минуты до 24 часов")
+            client.start_drying(temp_c=data.temp_c, duration_min=data.duration_min)
+            settings_service.set_value(
+                db,
+                f"dryer_session:{printer.id}",
+                {"started": time.time(), "duration_min": data.duration_min},
+            )
+        elif data.action == "stop":
+            client.stop_drying()
+            settings_service.set_value(db, f"dryer_session:{printer.id}", None)
+        else:
+            raise HTTPException(status_code=422, detail="Неизвестное действие")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Moonraker недоступен: {e}")
+    return {"ok": True, "dryer": client.get_hub_data()["dryer"]}
+
+
+@router.get("/{printer_id}/moonraker-jobs")
+def moonraker_jobs(
+    printer_id: uuid.UUID,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    printer = _own(db, user, printer_id)
+    try:
+        jobs = _moonraker_client(printer).list_history(limit=limit)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Moonraker недоступен: {e}")
+    return _annotate_consumption(db, user, jobs)
+
+
+@router.post("/{printer_id}/moonraker-jobs/{job_id}/import")
+def import_moonraker_job(
+    printer_id: uuid.UUID,
+    job_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Создаёт черновик print job из задания Moonraker (для списания).
+
+    Идемпотентно: повторный импорт того же задания возвращает существующую печать,
+    чтобы не плодить дубли-черновики и не списать один расход дважды.
+    """
+    from app.services import moonraker, print_job_service
+
+    printer = _own(db, user, printer_id)
+    existing = db.scalar(
+        select(PrintJob).where(
+            PrintJob.owner_user_id == user.id,
+            PrintJob.source == "moonraker",
+            PrintJob.parsed_metadata["moonraker_job_id"].astext == str(job_id),
+        )
+    )
+    if existing is not None:
+        return {"print_job_id": str(existing.id), "status": existing.status}
+    try:
+        jobs = _moonraker_client(printer).history_raw(limit=100)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Moonraker недоступен: {e}")
+    raw = next((j for j in jobs if str(j.get("job_id")) == job_id), None)
+    if raw is None:
+        raise HTTPException(status_code=404, detail="Задание не найдено в истории Moonraker")
+    parsed = moonraker.job_to_parsed(raw)
+    job = print_job_service.create_from_parsed(
+        db, owner=user, printer_id=printer.id, parsed=parsed, source="moonraker"
+    )
+    return {"print_job_id": str(job.id), "status": job.status}
+
+
+# --- Слоты в контексте принтера ---
+@router.get("/{printer_id}/slots", response_model=list[SlotOut])
+def list_slots(
+    printer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    printer = _own(db, user, printer_id)
+    from app.models import PrinterSlot
+
+    slots = db.scalars(
+        select(PrinterSlot)
+        .where(PrinterSlot.printer_id == printer.id)
+        .order_by(PrinterSlot.slot_index)
+    )
+    return [slot_service.slot_to_out(db, s) for s in slots]
+
+
+@router.post("/{printer_id}/slots", response_model=SlotOut, status_code=status.HTTP_201_CREATED)
+def create_slot(
+    printer_id: uuid.UUID,
+    data: SlotCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    printer = _own(db, user, printer_id)
+    from app.models import PrinterSlot
+
+    if data.slot_index is not None:
+        exists = db.scalar(
+            select(PrinterSlot).where(
+                PrinterSlot.printer_id == printer.id,
+                PrinterSlot.slot_index == data.slot_index,
+            )
+        )
+        if exists:
+            raise HTTPException(status_code=409, detail="Слот с таким номером уже есть")
+    slot = slot_service.create_slot(
+        db,
+        printer_id=printer.id,
+        slot_index=data.slot_index,
+        name=data.name,
+        is_active=data.is_active,
+    )
+    db.commit()
+    db.refresh(slot)
+    return slot_service.slot_to_out(db, slot)
