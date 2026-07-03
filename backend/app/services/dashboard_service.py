@@ -39,6 +39,9 @@ def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
 def _profile_name(p: FilamentProfile | None, spool: Spool) -> str:
     brand = spool.manufacturer or (p.brand if p else None)
     name = (p.name if p else None) or spool.label
+    # не дублируем бренд, если название уже начинается с него
+    if brand and name and name.lower().startswith(brand.lower()):
+        brand = None
     return " ".join(filter(None, [brand, name])) or "Без метки"
 
 
