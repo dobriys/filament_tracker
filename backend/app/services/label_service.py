@@ -166,9 +166,7 @@ SIZE_PRESETS: dict[str, tuple[float, float]] = {
     "expanded": (50, 30),
     "compact": (40, 25),
     "slim": (40, 12),
-    "optimized": (40, 30),
     "vertical": (30, 40),
-    "vertical_bold": (30, 40),
     "vertical_compact": (25, 40),
 }
 
@@ -200,11 +198,145 @@ def _fit_font(text, font, max_size, min_size, max_w):
 
 
 def _draw_card(c, x, y, w, h, data, qr_reader, fields):
-    """Рисует карточку в (x,y) — левый нижний угол.
+    """Рисует карточку в (x,y). Раскладка выбирается по геометрии:
+    низкая лента — slim, портрет — vertical, иначе — горизонтальная."""
+    if h <= 16 * mm:
+        return _draw_slim(c, x, y, w, h, data, qr_reader, fields)
+    if h > w:
+        return _draw_vertical(c, x, y, w, h, data, qr_reader, fields)
+    return _draw_horizontal(c, x, y, w, h, data, qr_reader, fields)
 
-    Раскладка: QR в правом верхнем углу, заголовок слева от него, строки полей —
-    на всю ширину под верхней зоной (как на образце Anycubic).
-    """
+
+def _draw_slim(c, x, y, w, h, data, qr_reader, fields):
+    """Лента 40×12: QR во всю высоту справа, слева три плотные строки."""
+    pad = 1.1 * mm
+    qr_size = h - 2 * pad
+    qr_x = x + w - qr_size - pad
+    c.drawImage(qr_reader, qr_x, y + pad, qr_size, qr_size)
+
+    text_x = x + pad
+    text_w = qr_x - text_x - pad
+    ty = y + h - pad
+
+    # 1) производитель + материал на плашке в одну строку;
+    #    ширина делится динамически: бренд берёт сколько нужно, материал — остальное
+    brand = data.get("brand") or data.get("name") or data["label"]
+    material = data.get("material")
+    b_size = _fit_font(brand, FONT_BOLD, 7, 5, text_w * (0.6 if material else 1.0))
+    brand_txt = _clip(brand, FONT_BOLD, b_size, text_w * (0.6 if material else 1.0))
+    brand_w = stringWidth(brand_txt, FONT_BOLD, b_size)
+    ty -= b_size
+    c.setFont(FONT_BOLD, b_size)
+    c.drawString(text_x, ty, brand_txt)
+    if material:
+        avail = text_w - brand_w - 4
+        m_size = _fit_font(material, FONT_BOLD, b_size, 4.5, avail - 3)
+        mat = _clip(material, FONT_BOLD, m_size, avail - 3)
+        tw = stringWidth(mat, FONT_BOLD, m_size)
+        mx = text_x + text_w - tw - 2
+        c.setFillGray(0)
+        c.rect(mx - 1.5, ty - m_size * 0.28, tw + 3, m_size * 1.32, fill=1, stroke=0)
+        c.setFillColorRGB(1, 1, 1)
+        c.setFont(FONT_BOLD, m_size)
+        c.drawString(mx, ty, mat)
+        c.setFillGray(0)
+
+    # 2) код цвета
+    hexv = data.get("color_hex")
+    if hexv:
+        h_size = 5.5
+        ty -= h_size + 1.6
+        c.setFont(FONT, h_size)
+        c.drawString(text_x, ty, _clip(hexv, FONT, h_size, text_w))
+
+    # 3) поля одной компактной строкой: «Nozzle 210°C · Bed 60°C»
+    lines = _field_lines(data, fields)
+    if lines:
+        compact = " · ".join(f"{lbl} {val}" for lbl, val in lines)
+        f_size = _fit_font(compact, FONT, 6, 4, text_w)
+        ty -= f_size + 1.8
+        c.setFont(FONT, f_size)
+        c.drawString(text_x, ty, _clip(compact, FONT, f_size, text_w))
+
+
+def _draw_vertical(c, x, y, w, h, data, qr_reader, fields):
+    """Портрет (30×40, 25×40): крупный QR сверху по центру, заголовок под ним,
+    строки полей во всю ширину до низа."""
+    pad = 1.4 * mm
+    full_w = w - 2 * pad
+    text_x = x + pad
+
+    # QR — сверху по центру, крупный
+    qr_size = min(full_w * 0.72, h * 0.40)
+    qr_x = x + (w - qr_size) / 2
+    qr_y = y + h - qr_size - pad
+    c.drawImage(qr_reader, qr_x, qr_y, qr_size, qr_size)
+    ty = qr_y - 1.5
+
+    def centered(text, font, size):
+        tw = stringWidth(text, font, size)
+        c.drawString(x + (w - tw) / 2, ty, text)
+
+    # производитель
+    brand = data.get("brand") or data.get("name") or data["label"]
+    b_size = _fit_font(brand, FONT_BOLD, 8, 5, full_w)
+    ty -= b_size
+    c.setFont(FONT_BOLD, b_size)
+    centered(_clip(brand, FONT_BOLD, b_size, full_w), FONT_BOLD, b_size)
+
+    # материал — белым на чёрной плашке, по центру
+    material = data.get("material")
+    if material:
+        m_size = min(8, b_size)
+        mat = _clip(material, FONT_BOLD, m_size, full_w - 2)
+        tw = stringWidth(mat, FONT_BOLD, m_size)
+        ty -= m_size + 2.6
+        mx = x + (w - tw) / 2
+        c.setFillGray(0)
+        c.rect(mx - 2, ty - m_size * 0.28, tw + 4, m_size * 1.32, fill=1, stroke=0)
+        c.setFillColorRGB(1, 1, 1)
+        c.setFont(FONT_BOLD, m_size)
+        c.drawString(mx, ty, mat)
+        c.setFillGray(0)
+
+    # код цвета
+    hexv = data.get("color_hex")
+    if hexv:
+        h_size = 5.5
+        ty -= h_size + 2.2
+        c.setFont(FONT, h_size)
+        centered(hexv, FONT, h_size)
+
+    ty -= 1.5
+
+    # строки полей на всю ширину до нижнего края
+    lines = _field_lines(data, fields)
+    line_size = 5.6
+    line_h = line_size + 1.7
+    label_w = min(
+        full_w * 0.55,
+        max([stringWidth(f"{lbl}:", FONT, line_size) for lbl, _ in lines], default=0) + 2,
+    )
+    val_w = full_w - label_w
+    bottom = y + pad
+    for label, value in lines:
+        if ty - line_h < bottom:
+            break
+        ty -= line_h
+        c.setFont(FONT, line_size)
+        c.setFillGray(0.4)
+        c.drawString(text_x, ty, _clip(f"{label}:", FONT, line_size, label_w))
+        v_size = line_size
+        while v_size > 4 and stringWidth(value, FONT, v_size) > val_w:
+            v_size -= 0.25
+        c.setFont(FONT, v_size)
+        c.setFillGray(0)
+        c.drawString(text_x + label_w, ty, value)
+
+
+def _draw_horizontal(c, x, y, w, h, data, qr_reader, fields):
+    """Классическая раскладка: QR в правом верхнем углу, заголовок слева,
+    строки полей на всю ширину (как на образце Anycubic)."""
     pad = max(1.3 * mm, w * 0.035)
 
     qr_size = min(h * 0.44, w * 0.32)
