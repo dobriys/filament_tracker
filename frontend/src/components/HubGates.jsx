@@ -54,20 +54,19 @@ export function GateCard({ g }) {
   );
 }
 
-// Компактная полоска гейтов — для карточки принтера на главной
+// Плитки гейтов — для карточки принтера на главной (стиль макета)
 export function GateChips({ gates }) {
   if (!gates?.length) return null;
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <div className="gate-tiles">
       {gates.map((g) => {
         const v = VERDICT[g.verdict] || VERDICT.empty;
         return (
-          <span key={g.gate} className={`gate-chip gate-${v.cls}`} title={`${t("Слот")} ${g.slot_index}: ${g.occupied ? g.material || "" : t("пусто")} · ${v.label()}`}>
-            <Dot hex={g.occupied ? g.color_hex : null} size={11} />
-            <span>{g.slot_index}</span>
-            {g.occupied && <span className="muted" style={{ fontSize: 11 }}>{g.material}</span>}
-            <span className={`gate-verdict ${v.cls}`} style={{ fontSize: 11 }}>{v.icon}</span>
-          </span>
+          <div key={g.gate} className={`gate-tile gate-${v.cls}`} title={`${t("Слот")} ${g.slot_index}: ${g.occupied ? g.material || "" : t("пусто")} · ${v.label()}`}>
+            <span className={`gate-verdict ${v.cls}`}>{v.icon}</span>
+            <div className="gate-tile-swatch" style={{ background: g.occupied ? g.color_hex : "var(--panel-2)" }} />
+            <div className="gate-tile-cap">{g.slot_index}: {g.occupied ? (g.material || "—") : t("пусто")}</div>
+          </div>
         );
       })}
     </div>

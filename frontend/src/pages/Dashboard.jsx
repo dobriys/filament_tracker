@@ -5,7 +5,7 @@ import { fmtMoney } from "../format.js";
 import { t, tReason } from "../i18n.js";
 import { GateChips } from "../components/HubGates.jsx";
 
-const MAT_COLORS = ["#426ef0", "#16a34a", "#f97a1f", "#f6c123", "#a855f7", "#ec4899", "#06b6d4", "#9ca3af"];
+const MAT_COLORS = ["#2e6be6", "#3d4657", "#17a34a", "#f6a723", "#8a5fbf", "#e0526e", "#17a2a6", "#9aa1ab"];
 
 function timeAgo(iso) {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -29,7 +29,7 @@ function BarChart({ data }) {
         const y = padT + ch * (1 - t);
         return (
           <g key={i}>
-            <line x1={padL} y1={y} x2={W} y2={y} stroke="var(--border)" strokeWidth="1" />
+            <line x1={padL} y1={y} x2={W} y2={y} stroke="var(--border)" strokeWidth="1" strokeDasharray="3 4" />
             <text x={padL - 6} y={y + 3} textAnchor="end" fontSize="9" fill="var(--muted)">{Math.round(niceMax * t)}</text>
           </g>
         );
@@ -38,9 +38,10 @@ function BarChart({ data }) {
         const x = padL + (cw / data.length) * i + (cw / data.length - bw) / 2;
         const h = ch * (d.grams / niceMax);
         const y = padT + ch - h;
+        const recent = i >= data.length - 2; // последние 2 месяца — акцент
         return (
           <g key={i}>
-            <rect x={x} y={y} width={bw} height={Math.max(0, h)} rx="3" fill="var(--accent)" />
+            <rect x={x} y={y} width={bw} height={Math.max(0, h)} rx="4" fill={recent ? "var(--accent)" : "var(--border)"} />
             <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--muted)">{t(d.label)}</text>
           </g>
         );
@@ -184,7 +185,7 @@ function MoonrakerCard({ printer, navigate }) {
             {/* Блок «Печать» */}
             <div className="printer-zone">
               <div className="zone-title">{isPrinting ? t("Печатается") : t("Последняя печать")}</div>
-              <div className="zone-file" title={file}>{file || t("нет данных")}</div>
+              <div className="zone-file-box" title={file}>{file || t("нет данных")}</div>
               {isPrinting ? (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "10px 0 6px" }}>
@@ -206,7 +207,7 @@ function MoonrakerCard({ printer, navigate }) {
                 </div>
               )}
               {err && <div className="error">{err}</div>}
-              <div style={{ display: "flex", gap: 8, marginTop: "auto", paddingTop: 14 }}>
+              <div className="printer-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: "auto", paddingTop: 14 }}>
                 <button
                   onClick={consume}
                   disabled={!canConsume || busy}
@@ -226,19 +227,23 @@ function MoonrakerCard({ printer, navigate }) {
             <div className="printer-zone">
               <div className="zone-title">{t("Слоты ACE")}</div>
               <GateChips gates={gates} />
-              {dryer && (
-                <div className="zone-row">
-                  <span className="muted">🔥 {t("Сушка")}</span>
-                  {drying
-                    ? <b className="mono">{dryer.target_temp}°C{dryer.remaining_min ? ` · ${Math.floor(dryer.remaining_min / 60)}:${String(dryer.remaining_min % 60).padStart(2, "0")}` : ""}</b>
-                    : <span className="muted">{t("выключена")}</span>}
-                </div>
-              )}
-              {totals && (
-                <div className="zone-totals muted">
-                  <span><b className="mono">{totals.total_jobs}</b> {t("печатей")}</span>
-                  <span><b className="mono">{Math.round((totals.total_print_time_sec || 0) / 3600)}</b> {t("ч печати")}</span>
-                  <span><b className="mono">{((totals.total_filament_mm || 0) / 1e6).toFixed(2)}</b> {t("км филамента")}</span>
+              {(dryer || totals) && (
+                <div className="dryer-box">
+                  {dryer && (
+                    <div className="zone-row">
+                      <span style={{ fontWeight: 600 }}>{t("Сушка филамента")}</span>
+                      {drying
+                        ? <span className="badge in_use">{dryer.target_temp}°C{dryer.remaining_min ? ` · ${Math.floor(dryer.remaining_min / 60)}:${String(dryer.remaining_min % 60).padStart(2, "0")}` : ""}</span>
+                        : <span className="badge">{t("выключена")}</span>}
+                    </div>
+                  )}
+                  {totals && (
+                    <div className="zone-totals muted">
+                      <span><b>{totals.total_jobs}</b> {t("печатей")}</span>
+                      <span><b>{Math.round((totals.total_print_time_sec || 0) / 3600)}</b> {t("ч печати")}</span>
+                      <span><b>{((totals.total_filament_mm || 0) / 1e6).toFixed(2)}</b> {t("км филамента")}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -313,57 +318,65 @@ export default function Dashboard() {
           </div>
 
           <div className="card">
-            <h3 className="card-title">{t("🕑 Недавняя активность")}</h3>
-            <table style={{ marginTop: 10 }}>
-              <thead><tr><th>{t("Действие")}</th><th>{t("Катушка")}</th><th>{t("Объём")}</th><th>{t("Время")}</th></tr></thead>
-              <tbody>
-                {d.recent_activity.map((a, i) => {
-                  const neg = a.amount && a.amount.startsWith("-");
-                  return (
-                    <tr key={i}>
-                      <td><span className={`act-tag ${a.type}`}>{{ used: t("Расход"), added: t("Добавлено"), updated: t("Изменено"), moved: t("Перемещено") }[a.type] || a.type}</span></td>
-                      <td>{a.name}<div className="muted" style={{ fontSize: 12 }}>{tReason(a.sub)}</div></td>
-                      <td style={{ color: neg ? "var(--danger)" : a.amount?.startsWith("+") ? "var(--ok)" : "var(--text)" }}>{a.amount || "—"}</td>
-                      <td className="muted">{timeAgo(a.created_at)}</td>
-                    </tr>
-                  );
-                })}
-                {d.recent_activity.length === 0 && <tr><td colSpan={4} className="muted">{t("Пока нет активности")}</td></tr>}
-              </tbody>
-            </table>
-            <Link to="/spools" style={{ display: "inline-block", marginTop: 10 }}>{t("Вся история →")}</Link>
+            <h3 className="card-title">{t("Недавняя активность")}</h3>
+            <div className="act-list">
+              {d.recent_activity.map((a, i) => {
+                const neg = a.amount && a.amount.startsWith("-");
+                const pos = a.amount && a.amount.startsWith("+");
+                return (
+                  <div className="act-item" key={i}>
+                    <div style={{ minWidth: 0 }}>
+                      <span className="act-name">{a.name}</span>{" "}
+                      <span className={`act-tag ${a.type}`} style={{ marginLeft: 6 }}>{{ used: t("Расход"), added: t("Добавлено"), updated: t("Изменено"), moved: t("Перемещено") }[a.type] || a.type}</span>
+                      <div className="act-sub">{tReason(a.sub)}</div>
+                    </div>
+                    <div className="act-right">
+                      <div className={`act-amount ${neg ? "neg" : pos ? "pos" : ""}`}>{a.amount || "—"}</div>
+                      <div className="act-time">{timeAgo(a.created_at)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              {d.recent_activity.length === 0 && <div className="muted">{t("Пока нет активности")}</div>}
+            </div>
+            <div style={{ textAlign: "right", marginTop: 8 }}>
+              <Link to="/print-jobs">{t("Вся история →")}</Link>
+            </div>
           </div>
         </div>
 
         <div>
           <div className="card">
-            <h3 className="card-title">{t("⚡ Быстрые действия")}</h3>
-            <div className="card-sub">{t("Быстро обновляйте инвентарь.")}</div>
+            <h3 className="card-title">{t("Быстрые действия и уведомления")}</h3>
             <button
-              style={{ width: "100%", padding: "14px", fontSize: 16, fontWeight: 600 }}
+              style={{ width: "100%", padding: "13px", fontSize: 15, fontWeight: 600, marginTop: 12 }}
               onClick={() => navigate("/spools/new")}
             >
               {t("＋ Добавить катушку")}
             </button>
-          </div>
-
-          <div className="card">
-            <h3 className="card-title">{t("⚠️ Заканчиваются")}</h3>
-            <div className="card-sub">{t("Катушки на исходе.")}</div>
-            {d.low_stock.map((s) => (
-              <div key={s.id} style={{ marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div>{s.name}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>{s.sub}</div>
-                  </div>
-                  <span className="badge empty">{s.remaining_g}{" "}{t("г")}</span>
-                </div>
-                <div className="lowstock-bar"><div style={{ width: `${Math.round(s.pct * 100)}%` }} /></div>
+            {d.low_stock.length === 0 ? (
+              <div className="ok-panel">
+                <div className="ok-panel-title">✓ {t("Всё в порядке")}</div>
+                <div className="muted">{t("Нет катушек с низким остатком.")}</div>
+                <Link to="/spools" style={{ display: "inline-block", marginTop: 6 }}>{t("Все катушки →")}</Link>
               </div>
-            ))}
-            {d.low_stock.length === 0 && <div className="muted">{t("Всё в порядке")}</div>}
-            <Link to="/spools" style={{ display: "inline-block", marginTop: 6 }}>{t("Весь инвентарь →")}</Link>
+            ) : (
+              <div style={{ marginTop: 14 }}>
+                {d.low_stock.map((s) => (
+                  <div key={s.id} style={{ marginBottom: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div>{s.name}</div>
+                        <div className="muted" style={{ fontSize: 12 }}>{s.sub}</div>
+                      </div>
+                      <span className="badge empty">{s.remaining_g}{" "}{t("г")}</span>
+                    </div>
+                    <div className="lowstock-bar"><div style={{ width: `${Math.round(s.pct * 100)}%` }} /></div>
+                  </div>
+                ))}
+                <Link to="/spools">{t("Весь инвентарь →")}</Link>
+              </div>
+            )}
           </div>
 
           {d.drying_alerts?.length > 0 && (

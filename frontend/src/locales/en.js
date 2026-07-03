@@ -494,6 +494,10 @@ export const EN = {
   "ждёт списания": "awaiting deduction",
   "интерфейс": "UI",
   "сервер": "server",
+  "Быстрые действия и уведомления": "Quick actions & alerts",
+  "Нет катушек с низким остатком.": "No spools are currently running low.",
+  "Недавняя активность": "Recent activity",
+  "Сушка филамента": "Filament dryer",
   // Месяцы на графике (labels приходят из API по-русски)
   "янв": "Jan", "фев": "Feb", "мар": "Mar", "апр": "Apr", "май": "May", "июн": "Jun",
   "июл": "Jul", "авг": "Aug", "сен": "Sep", "окт": "Oct", "ноя": "Nov", "дек": "Dec",
