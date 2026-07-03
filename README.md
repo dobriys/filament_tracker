@@ -156,7 +156,6 @@ docker compose down             # остановить
 git pull && ./setup.sh          # обновить до новой версии
 ```
 
-> ⚠️ **Смените пароль БД по умолчанию** (`POSTGRES_PASSWORD` в `.env`)
 
 <details>
 <summary>Установка вручную (без скрипта)</summary>
@@ -170,7 +169,7 @@ cp .env.example .env
 echo "SECRET_KEY=$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=')"
 echo "ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')"
 
-# отредактировать .env (пароли, затем:
+# отредактировать .env , затем:
 docker compose up -d          
 ```
 </details>
