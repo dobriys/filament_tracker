@@ -13,6 +13,8 @@ export default function Settings() {
   });
   const [msg, setMsg] = useState(null);
   const [serverVersion, setServerVersion] = useState(null);
+  const [spoolmanUrl, setSpoolmanUrl] = useState("");
+  const [spoolmanBusy, setSpoolmanBusy] = useState(false);
   const fileRef = useRef();
 
   useEffect(() => {
@@ -82,6 +84,18 @@ export default function Settings() {
     );
   }
 
+  async function importSpoolman() {
+    const url = spoolmanUrl.trim();
+    if (!url) return;
+    setMsg(null);
+    setSpoolmanBusy(true);
+    try {
+      const r = await api.post("/api/spools/import-spoolman", { url });
+      setMsg(`${t("Импорт из Spoolman: добавлено")} ${r.imported}, ${t("пропущено")} ${r.skipped} ${t("из")} ${r.total}`);
+    } catch (err) { setMsg(err.message); }
+    setSpoolmanBusy(false);
+  }
+
   function exportBackup() {
     api.download("/api/backup/export", { filename: "filament-backup.json" }).catch((e) => setMsg(e.message));
   }
@@ -108,6 +122,22 @@ export default function Settings() {
           <button className="secondary" onClick={exportBackup}>{t("Скачать бэкап (JSON)")}</button>
           <button className="secondary" onClick={() => fileRef.current.click()}>{t("Восстановить из файла")}</button>
           <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={importBackup} />
+        </div>
+      </div>
+
+      <div className="card">
+        <h3>{t("Импорт из Spoolman")}</h3>
+        <p className="muted">{t("Перенос катушек из вашего Spoolman по сети. Повторный импорт пропускает уже добавленные катушки.")}</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            style={{ flex: "1 1 260px" }}
+            value={spoolmanUrl}
+            onChange={(e) => setSpoolmanUrl(e.target.value)}
+            placeholder="http://spoolman.local:7912"
+          />
+          <button className="secondary" onClick={importSpoolman} disabled={spoolmanBusy || !spoolmanUrl.trim()}>
+            {spoolmanBusy ? t("Импорт…") : t("Импортировать")}
+          </button>
         </div>
       </div>
 

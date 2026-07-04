@@ -56,6 +56,67 @@ def create_spool(
     return spool_service.create_spool(db, owner=user, data=data.model_dump())
 
 
+class SpoolmanImportRequest(BaseModel):
+    url: str
+    include_archived: bool = False
+
+
+def _find_or_create_location(db: Session, user: User, name: str, cache: dict) -> uuid.UUID:
+    from app.models import Location
+
+    if name in cache:
+        return cache[name]
+    loc = db.scalar(
+        select(Location).where(Location.owner_user_id == user.id, Location.name == name)
+    )
+    if loc is None:
+        loc = Location(owner_user_id=user.id, name=name)
+        db.add(loc)
+        db.flush()
+    cache[name] = loc.id
+    return loc.id
+
+
+@router.post("/import-spoolman")
+def import_spoolman(
+    data: SpoolmanImportRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Импорт катушек из внешнего Spoolman по URL. Идемпотентно: повторный импорт
+    пропускает уже завезённые (по spoolman_id в specs)."""
+    from app.services import spoolman_import
+
+    try:
+        spools, currency = spoolman_import.fetch(data.url)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Spoolman недоступен: {e}")
+    if not isinstance(spools, list):
+        raise HTTPException(status_code=502, detail="Неожиданный ответ Spoolman")
+
+    existing = {
+        (s.specs or {}).get("spoolman_id")
+        for s in db.scalars(select(Spool).where(Spool.owner_user_id == user.id))
+    }
+    imported = skipped = 0
+    loc_cache: dict = {}
+    for raw in spools:
+        m = spoolman_import.map_spool(raw, currency=currency)
+        archived = m.pop("archived", False)
+        loc_name = m.pop("location_name", None)
+        sid = m["specs"].get("spoolman_id")
+        if (archived and not data.include_archived) or (sid is not None and sid in existing):
+            skipped += 1
+            continue
+        if loc_name:
+            m["location_id"] = _find_or_create_location(db, user, loc_name, loc_cache)
+        spool_service.create_spool(db, owner=user, data=m)
+        if sid is not None:
+            existing.add(sid)
+        imported += 1
+    return {"imported": imported, "skipped": skipped, "total": len(spools)}
+
+
 @router.get("/label-options")
 def label_options(_: User = Depends(get_current_user)):
     """Доступные размеры этикеток и каталог полей для печати."""
