@@ -22,12 +22,13 @@ export default function Settings() {
     api.get("/health").then((h) => setServerVersion(h.version)).catch(() => {});
   }, []);
 
+  // Применяем ответ сервера (PUT возвращает полное состояние), а не оптимистично:
+  // при ошибке состояние не меняется — переключатель сам «откатится».
   function toggle(key) {
     return async (e) => {
       const v = e.target.checked;
-      setS((prev) => ({ ...prev, [key]: v }));
       try {
-        await api.put("/api/settings", { [key]: v });
+        setS(await api.put("/api/settings", { [key]: v }));
         setMsg(t("Настройка сохранена"));
       } catch (err) { setMsg(err.message); }
     };
@@ -59,9 +60,8 @@ export default function Settings() {
       moonraker_auto_import: mode !== "off",
       moonraker_auto_consume: mode === "consume",
     };
-    setS((prev) => ({ ...prev, ...patch }));
     try {
-      await api.put("/api/settings", patch);
+      setS(await api.put("/api/settings", patch));  // применяем ответ сервера
       setMsg(t("Настройка сохранена"));
     } catch (err) { setMsg(err.message); }
   }
