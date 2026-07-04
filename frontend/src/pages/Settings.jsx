@@ -31,6 +31,39 @@ export default function Settings() {
     };
   }
 
+  // Режимы автоматизации Moonraker — единый выбор вместо двух чекбоксов.
+  // Автосписание невозможно без автоимпорта, поэтому это одно состояние из трёх.
+  const AUTO_MODES = [
+    {
+      key: "off",
+      label: t("Выкл"),
+      hint: t("Автоматизация отключена. Завершённые печати импортируете и списываете вручную."),
+    },
+    {
+      key: "import",
+      label: t("Автоимпорт"),
+      hint: t("Фоновый опрос принтеров: новые завершённые печати сами появляются в истории черновиком — остаётся только списать материал."),
+    },
+    {
+      key: "consume",
+      label: t("Автосписание"),
+      hint: t("Импорт и автоматическое списание материала, когда каждый инструмент печати сопоставлен со слотом принтера с катушкой. Если сопоставить не удалось — печать остаётся черновиком."),
+    },
+  ];
+  const autoMode = !s.moonraker_auto_import ? "off" : s.moonraker_auto_consume ? "consume" : "import";
+
+  async function setAutoMode(mode) {
+    const patch = {
+      moonraker_auto_import: mode !== "off",
+      moonraker_auto_consume: mode === "consume",
+    };
+    setS((prev) => ({ ...prev, ...patch }));
+    try {
+      await api.put("/api/settings", patch);
+      setMsg(t("Настройка сохранена"));
+    } catch (err) { setMsg(err.message); }
+  }
+
   function Toggle({ k, label, hint }) {
     return (
       <div style={{ marginBottom: 10 }}>
@@ -80,16 +113,28 @@ export default function Settings() {
 
       <div className="card">
         <h3>{t("Moonraker: автоматизация")}</h3>
-        <Toggle
-          k="moonraker_auto_import"
-          label={t("Автоимпорт завершённых печатей")}
-          hint={t("Фоновый опрос принтеров: новые завершённые задания появляются в истории сами (черновиком для списания).")}
-        />
-        <Toggle
-          k="moonraker_auto_consume"
-          label={t("Автосписание материала")}
-          hint={t("Списывать без подтверждения, если каждый инструмент печати сопоставлен со слотом принтера и в слоте стоит катушка. Иначе печать останется черновиком.")}
-        />
+        <div className="card-sub" style={{ marginBottom: 12 }}>
+          {t("Что приложение делает с завершёнными печатями с принтера.")}
+        </div>
+        <div className="seg-toggle" role="tablist" aria-label={t("Moonraker: автоматизация")}>
+          {AUTO_MODES.map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              role="tab"
+              aria-selected={autoMode === m.key}
+              className={`seg-item ${autoMode === m.key ? "active" : ""}`}
+              disabled={!isAdmin}
+              onClick={() => setAutoMode(m.key)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <div className="seg-hint">
+          <b>{AUTO_MODES.find((m) => m.key === autoMode)?.label}.</b>{" "}
+          {AUTO_MODES.find((m) => m.key === autoMode)?.hint}
+        </div>
         {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
       </div>
 

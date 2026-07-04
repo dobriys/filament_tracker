@@ -440,12 +440,17 @@ export const EN = {
   "(проверьте API-ключ)": "(check the API key)",
   // Настройки автоматизации Moonraker
   "Moonraker: автоматизация": "Moonraker: automation",
-  "Автоимпорт завершённых печатей": "Auto-import finished prints",
-  "Фоновый опрос принтеров: новые завершённые задания появляются в истории сами (черновиком для списания).":
-    "Background printer polling: new finished jobs show up in history automatically (as drafts ready to deduct).",
-  "Автосписание материала": "Auto-deduct material",
-  "Списывать без подтверждения, если каждый инструмент печати сопоставлен со слотом принтера и в слоте стоит катушка. Иначе печать останется черновиком.":
-    "Deduct without confirmation when every tool of the print maps to a printer slot with a spool in it. Otherwise the print stays a draft.",
+  "Что приложение делает с завершёнными печатями с принтера.":
+    "What the app does with finished prints from the printer.",
+  "Выкл": "Off",
+  "Автоимпорт": "Auto-import",
+  "Автосписание": "Auto-deduct",
+  "Автоматизация отключена. Завершённые печати импортируете и списываете вручную.":
+    "Automation is off. You import and deduct finished prints manually.",
+  "Фоновый опрос принтеров: новые завершённые печати сами появляются в истории черновиком — остаётся только списать материал.":
+    "Background printer polling: new finished prints show up in history as drafts — you just deduct the material.",
+  "Импорт и автоматическое списание материала, когда каждый инструмент печати сопоставлен со слотом принтера с катушкой. Если сопоставить не удалось — печать остаётся черновиком.":
+    "Imports and automatically deducts material when every tool of the print maps to a printer slot with a spool. If it can't be matched, the print stays a draft.",
   // ACE-хаб и сводка принтера
   "Слоты ACE": "ACE slots",
   "— что принтер видит в слотах и совпадает ли это с привязанными катушками": "— what the printer sees in its slots and whether it matches the assigned spools",
