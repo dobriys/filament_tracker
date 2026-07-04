@@ -29,6 +29,7 @@ export default function Printers() {
     moonraker_url: "",
     moonraker_api_key: "",
     slot_count: 4,
+    _autoName: "", // последнее имя, подставленное из пресета (чтобы отличить от ручного)
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -53,17 +54,23 @@ export default function Printers() {
   function applyPreset(key) {
     const p = presets.find((x) => x.key === key);
     if (!p) { setForm((f) => ({ ...f, preset_key: "" })); return; }
-    setForm((f) => ({
-      ...f,
-      preset_key: key,
-      brand: p.brand,
-      model: p.model,
-      capabilities: p.capabilities,
-      note: p.note,
-      integration_type: p.integration_type,
-      slot_count: p.capabilities?.mmu_slots ?? (p.capabilities?.has_mmu ? f.slot_count : 0),
-      name: f.name || [p.brand, p.model].filter(Boolean).join(" "),
-    }));
+    const auto = [p.brand, p.model].filter(Boolean).join(" ");
+    setForm((f) => {
+      // Обновляем автоимя при смене модели, но не трогаем имя, вписанное вручную.
+      const userTyped = f.name && f.name !== f._autoName;
+      return {
+        ...f,
+        preset_key: key,
+        brand: p.brand,
+        model: p.model,
+        capabilities: p.capabilities,
+        note: p.note,
+        integration_type: p.integration_type,
+        slot_count: p.capabilities?.mmu_slots ?? (p.capabilities?.has_mmu ? f.slot_count : 0),
+        name: userTyped ? f.name : auto,
+        _autoName: auto,
+      };
+    });
   }
 
   async function create(e) {
