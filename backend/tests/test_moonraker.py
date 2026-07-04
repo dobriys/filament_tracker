@@ -151,6 +151,33 @@ def test_status_progress_falls_back_to_virtual_sdcard():
     assert parse_status(payload)["progress"] == 0.37
 
 
+def test_job_to_parsed_fallback_to_total_length():
+    # Moonraker не извлёк пофиловые веса (только size/modified), но есть длина.
+    job = {
+        "job_id": "0000DE",
+        "filename": ".3mf_temp/0703-washer_plate(01)_PLA_0.2_6h40m.gcode",
+        "status": "completed",
+        "filament_used": 40904.0,
+        "metadata": {"size": 123, "modified": 1.0},
+    }
+    p = job_to_parsed(job)
+    assert p["tool_count"] == 1
+    assert p["total_filament_used_mm"] == 40904.0
+    assert len(p["tools"]) == 1
+    tool = p["tools"][0]
+    assert tool["tool_index"] == 0
+    assert tool["used_g"] is None
+    assert tool["used_mm"] == 40904.0
+    assert tool["material"] == "PLA"  # из имени файла
+
+
+def test_job_to_parsed_no_fallback_without_length():
+    job = {"job_id": "1", "filename": "x.gcode", "filament_used": 0, "metadata": {}}
+    p = job_to_parsed(job)
+    assert p["tool_count"] == 0
+    assert p["tools"] == []
+
+
 def test_history_parsing():
     jobs = parse_history(HISTORY)
     assert len(jobs) == 2

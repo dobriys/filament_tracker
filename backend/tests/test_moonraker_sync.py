@@ -57,6 +57,23 @@ def test_resolve_mappings_no_usage_returns_none():
     assert resolve_slot_mappings([{"tool_index": 0, "used_g": 0}], [_slot(0)]) is None
 
 
+def test_resolve_mappings_uses_length_when_no_grams():
+    # Fallback-tool без граммов, но с длиной — тоже маппится (граммы посчитает confirm).
+    tools = [{"tool_index": 0, "used_g": None, "used_mm": 40904.0}]
+    assert resolve_slot_mappings(tools, [_slot(0)]) == [{"tool_index": 0, "slot_id": "slot0"}]
+
+
+def test_grams_from_length():
+    from app.services.print_job_service import grams_from_length
+
+    spool = SimpleNamespace(diameter_mm=1.75, filament_profile_id=None, material="PLA")
+    # 1 м PLA 1.75 ≈ 2.98 г
+    assert abs(float(grams_from_length(None, spool, 1000)) - 2.98) < 0.05
+    # материал с «+» падает на базовую плотность
+    spool_plus = SimpleNamespace(diameter_mm=1.75, filament_profile_id=None, material="PLA+")
+    assert float(grams_from_length(None, spool_plus, 1000)) == float(grams_from_length(None, spool, 1000))
+
+
 # --- сверка гейтов хаба с катушками (match_gate) ---
 from app.services.moonraker import match_gate, parse_hub
 

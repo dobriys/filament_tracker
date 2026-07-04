@@ -106,8 +106,8 @@ def resolve_slot_mappings(tools: list[dict], slots: list) -> list[dict] | None:
     by_index = {s.slot_index: s for s in slots if s.current_spool_id is not None}
     mappings = []
     for t in tools:
-        used = t.get("used_g") or 0
-        if float(used) <= 0:
+        # tool «используется», если есть граммы или хотя бы длина (fallback).
+        if float(t.get("used_g") or 0) <= 0 and float(t.get("used_mm") or 0) <= 0:
             continue
         slot = by_index.get(t["tool_index"])
         if slot is None:
