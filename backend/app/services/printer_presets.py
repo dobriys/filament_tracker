@@ -17,9 +17,10 @@ capabilities:
 note — короткая подсказка (объём печати + нюанс доступа), показывается при выборе.
 """
 
-_ACE = {"has_mmu": True, "mmu_slots": 4, "mmu_name": "ACE", "has_dryer": False, "tool_count": 4}
+# Все Anycubic Combo идут с одной и той же ACE Pro (4 слота + сушилка). Камера —
+# свойство самого принтера (S1 закрытый, Kobra 3 — открытый), задаётся отдельно.
 _ACE_PRO = {"has_mmu": True, "mmu_slots": 4, "mmu_name": "ACE Pro", "has_dryer": True,
-            "has_chamber": True, "tool_count": 4, "controls": ["dryer_start_stop"]}
+            "tool_count": 4, "controls": ["dryer_start_stop"]}
 
 
 def _preset(brand, model, caps, note, key=None, integration="moonraker"):
@@ -35,20 +36,20 @@ PRESETS: list[dict] = [
     # --- Anycubic (Kobra OS; Moonraker через overlay Rinkhals) ---
     _preset("Anycubic", "Kobra 2 Pro", {}, "220×220×250 · через Rinkhals"),
     _preset("Anycubic", "Kobra 3", {}, "250×250×260 · через Rinkhals"),
-    _preset("Anycubic", "Kobra 3 Combo", dict(_ACE), "250×250×260 · ACE · через Rinkhals",
-            key="anycubic-kobra-3-combo"),
+    _preset("Anycubic", "Kobra 3 Combo", dict(_ACE_PRO),
+            "250×250×260 · ACE Pro · через Rinkhals", key="anycubic-kobra-3-combo"),
     _preset("Anycubic", "Kobra 3 V2", {}, "255×255×260 · через Rinkhals"),
-    _preset("Anycubic", "Kobra 3 V2 Combo", dict(_ACE), "255×255×260 · ACE · через Rinkhals"),
+    _preset("Anycubic", "Kobra 3 V2 Combo", dict(_ACE_PRO), "255×255×260 · ACE Pro · через Rinkhals"),
     _preset("Anycubic", "Kobra 3 Max", {}, "420×420×500 · через Rinkhals"),
-    _preset("Anycubic", "Kobra 3 Max Combo", dict(_ACE), "420×420×500 · ACE · через Rinkhals"),
+    _preset("Anycubic", "Kobra 3 Max Combo", dict(_ACE_PRO), "420×420×500 · ACE Pro · через Rinkhals"),
     _preset("Anycubic", "Kobra S1", {"has_chamber": True},
             "250×250×250 · закрытая · через Rinkhals", key="anycubic-kobra-s1"),
-    _preset("Anycubic", "Kobra S1 Combo", dict(_ACE_PRO),
-            "250×250×250 · ACE Pro · через Rinkhals", key="anycubic-kobra-s1-combo"),
+    _preset("Anycubic", "Kobra S1 Combo", {**_ACE_PRO, "has_chamber": True},
+            "250×250×250 · закрытая · ACE Pro · через Rinkhals", key="anycubic-kobra-s1-combo"),
     _preset("Anycubic", "Kobra S1 Max", {"has_chamber": True},
             "350×350×350 · закрытая · через Rinkhals"),
-    _preset("Anycubic", "Kobra S1 Max Combo", dict(_ACE_PRO),
-            "350×350×350 · ACE Pro · через Rinkhals"),
+    _preset("Anycubic", "Kobra S1 Max Combo", {**_ACE_PRO, "has_chamber": True},
+            "350×350×350 · закрытая · ACE Pro · через Rinkhals"),
 
     # --- Artillery ---
     _preset("Artillery", "Sidewinder X4 Pro", {}, "240×240×260 · Fluidd"),
