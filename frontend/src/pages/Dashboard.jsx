@@ -251,6 +251,7 @@ function MoonrakerCard({ printer, navigate }) {
   const [gates, setGates] = useState([]);
   const [dryer, setDryer] = useState(null);
   const [totals, setTotals] = useState(null);
+  const [caps, setCaps] = useState(printer.capabilities || {});
   const [job, setJob] = useState(null);
   const [offline, setOffline] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -258,7 +259,8 @@ function MoonrakerCard({ printer, navigate }) {
 
   const loadOverview = () =>
     api.get(`/api/printers/${printer.id}/overview`).then((o) => {
-      setStatus(o.status); setGates(o.gates || []); setDryer(o.dryer); setTotals(o.totals); setOffline(false);
+      setStatus(o.status); setGates(o.gates || []); setDryer(o.dryer); setTotals(o.totals);
+      setCaps(o.capabilities || {}); setOffline(false);
       return o;
     }).catch(() => setOffline(true));
 
@@ -302,6 +304,10 @@ function MoonrakerCard({ printer, navigate }) {
   const remaining = isPrinting && status?.progress > 0.02 && elapsed != null
     ? elapsed * (1 / status.progress - 1)
     : null;
+
+  // Секции карточки — по возможностям принтера (авто из overview + пресет).
+  const hasMmu = caps.has_mmu ?? gates.length > 0;
+  const mmuTitle = caps.mmu_name ? `${t("Слоты")} ${caps.mmu_name}` : t("Слоты мультиподачи");
 
   return (
     <div className="card moonraker-card">
@@ -359,16 +365,22 @@ function MoonrakerCard({ printer, navigate }) {
               </div>
             </div>
 
-            {/* Блок «Слоты и сушка» */}
-            <div className="printer-zone">
-              <div className="zone-title">{t("Слоты ACE")}</div>
-              <GateChips gates={gates} />
-              {dryer && (
-                <div className="dryer-box">
-                  <DryerControls printer={printer} dryer={dryer} onChanged={loadOverview} />
-                </div>
-              )}
-            </div>
+            {/* Блок «Слоты и сушка» — только если у принтера они есть */}
+            {(hasMmu || dryer) && (
+              <div className="printer-zone">
+                {hasMmu && (
+                  <>
+                    <div className="zone-title">{mmuTitle}</div>
+                    <GateChips gates={gates} />
+                  </>
+                )}
+                {dryer && (
+                  <div className="dryer-box">
+                    <DryerControls printer={printer} dryer={dryer} onChanged={loadOverview} />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           {totals && (
             <div className="printer-lifetime">

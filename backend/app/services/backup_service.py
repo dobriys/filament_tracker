@@ -115,7 +115,7 @@ SETTINGS_DEFAULTS = {
     "moonraker_auto_import": True,
     "moonraker_auto_consume": False,
 }
-PRINTER_COLS = ["name", "integration_type", "moonraker_url", "is_active", "notes"]
+PRINTER_COLS = ["name", "integration_type", "brand", "model", "capabilities", "moonraker_url", "is_active", "notes"]
 SLOT_COLS = ["slot_index", "name", "current_spool_id", "is_active"]
 EVENT_COLS = [
     "spool_id", "event_type", "weight_before_g", "weight_after_g", "delta_g",
@@ -279,6 +279,9 @@ def restore_backup(db: Session, user: User, data: dict) -> dict:
             owner_user_id=user.id,
             name=item.get("name") or "Принтер",
             integration_type=item.get("integration_type") or "manual",
+            brand=item.get("brand"),
+            model=item.get("model"),
+            capabilities=item.get("capabilities") or {},
             moonraker_url=item.get("moonraker_url"),
             moonraker_api_key_encrypted=(
                 encrypt_secret(item["moonraker_api_key"])

@@ -139,6 +139,21 @@ def parse_dryer(payload: dict) -> dict | None:
     return sorted(units.values(), key=lambda x: (x["status"] != "drying", x["unit"]))[0]
 
 
+def detect_capabilities(gates: list | None, dryer: dict | None) -> dict:
+    """Возможности принтера, выведенные из живой телеметрии Moonraker.
+
+    gates/dryer — уже распарсенные (parse_hub / parse_dryer). Пусто/None —
+    значит соответствующей подсистемы у принтера нет.
+    """
+    caps: dict = {}
+    if gates:
+        caps["has_mmu"] = True
+        caps["mmu_slots"] = len(gates)
+    if dryer is not None:
+        caps["has_dryer"] = True
+    return caps
+
+
 def dryer_unit(dryer: dict | None, requested: int | None = None) -> int:
     if requested is not None:
         return requested

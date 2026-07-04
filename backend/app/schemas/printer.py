@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict
 class PrinterBase(BaseModel):
     name: str
     integration_type: str = "manual"  # manual | moonraker
+    brand: str | None = None
+    model: str | None = None
+    capabilities: dict | None = None
     moonraker_url: str | None = None
     is_active: bool = True
     notes: str | None = None
@@ -14,6 +17,8 @@ class PrinterBase(BaseModel):
 
 class PrinterCreate(PrinterBase):
     moonraker_api_key: str | None = None
+    # Пресет из каталога — префилл бренда/модели/интеграции/возможностей/слотов.
+    preset_key: str | None = None
     # Удобство: сразу создать N слотов (Slot 1..N) при создании принтера.
     slot_count: int = 0
 
@@ -21,6 +26,9 @@ class PrinterCreate(PrinterBase):
 class PrinterUpdate(BaseModel):
     name: str | None = None
     integration_type: str | None = None
+    brand: str | None = None
+    model: str | None = None
+    capabilities: dict | None = None
     moonraker_url: str | None = None
     moonraker_api_key: str | None = None
     is_active: bool | None = None
@@ -35,6 +43,14 @@ class PrinterOut(PrinterBase):
     has_moonraker_key: bool
     created_at: datetime
     updated_at: datetime
+
+
+class PrinterPreset(BaseModel):
+    key: str
+    brand: str | None = None
+    model: str | None = None
+    integration_type: str
+    capabilities: dict
 
 
 class TestConnectionResult(BaseModel):
