@@ -130,7 +130,11 @@ export default function Printers() {
               <div>
                 {(form.brand || form.model) && <div className="printer-head-sub">{[form.brand, form.model].filter(Boolean).join(" ")}</div>}
                 <CapabilityChips caps={form.capabilities || {}} />
-                {form.note && <div className="muted" style={{ fontSize: 12, marginTop: 5 }}>{form.note}</div>}
+                {form.note && (
+                  <div className="muted" style={{ fontSize: 12, marginTop: 5 }}>
+                    {form.note.split(" · ").map((seg) => t(seg)).join(" · ")}
+                  </div>
+                )}
               </div>
             </div>
           )}

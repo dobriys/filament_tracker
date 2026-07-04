@@ -9,7 +9,7 @@ where it went — all in one place. The app tallies usage from your printer
 (Moonraker) or from an uploaded gcode file, prints QR-coded labels, and keeps all
 your data on your own server. Interface in English and Russian.
 
-![Dashboard](docs/screenshots/dashboard.png)
+![Dashboard](docs/screenshots/en/dashboard.png)
 
 ---
 
@@ -63,7 +63,7 @@ each connected printer with live print status (progress, temperatures, time left
 and a **“Deduct”** button that lights up when a print finishes. Also: a monthly
 usage chart, a breakdown by material, and a feed of recent events.
 
-![Dashboard](docs/screenshots/dashboard.png)
+![Dashboard](docs/screenshots/en/dashboard.png)
 
 ### 📦 Spools
 
@@ -72,12 +72,12 @@ amount, where it currently is (storage location or printer slot) and quick actio
 From here you can add a spool, edit it, duplicate it (including “in another color”),
 weigh it, adjust the remaining amount, and print a label.
 
-![Spools](docs/screenshots/spools.png)
+![Spools](docs/screenshots/en/spools.png)
 
 Spool card: remaining amount, recommended print profile, usage history, a QR code
 with a print-label button, placement, and full filament specs.
 
-![Spool card](docs/screenshots/spool-detail.png)
+![Spool card](docs/screenshots/en/spool-detail.png)
 
 ### 🏷️ Labels and QR codes
 
@@ -101,7 +101,7 @@ The app shows printer status and job history. For a finished job just press
 confirm which spools to deduct from. Already-deducted jobs are marked and won't be
 deducted twice.
 
-![Printers and Moonraker](docs/screenshots/printers.png)
+![Printers and Moonraker](docs/screenshots/en/printers.png)
 
 ### 📄 gcode upload
 
@@ -109,7 +109,7 @@ If the printer isn't connected, upload a gcode file manually. The app parses usa
 per tool (T0, T1, …), and you map each tool to a spool from inventory and deduct the
 material.
 
-![gcode upload](docs/screenshots/gcode.png)
+![gcode upload](docs/screenshots/en/gcode.png)
 
 ### 🗂️ Profiles, locations, slots
 
@@ -119,14 +119,14 @@ material.
 - **Printer slots** — which spool sits in which slot, with an assignment history
   (managed on the “Printers” page).
 
-![Filament profiles](docs/screenshots/profiles.png)
+![Filament profiles](docs/screenshots/en/profiles.png)
 
 ### 📜 History
 
 Every deduction and adjustment: when, for which print, and from which spool the
 material was deducted.
 
-![History](docs/screenshots/print-jobs.png)
+![History](docs/screenshots/en/print-jobs.png)
 
 ### ⚙️ Settings
 
@@ -138,7 +138,7 @@ material was deducted.
   auto-deduction when everything maps to slots (optional).
 - **Deduction** — allow the remaining amount to go negative (admin only).
 
-![Settings](docs/screenshots/settings.png)
+![Settings](docs/screenshots/en/settings.png)
 
 ---
 
