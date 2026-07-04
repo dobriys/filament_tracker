@@ -315,6 +315,8 @@ export const EN = {
   "например Ocean Blue Silk": "e.g. Ocean Blue Silk",
   "не в сети": "offline",
   "не используется": "not used",
+  "м": "m",
+  "Слайсер не дал вес — оценка по длине и выбранной катушке": "Slicer gave no weight — estimated from length and selected spool",
   "необязательно": "optional",
   "нет": "no",
   "нет данных": "no data",

@@ -7,6 +7,16 @@ const Swatch = ({ hex, size = 13 }) => (
   <span style={{ display: "inline-block", width: size, height: size, borderRadius: 3, background: hex || "#666", border: "1px solid var(--border)", verticalAlign: "middle" }} />
 );
 
+// Плотность (г/см³) для оценки веса по длине — должна совпадать с backend.
+const DENSITY = { PLA: 1.24, "PLA+": 1.24, PETG: 1.27, PET: 1.27, ABS: 1.04, ASA: 1.07, TPU: 1.21, TPE: 1.21, PC: 1.20, NYLON: 1.14, PA: 1.14, HIPS: 1.04, PVA: 1.23, PP: 0.90 };
+function estimateGrams(mm, spool) {
+  if (!mm || !spool) return null;
+  const d = Number(spool.diameter_mm) || 1.75;
+  const mat = (spool.material || "").toUpperCase().replace(/\s/g, "");
+  const dens = DENSITY[mat] || DENSITY[mat.replace(/\+$/, "")] || 1.24;
+  return Math.PI * (d / 2) ** 2 * Number(mm) / 1000 * dens;
+}
+
 // Списание печати: сопоставление Tool → катушка из инвентаря и подтверждение.
 export default function ConsumeJob() {
   const { id } = useParams();
@@ -38,7 +48,8 @@ export default function ConsumeJob() {
       setSlotMap(sm);
       const init = {};
       (j.tools || []).forEach((tool) => {
-        if (Number(tool.used_g) > 0 && slotByIndex[tool.tool_index + 1]) init[tool.tool_index] = slotByIndex[tool.tool_index + 1];
+        const used = Number(tool.used_g) > 0 || Number(tool.used_mm) > 0;
+        if (used && slotByIndex[tool.tool_index + 1]) init[tool.tool_index] = slotByIndex[tool.tool_index + 1];
       });
       setMapping(init);
     }).catch(() => {});
@@ -50,7 +61,7 @@ export default function ConsumeJob() {
     setError(null); setProblems(null); setBusy(true);
     try {
       const mappings = job.tools
-        .filter((tool) => Number(tool.used_g) > 0 && mapping[tool.tool_index])
+        .filter((tool) => (Number(tool.used_g) > 0 || Number(tool.used_mm) > 0) && mapping[tool.tool_index])
         .map((tool) => ({ tool_index: tool.tool_index, spool_id: mapping[tool.tool_index] }));
       const res = await api.post(`/api/print-jobs/${id}/confirm-usage`, { mappings, allow_negative: allowNegative });
       setResult(res);
@@ -101,15 +112,25 @@ export default function ConsumeJob() {
           <thead><tr><th>{t("Инструмент")}</th><th>{t("Расход")}</th><th style={{ width: 30, textAlign: "center" }}>→</th><th>{t("Катушка из инвентаря")}</th></tr></thead>
           <tbody>
             {job.tools.map((tool) => {
-              const unused = Number(tool.used_g) <= 0;
+              const grams = Number(tool.used_g) || 0;
+              const mm = Number(tool.used_mm) || 0;
+              const unused = grams <= 0 && mm <= 0;
+              const byLength = grams <= 0 && mm > 0;
               const sp = spoolById(mapping[tool.tool_index]);
+              const est = byLength ? estimateGrams(mm, sp) : null;
               return (
                 <tr key={tool.id}>
                   <td>
                     <strong>Tool {tool.tool_index}</strong>
                     <div className="muted" style={{ fontSize: 13 }}><Swatch hex={tool.color_hex} /> {tool.material || "—"} {tool.color_hex || ""}</div>
                   </td>
-                  <td>{unused ? <span className="muted">{t("не используется")}</span> : `${Number(tool.used_g).toFixed(2)} ${t("г")}`}</td>
+                  <td>{unused ? <span className="muted">{t("не используется")}</span>
+                    : byLength
+                      ? <span title={t("Слайсер не дал вес — оценка по длине и выбранной катушке")}>
+                          {est != null ? `≈ ${est.toFixed(1)} ${t("г")}` : "≈ ?"}{" "}
+                          <span className="muted">({(mm / 1000).toFixed(2)} {t("м")})</span>
+                        </span>
+                      : `${grams.toFixed(2)} ${t("г")}`}</td>
                   <td style={{ textAlign: "center", color: "var(--muted)" }}>→</td>
                   <td>
                     <select value={mapping[tool.tool_index] || ""} disabled={unused} style={{ minWidth: 280 }}

@@ -5,6 +5,7 @@
   проверить остаток -> создать print_job_spool_usage -> уменьшить вес ->
   записать spool_event(print_usage).
 """
+import math
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -12,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import (
+    FilamentProfile,
     PrinterSlot,
     PrintJob,
     PrintJobSpoolUsage,
@@ -26,6 +28,31 @@ class ConsumptionError(Exception):
     def __init__(self, problems: list[dict]):
         self.problems = problems
         super().__init__("Невозможно списать печать")
+
+
+# Плотность филамента, г/см³ — для оценки веса по длине, когда слайсер не отдал
+# пофиловый расход в граммах. Значения ориентировочные, по материалу катушки.
+_DEFAULT_DENSITY = {
+    "PLA": 1.24, "PLA+": 1.24, "PETG": 1.27, "PET": 1.27, "ABS": 1.04,
+    "ASA": 1.07, "TPU": 1.21, "TPE": 1.21, "PC": 1.20, "NYLON": 1.14,
+    "PA": 1.14, "HIPS": 1.04, "PVA": 1.23, "PP": 0.90,
+}
+
+
+def _spool_density(db: Session, spool: Spool) -> float:
+    if spool.filament_profile_id:
+        prof = db.get(FilamentProfile, spool.filament_profile_id)
+        if prof is not None and prof.density_g_cm3:
+            return float(prof.density_g_cm3)
+    mat = (spool.material or "").upper().replace(" ", "")
+    return _DEFAULT_DENSITY.get(mat) or _DEFAULT_DENSITY.get(mat.rstrip("+")) or 1.24
+
+
+def grams_from_length(db: Session, spool: Spool, length_mm) -> Decimal:
+    """Вес филамента по длине: π·(d/2)²·L / 1000 · плотность (мм³ → см³ → г)."""
+    d = float(spool.diameter_mm or 1.75)
+    grams = math.pi * (d / 2) ** 2 * float(length_mm) / 1000 * _spool_density(db, spool)
+    return Decimal(str(round(grams, 2)))
 
 
 def create_from_parsed(
@@ -134,8 +161,9 @@ def confirm_usage(
     problems = []
 
     for row in rows:
-        used = Decimal(row.used_g or 0)
-        if used <= 0:
+        has_g = Decimal(row.used_g or 0) > 0
+        has_mm = Decimal(row.used_mm or 0) > 0
+        if not has_g and not has_mm:
             continue
         m = map_by_tool.get(row.tool_index)
         spool_id = m.get("spool_id") if m else None
@@ -158,6 +186,12 @@ def confirm_usage(
             spool = db.get(Spool, slot.current_spool_id)
         else:
             problems.append({"tool_index": row.tool_index, "detail": "Не выбран филамент"})
+            continue
+        # Нет пофиловых граммов — считаем из длины по выбранной катушке.
+        used = Decimal(row.used_g or 0)
+        if used <= 0 and has_mm:
+            used = grams_from_length(db, spool, row.used_mm)
+        if used <= 0:
             continue
         left = Decimal(spool.current_weight_g)
         if left < used and not allow_negative:

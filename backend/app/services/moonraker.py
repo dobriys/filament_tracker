@@ -244,6 +244,24 @@ def job_to_parsed(job: dict) -> dict:
                 "density_g_cm3": None,
             }
         )
+    total_mm = job.get("filament_used")
+    if not tools and total_mm and float(total_mm) > 0:
+        # Fallback: Moonraker не извлёк пофиловые веса (частый случай для
+        # временных .3mf_temp-файлов) — но суммарная длина есть. Заводим одну
+        # строку расхода по длине; граммы посчитаются из выбранной катушки при
+        # списании (диаметр × плотность).
+        tools.append(
+            {
+                "tool_index": 0,
+                "material": _material_from_filename(job.get("filename")),
+                "color_hex": None,
+                "used_g": None,
+                "used_mm": total_mm,
+                "density_g_cm3": None,
+            }
+        )
+        n = 1
+
     est = meta.get("estimated_time")
     jid = job.get("job_id")
     return {
@@ -257,9 +275,21 @@ def job_to_parsed(job: dict) -> dict:
         "filament_change_count": None,
         "tool_count": n,
         "total_filament_used_g": meta.get("filament_weight_total"),
-        "total_filament_used_mm": job.get("filament_used"),
+        "total_filament_used_mm": total_mm,
         "tools": tools,
     }
+
+
+_MATERIALS = ("PLA+", "PETG", "PLA", "ABS", "ASA", "TPU", "PVA", "HIPS", "PC", "PA", "PP")
+
+
+def _material_from_filename(name: str | None) -> str | None:
+    """Материал из имени файла Anycubic (…_PLA_0.2_…). Только для подсказки."""
+    up = (name or "").upper()
+    for m in _MATERIALS:
+        if f"_{m}_" in up or f"_{m}." in up:
+            return m
+    return None
 
 
 class MoonrakerClient:
