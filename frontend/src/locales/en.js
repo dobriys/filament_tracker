@@ -128,6 +128,7 @@ export const EN = {
   "Обзор запасов филамента и недавней активности.": "Overview of filament stock and recent activity.",
   "Обработка…": "Processing…",
   "Общая информация": "General info",
+  "Общие": "Other",
   "Объём": "Amount",
   "Ожидание": "Standby",
   "Описание": "Description",

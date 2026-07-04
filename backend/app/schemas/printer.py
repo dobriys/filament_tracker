@@ -51,6 +51,7 @@ class PrinterPreset(BaseModel):
     model: str | None = None
     integration_type: str
     capabilities: dict
+    note: str | None = None
 
 
 class TestConnectionResult(BaseModel):

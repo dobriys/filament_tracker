@@ -24,12 +24,20 @@ export default function Printers() {
     brand: null,
     model: null,
     capabilities: null,
+    note: null,
     integration_type: "manual",
     moonraker_url: "",
     moonraker_api_key: "",
     slot_count: 4,
   };
   const [form, setForm] = useState(emptyForm);
+
+  // Пресеты, сгруппированные по бренду — для <optgroup> в селекте модели.
+  const presetGroups = presets.reduce((acc, p) => {
+    const g = p.brand || t("Общие");
+    (acc[g] = acc[g] || []).push(p);
+    return acc;
+  }, {});
 
   function load() {
     return api.get("/api/printers").then((ps) => { setPrinters(ps); return ps; }).catch(() => []);
@@ -51,6 +59,7 @@ export default function Printers() {
       brand: p.brand,
       model: p.model,
       capabilities: p.capabilities,
+      note: p.note,
       integration_type: p.integration_type,
       slot_count: p.capabilities?.mmu_slots ?? (p.capabilities?.has_mmu ? f.slot_count : 0),
       name: f.name || [p.brand, p.model].filter(Boolean).join(" "),
@@ -99,8 +108,10 @@ export default function Printers() {
               <label>{t("Модель принтера")}</label>
               <select value={form.preset_key} onChange={(e) => applyPreset(e.target.value)}>
                 <option value="">{t("— выбрать модель —")}</option>
-                {presets.map((p) => (
-                  <option key={p.key} value={p.key}>{[p.brand, p.model].filter(Boolean).join(" ") || p.key}</option>
+                {Object.entries(presetGroups).map(([brand, items]) => (
+                  <optgroup key={brand} label={brand}>
+                    {items.map((p) => <option key={p.key} value={p.key}>{p.model}</option>)}
+                  </optgroup>
                 ))}
               </select>
             </div>
@@ -112,6 +123,7 @@ export default function Printers() {
               <div>
                 {(form.brand || form.model) && <div className="printer-head-sub">{[form.brand, form.model].filter(Boolean).join(" ")}</div>}
                 <CapabilityChips caps={form.capabilities || {}} />
+                {form.note && <div className="muted" style={{ fontSize: 12, marginTop: 5 }}>{form.note}</div>}
               </div>
             </div>
           )}
