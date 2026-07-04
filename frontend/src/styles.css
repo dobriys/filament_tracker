@@ -540,6 +540,49 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
 [data-theme="dark"] .apple-switch:hover { background: #52525b; }
 [data-theme="dark"] .apple-switch.on { background: #30d158; }
 [data-theme="dark"] .apple-switch.on:hover { background: #34c759; }
+
+/* Сегментный переключатель режимов (Настройки → Moonraker) */
+.seg-toggle {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--panel-2, var(--border-soft));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  width: 100%;
+  max-width: 440px;
+}
+.seg-item {
+  flex: 1;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.seg-item:hover:not(.active):not(:disabled) { color: var(--text-soft); }
+.seg-item.active {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+}
+.seg-item:disabled { cursor: not-allowed; opacity: 0.55; }
+.seg-hint {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  min-height: 34px;
+}
+.seg-hint b { color: var(--text-soft); font-weight: 600; }
+
 .zone-title {
   font-size: 11px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.08em; color: var(--muted-2); margin-bottom: 12px;
