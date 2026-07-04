@@ -1,150 +1,153 @@
 # 🧵 Filament Tracker
 
-**Учёт филамента для 3D-печати, который вы разворачиваете на своём сервере.**
+**English** · [Русский](README.ru.md)
 
-Сколько катушек осталось, что где лежит, на сколько ещё хватит пластика и куда
-он ушёл — всё в одном месте. Приложение само считает расход по данным принтера
-(Moonraker) или по загруженному gcode, печатает этикетки с QR-кодом и хранит все
-данные только у вас. Интерфейс на русском и английском.
+**Self-hosted filament tracking for 3D printing.**
 
-![Панель](docs/screenshots/dashboard.png)
+How many spools are left, what's stored where, how much plastic you still have and
+where it went — all in one place. The app tallies usage from your printer
+(Moonraker) or from an uploaded gcode file, prints QR-coded labels, and keeps all
+your data on your own server. Interface in English and Russian.
 
----
-
-## Содержание
-
-- [Что умеет](#что-умеет)
-- [Возможности по разделам](#возможности-по-разделам)
-- [Установка на свой сервер (Docker)](#установка-на-свой-сервер-docker)
-- [Установка через Portainer](#установка-через-portainer)
-- [Первые шаги после установки](#первые-шаги-после-установки)
-- [Резервные копии](#резервные-копии)
-- [Частые вопросы](#частые-вопросы)
+![Dashboard](docs/screenshots/dashboard.png)
 
 ---
 
-## Что умеет
+## Contents
 
-- 📦 **Инвентарь катушек** — материал, цвет, остаток в граммах, место хранения, фото.
-- ⚖️ **Точный остаток** — списание по весу, ручные корректировки, полная история движений.
-- 🖨️ **Интеграция с принтером (Moonraker / Rinkhals)** — статус печати прямо на главной
-  и списание израсходованного пластика в один клик по завершении задания.
-- 🗂️ **Каталог принтеров** — выбор модели из 50+ совместимых Klipper/Moonraker-принтеров
-  (Anycubic, Creality, Sovol, QIDI, FLSUN, ELEGOO, Prusa и др.). Карточка сама
-  показывает то, что есть у принтера — слоты мультиподачи, сушилку, камеру — и рисует
-  силуэт с акцентом бренда.
-- 🧵 **Импорт из Spoolman** — перенос катушек из вашего self-hosted
-  [Spoolman](https://github.com/Donkie/Spoolman) по сети в один клик.
-- 🤖 **Автосписание** — фоновый опрос принтера: завершённые печати импортируются сами,
-  а при полном сопоставлении со слотами материал списывается автоматически (опция).
-- 📄 **Расчёт по gcode** — загрузите файл, приложение посчитает расход по каждому
-  экструдеру и спишет с нужных катушек.
-- 🏷️ **Этикетки и QR-коды** — печать наклеек с живым предпросмотром; скан QR открывает
-  карточку катушки.
-- 📊 **Дашборд** — остаток по материалам, расход по месяцам, что заканчивается,
-  недавняя активность.
-- 🗂️ **Профили филамента, места хранения, слоты принтера** — гибкая организация склада.
-- 💾 **Бэкап в JSON** — выгрузка и восстановление всех данных.
-- 🔐 **Свой сервер, свои данные** — авторизация по логину, ключи принтеров хранятся
-  в зашифрованном виде.
+- [What it does](#what-it-does)
+- [Feature tour](#feature-tour)
+- [Install on your own server (Docker)](#install-on-your-own-server-docker)
+- [Install via Portainer](#install-via-portainer)
+- [First steps after install](#first-steps-after-install)
+- [Backups](#backups)
+- [FAQ](#faq)
 
 ---
 
-## Возможности по разделам
+## What it does
 
-### 📊 Панель (главная)
+- 📦 **Spool inventory** — material, color, remaining grams, storage location, photo.
+- ⚖️ **Accurate remaining amount** — deduction by weight, manual adjustments, full
+  movement history.
+- 🖨️ **Printer integration (Moonraker / Rinkhals)** — live print status right on the
+  dashboard and one-click deduction of used plastic when a job finishes.
+- 🗂️ **Printer catalog** — pick your model from 50+ compatible Klipper/Moonraker
+  printers (Anycubic, Creality, Sovol, QIDI, FLSUN, ELEGOO, Prusa and more). The card
+  shows only what your printer actually has — multi-material slots, dryer, chamber —
+  and draws a silhouette in the brand's accent color.
+- 🧵 **Spoolman import** — bring spools over from your self-hosted
+  [Spoolman](https://github.com/Donkie/Spoolman) across the network in one click.
+- 🤖 **Auto-deduction** — background printer polling: finished prints are imported
+  automatically, and when every tool maps to a slot the material is deducted for you
+  (optional).
+- 📄 **gcode estimation** — upload a file and the app computes usage per extruder and
+  deducts from the right spools.
+- 🏷️ **Labels and QR codes** — print stickers with a live preview; scanning the QR
+  opens the spool's card.
+- 📊 **Dashboard** — stock by material, monthly usage, what's running low, recent
+  activity.
+- 🗂️ **Filament profiles, storage locations, printer slots** — flexible organization.
+- 💾 **JSON backup** — export and restore all your data.
+- 🔐 **Your server, your data** — login-based auth; printer keys are stored encrypted.
 
-Сводка склада: всего катушек, сколько заканчивается, суммарный остаток и оценка
-часов печати, расход за 30 дней. Ниже — виджет каждого подключённого принтера с
-живым статусом печати (прогресс, температуры, оставшееся время) и кнопкой
-**«Списать»**, которая активируется, когда печать завершена. Также — график расхода
-по месяцам, распределение по материалам и лента недавних событий.
+---
 
-![Панель](docs/screenshots/dashboard.png)
+## Feature tour
 
-### 📦 Катушки
+### 📊 Dashboard
 
-Главный список склада. По каждой катушке видно материал и цвет, остаток, где она
-сейчас находится (место хранения или слот принтера) и быстрые действия. Отсюда же
-можно добавить катушку, отредактировать, продублировать (в том числе «в другом
-цвете»), взвесить, скорректировать остаток и напечатать этикетку.
+Inventory summary: total spools, how many are running low, total remaining amount
+and an estimate of print hours, usage over the last 30 days. Below is a widget for
+each connected printer with live print status (progress, temperatures, time left)
+and a **“Deduct”** button that lights up when a print finishes. Also: a monthly
+usage chart, a breakdown by material, and a feed of recent events.
 
-![Катушки](docs/screenshots/spools.png)
+![Dashboard](docs/screenshots/dashboard.png)
 
-Карточка катушки: остаток, рекомендуемый профиль печати, история использования,
-QR-код с кнопкой печати этикетки, размещение и полные характеристики филамента.
+### 📦 Spools
 
-![Карточка катушки](docs/screenshots/spool-detail.png)
+The main inventory list. For each spool you see the material and color, remaining
+amount, where it currently is (storage location or printer slot) and quick actions.
+From here you can add a spool, edit it, duplicate it (including “in another color”),
+weigh it, adjust the remaining amount, and print a label.
 
-### 🏷️ Этикетки и QR-коды
+![Spools](docs/screenshots/spools.png)
 
-Для каждой катушки формируется наклейка с производителем, материалом, кодом цвета
-и выбранными характеристиками (температуры, flow, pressure advance и т.д.).
-**Живой предпросмотр** показывает результат сразу при выборе размера и полей.
-Доступны разные размеры (в том числе вертикальные). Печать — в PDF (по одной или
-листом A4). QR-код на этикетке открывает приватную карточку катушки.
+Spool card: remaining amount, recommended print profile, usage history, a QR code
+with a print-label button, placement, and full filament specs.
 
-### 🖨️ Принтеры и Moonraker
+![Spool card](docs/screenshots/spool-detail.png)
 
-Добавляя принтер, выберите модель из каталога — тип подключения, число слотов и
-возможности (мультиподача, сушилка, камера) подставятся сами, а на карточке появится
-силуэт с акцентом бренда. Работает с любым Klipper/Moonraker-принтером (в т.ч.
-Anycubic на Rinkhals): что есть у принтера — то и показывается, лишние блоки не
-мешают. У совместимых хабов (например Anycubic ACE) сушкой можно управлять прямо
-из приложения.
+### 🏷️ Labels and QR codes
 
-Приложение показывает состояние принтера и историю заданий. Для завершённого
-задания достаточно нажать **«Списать»** — расход по каждому экструдеру уже известен
-из данных принтера, останется только подтвердить, с каких катушек списать.
-Уже списанные задания помечаются и повторно не списываются.
+Each spool gets a sticker with manufacturer, material, color code and selected specs
+(temperatures, flow, pressure advance, etc.). A **live preview** shows the result as
+you pick the size and fields. Several sizes are available (including vertical ones).
+Printing goes to PDF (one at a time or as an A4 sheet). The QR code on the label
+opens the private spool card.
 
-![Принтеры и Moonraker](docs/screenshots/printers.png)
+### 🖨️ Printers and Moonraker
 
-### 📄 Загрузка gcode
+When adding a printer, pick the model from the catalog — connection type, slot count
+and capabilities (multi-material, dryer, chamber) are filled in for you, and a
+silhouette in the brand's accent color appears on the card. Works with any
+Klipper/Moonraker printer (including Anycubic on Rinkhals): only what the printer
+actually has is shown, no clutter. For compatible hubs (e.g. Anycubic ACE) you can
+control drying right from the app.
 
-Если принтер не подключён, загрузите gcode-файл вручную. Приложение распарсит
-расход по инструментам (T0, T1, …), а вы сопоставите каждый инструмент с катушкой
-из склада и спишете материал.
+The app shows printer status and job history. For a finished job just press
+**“Deduct”** — usage per extruder is already known from the printer, so you only
+confirm which spools to deduct from. Already-deducted jobs are marked and won't be
+deducted twice.
 
-![Загрузка gcode](docs/screenshots/gcode.png)
+![Printers and Moonraker](docs/screenshots/printers.png)
 
-### 🗂️ Профили, места хранения, слоты
+### 📄 gcode upload
 
-- **Профили филамента** — шаблоны (бренд, материал, температуры, характеристики),
-  чтобы не заполнять всё вручную для каждой катушки.
-- **Места хранения** — полки, коробки, сушилки; видно, что где лежит.
-- **Слоты принтера** — какая катушка стоит в каком слоте, с историей назначений
-  (управление — на странице «Принтеры»).
+If the printer isn't connected, upload a gcode file manually. The app parses usage
+per tool (T0, T1, …), and you map each tool to a spool from inventory and deduct the
+material.
 
-![Профили филамента](docs/screenshots/profiles.png)
+![gcode upload](docs/screenshots/gcode.png)
 
-### 📜 История
+### 🗂️ Profiles, locations, slots
 
-Все списания и корректировки: когда, по какой печати и с какой катушки был списан
-материал.
+- **Filament profiles** — templates (brand, material, temperatures, specs) so you
+  don't fill everything in by hand for each spool.
+- **Storage locations** — shelves, boxes, dryers; see what's where.
+- **Printer slots** — which spool sits in which slot, with an assignment history
+  (managed on the “Printers” page).
 
-![История](docs/screenshots/print-jobs.png)
+![Filament profiles](docs/screenshots/profiles.png)
 
-### ⚙️ Настройки
+### 📜 History
 
-- **Бэкап** — скачать все данные в JSON и восстановить из файла.
-- **Импорт из Spoolman** — укажите адрес вашего Spoolman, и катушки перенесутся в
-  склад (производитель, материал, цвет, вес, остаток, локация). Повторный импорт
-  пропускает уже добавленные.
-- **Moonraker: автоматизация** — автоимпорт завершённых печатей (вкл. по умолчанию)
-  и полное автосписание при сопоставлении со слотами (опция).
-- **Списание** — разрешить уход остатка в минус (только администратор).
+Every deduction and adjustment: when, for which print, and from which spool the
+material was deducted.
 
-![Настройки](docs/screenshots/settings.png)
+![History](docs/screenshots/print-jobs.png)
+
+### ⚙️ Settings
+
+- **Backup** — download all data as JSON and restore from a file.
+- **Spoolman import** — point it at your Spoolman address and spools are copied into
+  inventory (manufacturer, material, color, weight, remaining, location). Re-importing
+  skips ones already added.
+- **Moonraker: automation** — auto-import of finished prints (on by default) and full
+  auto-deduction when everything maps to slots (optional).
+- **Deduction** — allow the remaining amount to go negative (admin only).
+
+![Settings](docs/screenshots/settings.png)
 
 ---
 
 
-## Установка на свой сервер (Docker)
+## Install on your own server (Docker)
 
-**Требуется:** Docker и Docker Compose (Linux-сервер, NAS, мини-ПК — что угодно).
+**Requirements:** Docker and Docker Compose (a Linux server, NAS, mini-PC — anything).
 
-Три команды — и всё готово:
+Three commands and you're done:
 
 ```bash
 git clone https://github.com/dobriys/filament_tracker.git
@@ -152,113 +155,113 @@ cd filament_tracker
 ./setup.sh
 ```
 
-Скрипт `setup.sh` сам создаст `.env`, **сгенерирует секретные ключи** и поднимет
-контейнеры из готовых образов.
-По окончании он выведет адрес интерфейса.
+The `setup.sh` script creates `.env`, **generates the secret keys**, and brings up
+the containers from prebuilt images. When it finishes it prints the interface URL.
 
-После запуска:
+After startup:
 
-- Интерфейс — **http://<адрес-сервера>:5173**
-- При первом входе сервис предложит **создать учётную запись администратора**
-  (email + пароль).
+- Interface — **http://<server-address>:5173**
+- On first login the service offers to **create an administrator account**
+  (email + password).
 
-Полезные команды:
+Handy commands:
 
 ```bash
-docker compose logs -f          # смотреть логи
-docker compose restart backend  # перезапустить сервис
-docker compose down             # остановить
-git pull && ./setup.sh          # обновить до новой версии
+docker compose logs -f          # watch logs
+docker compose restart backend  # restart the service
+docker compose down             # stop
+git pull && ./setup.sh          # update to a new version
 ```
 
 
 <details>
-<summary>Установка вручную (без скрипта)</summary>
+<summary>Manual install (without the script)</summary>
 
 ```bash
 git clone https://github.com/dobriys/filament_tracker.git
 cd filament_tracker
 cp .env.example .env
 
-# сгенерировать ключи и вписать их в .env
+# generate the keys and put them into .env
 echo "SECRET_KEY=$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=')"
 echo "ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')"
 
-# отредактировать .env , затем:
+# edit .env , then:
 docker compose up -d          
 ```
 </details>
 
 ---
 
-## Установка через Portainer
+## Install via Portainer
 
-Просто вставьте compose и нажмите Deploy.
+Just paste the compose and hit Deploy.
 
-1. **Stacks → Add stack → Web editor**, задайте имя (например `filament-tracker`).
-2. Вставьте содержимое файла [`docker-compose.yml`](docker-compose.yml)
-3. Раскройте **Environment variables** и добавьте как минимум
-   `SECRET_KEY`, `ENCRYPTION_KEY` (сгенерируйте, см. ниже) и
-   `POSTGRES_PASSWORD` — свой пароль БД.
-4. **Deploy the stack** и откройте `http://<адрес-сервера>:5173`.
+1. **Stacks → Add stack → Web editor**, give it a name (e.g. `filament-tracker`).
+2. Paste the contents of [`docker-compose.yml`](docker-compose.yml)
+3. Expand **Environment variables** and add at least
+   `SECRET_KEY`, `ENCRYPTION_KEY` (generate them, see below) and
+   `POSTGRES_PASSWORD` — your own database password.
+4. **Deploy the stack** and open `http://<server-address>:5173`.
 
-Сгенерировать ключи (на любой машине):
+Generate the keys (on any machine):
 
 ```bash
 echo "SECRET_KEY=$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=')"
 echo "ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')"
 ```
 
-Обновление: **Stacks → ваш stack → Pull and redeploy** — Portainer подтянет
-свежие образы.
+Updating: **Stacks → your stack → Pull and redeploy** — Portainer pulls the fresh
+images.
 
 ---
 
 
-## Первые шаги после установки
+## First steps after install
 
-1. При первом входе создайте учётную запись администратора.
-2. (Опционально) создайте **профили филамента** для брендов, которыми печатаете.
-3. Добавьте **места хранения** (полки, сушилки).
-4. Добавьте первые **катушки** — вручную или на основе профиля.
-5. Подключите **принтер** по адресу Moonraker (раздел «Принтеры»).
-6. Напечатайте **этикетки** с QR и наклейте на катушки.
-7. Печатайте — и списывайте расход с главной страницы в один клик.
-
----
-
-## Резервные копии
-
-В разделе **Настройки → Бэкап** можно скачать полную выгрузку в JSON
-и восстановить из неё (данные добавляются, а не перезаписываются). Рекомендуется
-делать выгрузку перед крупными изменениями.
+1. On first login, create an administrator account.
+2. (Optional) create **filament profiles** for the brands you print with.
+3. Add **storage locations** (shelves, dryers).
+4. Add your first **spools** — by hand or from a profile.
+5. Connect a **printer** via its Moonraker address (the “Printers” section).
+6. Print **labels** with QR codes and stick them on your spools.
+7. Print — and deduct usage from the dashboard in one click.
 
 ---
 
-## Частые вопросы
+## Backups
 
-**Нужен ли принтер с Moonraker?**
-Нет. Без принтера ведите склад вручную и списывайте расход, загружая gcode-файлы.
-С Moonraker (в т.ч. Rinkhals на Anycubic) списание становится полуавтоматическим.
+Under **Settings → Backup** you can download a full JSON export and restore from it
+(data is added, not overwritten). It's recommended to export before major changes.
 
-**Какие принтеры поддерживаются?**
-Любой принтер с Moonraker: в каталоге уже 50+ моделей (Anycubic, Creality, Sovol,
-QIDI, FLSUN, ELEGOO, Kingroon, Artillery, BIQU, Prusa и др.), но подойдёт и любой
-другой Klipper/Moonraker-принтер — выберите «Klipper / Moonraker», и возможности
-определятся сами. Bambu Lab пока не поддерживается.
+---
 
-**Уже веду учёт в Spoolman — переносить всё заново?**
-Нет. В **Настройки → Импорт из Spoolman** укажите адрес вашего Spoolman — катушки
-перенесутся автоматически.
+## FAQ
 
-**Данные уходят в облако?**
-Нет. Всё работает на вашем сервере, данные хранятся локально в вашей базе.
+**Do I need a printer with Moonraker?**
+No. Without a printer, keep inventory by hand and deduct usage by uploading gcode
+files. With Moonraker (including Rinkhals on Anycubic) deduction becomes
+semi-automatic.
 
-**Забыл пароль администратора.**
-Сбросьте хеш пароля прямо в БД или (если данные не жалко) очистите таблицу
-`users` — при следующем входе сервис снова предложит создать администратора.
+**Which printers are supported?**
+Any printer with Moonraker: the catalog already has 50+ models (Anycubic, Creality,
+Sovol, QIDI, FLSUN, ELEGOO, Kingroon, Artillery, BIQU, Prusa and more), but any other
+Klipper/Moonraker printer works too — pick “Klipper / Moonraker” and capabilities are
+detected automatically. Bambu Lab is not supported yet.
+
+**I already track things in Spoolman — do I re-enter everything?**
+No. Under **Settings → Spoolman import** enter your Spoolman address and the spools
+are transferred automatically.
+
+**Does my data go to the cloud?**
+No. Everything runs on your server; data is stored locally in your database.
+
+**I forgot the admin password.**
+Reset the password hash directly in the database or (if you don't mind losing data)
+clear the `users` table — on the next login the service will offer to create an
+administrator again.
 
 
 ---
 
-<p align="center"><sub>Self-hosted · ваши данные остаются у вас · интерфейс на русском</sub></p>
+<p align="center"><sub>Self-hosted · your data stays with you · interface in English and Russian</sub></p>
