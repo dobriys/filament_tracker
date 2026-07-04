@@ -218,6 +218,7 @@ export const EN = {
   "Модель принтера": "Printer model",
   "— выбрать модель —": "— pick a model —",
   "Мультиподача": "Multi-material",
+  "Иллюстрация принтера": "Printer illustration",
   "Сушилка": "Dryer",
   "Камера": "Chamber",
   "Смен филамента:": "Filament changes:",

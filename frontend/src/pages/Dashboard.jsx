@@ -4,6 +4,7 @@ import { api } from "../api/client.js";
 import { fmtMoney } from "../format.js";
 import { t, tReason } from "../i18n.js";
 import { GateChips } from "../components/HubGates.jsx";
+import { PrinterArt, CapabilityChips, brandAccent } from "../components/PrinterArt.jsx";
 
 const MAT_COLORS = ["#2e6be6", "#3d4657", "#17a34a", "#f6a723", "#8a5fbf", "#e0526e", "#17a2a6", "#9aa1ab"];
 
@@ -308,12 +309,19 @@ function MoonrakerCard({ printer, navigate }) {
   // Секции карточки — по возможностям принтера (авто из overview + пресет).
   const hasMmu = caps.has_mmu ?? gates.length > 0;
   const mmuTitle = caps.mmu_name ? `${t("Слоты")} ${caps.mmu_name}` : t("Слоты мультиподачи");
+  const accent = brandAccent(printer.brand);
+  const modelLine = [printer.brand, printer.model].filter(Boolean).join(" ");
 
   return (
-    <div className="card moonraker-card">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h3 style={{ margin: 0, fontSize: 17 }}>🖨️ {printer.name}</h3>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+    <div className="card moonraker-card" style={{ "--brand": accent }}>
+      <div className="printer-head">
+        <PrinterArt caps={caps} brand={printer.brand} size={62} />
+        <div className="printer-head-main">
+          <h3>{printer.name}</h3>
+          {modelLine && <div className="printer-head-sub">{modelLine}</div>}
+          <CapabilityChips caps={caps} />
+        </div>
+        <div className="printer-head-status">
           {job?.consumed && <span className="badge added">{t("Списано")}</span>}
           {offline ? <span className="badge used">{t("не в сети")}</span> : status && <span className={`act-tag ${stTag}`}>{stLabel}</span>}
         </div>

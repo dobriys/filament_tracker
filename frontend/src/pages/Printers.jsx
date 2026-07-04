@@ -4,24 +4,11 @@ import { api } from "../api/client.js";
 import { fmtMoney } from "../format.js";
 import { t, dateLocale, tServer } from "../i18n.js";
 import { GateCard } from "../components/HubGates.jsx";
+import { PrinterArt, CapabilityChips, brandAccent } from "../components/PrinterArt.jsx";
 
 // Лейбл системы мультиподачи по возможностям: «Слоты ACE Pro» / «Слоты мультиподачи».
 function mmuLabel(caps) {
   return caps?.mmu_name ? `${t("Слоты")} ${caps.mmu_name}` : t("Слоты мультиподачи");
-}
-
-// Короткая сводка возможностей выбранного пресета — что подключим.
-function CapabilityHints({ caps }) {
-  const items = [];
-  if (caps.has_mmu) items.push(`${caps.mmu_name || t("Мультиподача")}${caps.mmu_slots ? ` · ${caps.mmu_slots}` : ""}`);
-  if (caps.has_dryer) items.push(t("Сушилка"));
-  if (caps.has_chamber) items.push(t("Камера"));
-  if (items.length === 0) return null;
-  return (
-    <div className="muted" style={{ fontSize: 13, margin: "-2px 0 10px", display: "flex", gap: 6, flexWrap: "wrap" }}>
-      {items.map((x) => <span key={x} className="badge">{x}</span>)}
-    </div>
-  );
 }
 
 export default function Printers() {
@@ -119,7 +106,15 @@ export default function Printers() {
             </div>
             <div><label>{t("Название")}</label><input value={form.name} onChange={set("name")} required /></div>
           </div>
-          {form.capabilities && <CapabilityHints caps={form.capabilities} />}
+          {form.preset_key && (
+            <div className="preset-preview" style={{ "--brand": brandAccent(form.brand) }}>
+              <PrinterArt caps={form.capabilities || {}} brand={form.brand} size={56} />
+              <div>
+                {(form.brand || form.model) && <div className="printer-head-sub">{[form.brand, form.model].filter(Boolean).join(" ")}</div>}
+                <CapabilityChips caps={form.capabilities || {}} />
+              </div>
+            </div>
+          )}
           <div className="row">
             <div>
               <label>{t("Тип интеграции")}</label>
@@ -229,12 +224,20 @@ function MoonrakerPanel({ printer, onClose }) {
   const pct = (v) => (v != null ? Math.round(v * 100) + "%" : "—");
 
   return (
-    <div className="card">
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <h3>Moonraker — {printer.name}</h3>
+    <div className="card moonraker-card" style={{ "--brand": brandAccent(printer.brand) }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <PrinterArt caps={ov?.capabilities || printer.capabilities || {}} brand={printer.brand} size={50} />
+          <div>
+            <h3 style={{ margin: 0 }}>Moonraker — {printer.name}</h3>
+            {[printer.brand, printer.model].filter(Boolean).length > 0 && (
+              <div className="printer-head-sub">{[printer.brand, printer.model].filter(Boolean).join(" ")}</div>
+            )}
+          </div>
+        </div>
         <button className="secondary" onClick={onClose}>{t("Закрыть")}</button>
       </div>
-      <div className="muted" style={{ marginBottom: 8 }}>{printer.moonraker_url}</div>
+      <div className="muted" style={{ marginTop: 6, marginBottom: 8 }}>{printer.moonraker_url}</div>
       <div style={{ display: "flex", gap: 8 }}>
         <button className="secondary" onClick={testConn}>{t("Тест соединения")}</button>
         <button className="secondary" onClick={() => { loadOverview(); loadJobs(); }}>{t("Обновить")}</button>

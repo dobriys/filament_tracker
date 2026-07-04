@@ -541,6 +541,31 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
 [data-theme="dark"] .apple-switch.on { background: #30d158; }
 [data-theme="dark"] .apple-switch.on:hover { background: #34c759; }
 
+/* Брендинг принтера: акцент бренда, шапка с силуэтом, значки возможностей */
+.moonraker-card { position: relative; }
+.moonraker-card::before {
+  content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 4px;
+  background: var(--brand, var(--accent)); border-radius: 0 4px 4px 0; opacity: 0.85;
+}
+.printer-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.printer-head .printer-head-main { flex: 1 1 auto; min-width: 0; }
+.printer-head-main h3 { margin: 0; font-size: 17px; }
+.printer-head-sub { color: var(--muted); font-size: 13px; margin-top: 1px; }
+.printer-head-status { display: flex; gap: 6px; align-items: center; flex: 0 0 auto; }
+.cap-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.cap-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--text-soft);
+  background: var(--panel-3); border: 1px solid var(--border-soft);
+  padding: 2px 8px; border-radius: var(--radius-pill);
+}
+.preset-preview {
+  display: flex; align-items: center; gap: 14px;
+  margin: 2px 0 12px; padding: 10px 12px;
+  background: var(--panel-2); border: 1px solid var(--border-soft);
+  border-left: 4px solid var(--brand, var(--accent)); border-radius: var(--radius-sm);
+}
+
 /* Сегментный переключатель режимов (Настройки → Moonraker) */
 .seg-toggle {
   display: flex;
