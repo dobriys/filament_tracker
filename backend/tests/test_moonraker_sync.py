@@ -196,3 +196,25 @@ def test_dryer_unit_uses_active_unit_unless_requested():
     assert dryer_unit(dryer) == 1
     assert dryer_unit(dryer, requested=2) == 2
     assert dryer_unit(None) == 0
+
+
+# --- автоопределение возможностей + пресеты ---
+from app.services.moonraker import detect_capabilities
+from app.services.printer_presets import PRESETS, get_preset
+
+
+def test_detect_capabilities_from_hub_and_dryer():
+    gates = [{"gate": 0}, {"gate": 1}, {"gate": 2}, {"gate": 3}]
+    caps = detect_capabilities(gates, {"status": "stop"})
+    assert caps == {"has_mmu": True, "mmu_slots": 4, "has_dryer": True}
+
+
+def test_detect_capabilities_plain_printer():
+    assert detect_capabilities([], None) == {}
+
+
+def test_printer_presets_have_required_fields():
+    assert get_preset("anycubic-kobra-s1-combo")["capabilities"]["mmu_slots"] == 4
+    assert get_preset("missing") is None
+    for p in PRESETS:
+        assert {"key", "integration_type", "capabilities"} <= p.keys()

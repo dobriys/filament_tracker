@@ -5,41 +5,86 @@ import { fmtMoney } from "../format.js";
 import { t, dateLocale, tServer } from "../i18n.js";
 import { GateCard } from "../components/HubGates.jsx";
 
+// Лейбл системы мультиподачи по возможностям: «Слоты ACE Pro» / «Слоты мультиподачи».
+function mmuLabel(caps) {
+  return caps?.mmu_name ? `${t("Слоты")} ${caps.mmu_name}` : t("Слоты мультиподачи");
+}
+
+// Короткая сводка возможностей выбранного пресета — что подключим.
+function CapabilityHints({ caps }) {
+  const items = [];
+  if (caps.has_mmu) items.push(`${caps.mmu_name || t("Мультиподача")}${caps.mmu_slots ? ` · ${caps.mmu_slots}` : ""}`);
+  if (caps.has_dryer) items.push(t("Сушилка"));
+  if (caps.has_chamber) items.push(t("Камера"));
+  if (items.length === 0) return null;
+  return (
+    <div className="muted" style={{ fontSize: 13, margin: "-2px 0 10px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {items.map((x) => <span key={x} className="badge">{x}</span>)}
+    </div>
+  );
+}
+
 export default function Printers() {
   const [printers, setPrinters] = useState([]);
   const [selected, setSelected] = useState(null);
   const [mrPrinter, setMrPrinter] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [presets, setPresets] = useState([]);
   const [searchParams] = useSearchParams();
-  const [form, setForm] = useState({
+  const emptyForm = {
+    preset_key: "",
     name: "",
+    brand: null,
+    model: null,
+    capabilities: null,
     integration_type: "manual",
     moonraker_url: "",
     moonraker_api_key: "",
     slot_count: 4,
-  });
+  };
+  const [form, setForm] = useState(emptyForm);
 
   function load() {
     return api.get("/api/printers").then((ps) => { setPrinters(ps); return ps; }).catch(() => []);
   }
   useEffect(() => {
+    api.get("/api/printers/presets").then(setPresets).catch(() => {});
     load().then((ps) => {
       const mrId = searchParams.get("moonraker");
       if (mrId) { const p = ps.find((x) => x.id === mrId); if (p) setMrPrinter(p); }
     });
   }, []);
 
+  function applyPreset(key) {
+    const p = presets.find((x) => x.key === key);
+    if (!p) { setForm((f) => ({ ...f, preset_key: "" })); return; }
+    setForm((f) => ({
+      ...f,
+      preset_key: key,
+      brand: p.brand,
+      model: p.model,
+      capabilities: p.capabilities,
+      integration_type: p.integration_type,
+      slot_count: p.capabilities?.mmu_slots ?? (p.capabilities?.has_mmu ? f.slot_count : 0),
+      name: f.name || [p.brand, p.model].filter(Boolean).join(" "),
+    }));
+  }
+
   async function create(e) {
     e.preventDefault();
     await api.post("/api/printers", {
       name: form.name,
+      preset_key: form.preset_key || null,
+      brand: form.brand,
+      model: form.model,
+      capabilities: form.capabilities,
       integration_type: form.integration_type,
       moonraker_url: form.moonraker_url || null,
       moonraker_api_key: form.moonraker_api_key || null,
       slot_count: Number(form.slot_count) || 0,
     });
     setShowForm(false);
-    setForm({ name: "", integration_type: "manual", moonraker_url: "", moonraker_api_key: "", slot_count: 4 });
+    setForm(emptyForm);
     load();
   }
 
@@ -63,7 +108,19 @@ export default function Printers() {
       {showForm && (
         <form className="card" onSubmit={create}>
           <div className="row">
+            <div>
+              <label>{t("Модель принтера")}</label>
+              <select value={form.preset_key} onChange={(e) => applyPreset(e.target.value)}>
+                <option value="">{t("— выбрать модель —")}</option>
+                {presets.map((p) => (
+                  <option key={p.key} value={p.key}>{[p.brand, p.model].filter(Boolean).join(" ") || p.key}</option>
+                ))}
+              </select>
+            </div>
             <div><label>{t("Название")}</label><input value={form.name} onChange={set("name")} required /></div>
+          </div>
+          {form.capabilities && <CapabilityHints caps={form.capabilities} />}
+          <div className="row">
             <div>
               <label>{t("Тип интеграции")}</label>
               <select value={form.integration_type} onChange={set("integration_type")}>
@@ -85,11 +142,12 @@ export default function Printers() {
 
       <div className="card">
         <table>
-          <thead><tr><th>{t("Название")}</th><th>{t("Интеграция")}</th><th>{t("Активен")}</th><th></th></tr></thead>
+          <thead><tr><th>{t("Название")}</th><th>{t("Модель")}</th><th>{t("Интеграция")}</th><th>{t("Активен")}</th><th></th></tr></thead>
           <tbody>
             {printers.map((p) => (
               <tr key={p.id}>
                 <td>{p.name}</td>
+                <td className="muted">{[p.brand, p.model].filter(Boolean).join(" ") || "—"}</td>
                 <td>{p.integration_type}</td>
                 <td>{p.is_active ? t("да") : t("нет")}</td>
                 <td>
@@ -101,7 +159,7 @@ export default function Printers() {
                 </td>
               </tr>
             ))}
-            {printers.length === 0 && <tr><td colSpan={4} className="muted">{t("Пока нет принтеров")}</td></tr>}
+            {printers.length === 0 && <tr><td colSpan={5} className="muted">{t("Пока нет принтеров")}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -191,7 +249,7 @@ function MoonrakerPanel({ printer, onClose }) {
 
       {ov?.gates?.length > 0 && (
         <div className="card" style={{ marginTop: 12 }}>
-          <h4 style={{ margin: "0 0 10px" }}>🎛 {t("Слоты ACE")} <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>{t("— что принтер видит в слотах и совпадает ли это с привязанными катушками")}</span></h4>
+          <h4 style={{ margin: "0 0 10px" }}>🎛 {mmuLabel(ov?.capabilities)} <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>{t("— что принтер видит в слотах и совпадает ли это с привязанными катушками")}</span></h4>
           <div className="hub-gates">
             {ov.gates.map((g) => <GateCard key={g.gate} g={g} />)}
           </div>
@@ -437,7 +495,7 @@ function DryerCard({ printer, dryer, onChanged }) {
     <div className="card" style={{ marginTop: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <h4 style={{ margin: 0 }}>
-          🔥 {t("Сушка ACE")}{" "}
+          🔥 {t("Сушка филамента")}{" "}
           {drying
             ? <span className="act-tag in_use">{t("сушит")} {dryer.target_temp}°C{remainingLabel ? ` · ${t("осталось")} ${remainingLabel}` : durationLabel ? ` · ${t("Длительность")} ${durationLabel}` : ""}</span>
             : dryer.status === "heater_err"

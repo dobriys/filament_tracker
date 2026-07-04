@@ -10,15 +10,16 @@ from app.core.security import decrypt_secret, encrypt_secret
 from app.db.session import get_db
 from app.deps import get_current_user
 from app.models import AppSetting, Printer, PrintJob, User
-from app.services.moonraker import MoonrakerClient, dryer_unit
+from app.services.moonraker import MoonrakerClient, detect_capabilities, dryer_unit
 from app.schemas.printer import (
     PrinterCreate,
     PrinterOut,
+    PrinterPreset,
     PrinterUpdate,
     TestConnectionResult,
 )
 from app.schemas.slot import SlotCreate, SlotOut
-from app.services import settings_service, slot_service
+from app.services import printer_presets, settings_service, slot_service
 
 router = APIRouter(prefix="/printers", tags=["printers"])
 
@@ -36,6 +37,9 @@ def _to_out(printer: Printer) -> dict:
         "owner_user_id": printer.owner_user_id,
         "name": printer.name,
         "integration_type": printer.integration_type,
+        "brand": printer.brand,
+        "model": printer.model,
+        "capabilities": printer.capabilities or {},
         "moonraker_url": printer.moonraker_url,
         "is_active": printer.is_active,
         "notes": printer.notes,
@@ -43,6 +47,12 @@ def _to_out(printer: Printer) -> dict:
         "created_at": printer.created_at,
         "updated_at": printer.updated_at,
     }
+
+
+@router.get("/presets", response_model=list[PrinterPreset])
+def list_presets(user: User = Depends(get_current_user)):
+    """Курируемый каталог пресетов принтеров для формы заведения."""
+    return printer_presets.PRESETS
 
 
 @router.get("", response_model=list[PrinterOut])
@@ -59,10 +69,29 @@ def create_printer(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    # Пресет только заполняет умолчания — явные поля запроса всегда важнее.
+    preset = printer_presets.get_preset(data.preset_key)
+    brand = data.brand
+    model = data.model
+    capabilities = data.capabilities
+    integration_type = data.integration_type
+    slot_count = data.slot_count
+    if preset is not None:
+        brand = brand or preset.get("brand")
+        model = model or preset.get("model")
+        capabilities = capabilities if capabilities is not None else preset.get("capabilities")
+        if not integration_type or integration_type == "manual":
+            integration_type = preset.get("integration_type", integration_type)
+        if not slot_count:
+            slot_count = int((preset.get("capabilities") or {}).get("mmu_slots") or 0)
+
     printer = Printer(
         owner_user_id=user.id,
         name=data.name,
-        integration_type=data.integration_type,
+        integration_type=integration_type,
+        brand=brand,
+        model=model,
+        capabilities=capabilities or {},
         moonraker_url=data.moonraker_url,
         moonraker_api_key_encrypted=(
             encrypt_secret(data.moonraker_api_key) if data.moonraker_api_key else None
@@ -72,7 +101,7 @@ def create_printer(
     )
     db.add(printer)
     db.flush()
-    for i in range(1, data.slot_count + 1):
+    for i in range(1, slot_count + 1):
         slot_service.create_slot(
             db, printer_id=printer.id, slot_index=i, name=None, is_active=True
         )
@@ -308,10 +337,15 @@ def printer_overview(
             dryer["duration_min"] = sess.get("duration_min", duration_min)
             dryer["remaining_min"] = max(0, round(dryer["duration_min"] - elapsed_min))
 
+    # Возможности: сохранённые (пресет/ручные) + автоопределённые из телеметрии.
+    # Авто важнее — реальное железо перекрывает заявленное.
+    capabilities = {**(printer.capabilities or {}), **detect_capabilities(gates, dryer)}
+
     return {
         "status": status_data,
         "gates": gates,
         "dryer": dryer,
+        "capabilities": capabilities,
         "totals": client.get_totals(),
         "system": client.get_system(),
     }
