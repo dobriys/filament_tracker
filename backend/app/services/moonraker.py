@@ -81,52 +81,62 @@ def parse_hub(payload: dict) -> list[dict]:
 
 
 def parse_dryer(payload: dict) -> dict | None:
-    """Состояние сушки ACE (Rinkhals: mmu_machine.unit_N.dryer_*).
+    """Состояние сушки ACE (Rinkhals).
+
+    Данные о сушке приходят из двух объектов и на один и тот же юнит:
+      * mmu_machine.unit_N.dryer_* — статус и температуры, но остаток/длительность
+        Rinkhals сюда не прокидывает (всегда 0);
+      * filament_hub.filament_hubs[].dryer_status — здесь есть duration (в минутах)
+        и remain_time (в СЕКУНДАХ).
+    Мержим по номеру юнита, отдавая приоритет ненулевым значениям из filament_hub.
 
     Возвращает первый юнит с данными: status ("stop"/"drying"/"heater_err"),
     температуры, остаток в минутах, влажность. None — сушки нет (обычный принтер).
     """
     r = payload.get("result", payload) or {}
-    machine = (r.get("status", {}) or {}).get("mmu_machine", {}) or {}
-    units = []
+    status = r.get("status", {}) or {}
+    units: dict[int, dict] = {}
+
+    machine = status.get("mmu_machine", {}) or {}
     for key, u in machine.items():
         if not (isinstance(u, dict) and key.startswith("unit_")):
             continue
         if "dryer_status" not in u:
             continue
-        units.append(
-            {
-                "unit": int(key.split("_")[1]),
-                "status": u.get("dryer_status", "stop"),
-                "temp": u.get("dryer_temp", 0),
-                "target_temp": u.get("dryer_target_temp", 0),
-                "remaining_min": u.get("dryer_remaining", 0),
-                "duration_min": u.get("dryer_duration", 0),
-                "humidity": u.get("dryer_humidity", 0),
-            }
-        )
-    filament_hub = (r.get("status", {}) or {}).get("filament_hub", {}) or {}
+        uid = int(key.split("_")[1])
+        units[uid] = {
+            "unit": uid,
+            "status": u.get("dryer_status", "stop"),
+            "temp": u.get("dryer_temp", 0),
+            "target_temp": u.get("dryer_target_temp", 0),
+            "remaining_min": u.get("dryer_remaining", 0),
+            "duration_min": u.get("dryer_duration", 0),
+            "humidity": u.get("dryer_humidity", 0),
+        }
+
+    filament_hub = status.get("filament_hub", {}) or {}
     for hub in filament_hub.get("filament_hubs") or []:
         if not isinstance(hub, dict):
             continue
         dryer = hub.get("dryer_status") or {}
         if not isinstance(dryer, dict):
             continue
-        units.append(
-            {
-                "unit": int(hub.get("id", 0) or 0),
-                "status": dryer.get("status", "stop"),
-                "temp": dryer.get("temp", hub.get("temp", 0)),
-                "target_temp": dryer.get("target_temp", 0),
-                "remaining_min": dryer.get("remaining_time", dryer.get("remain_time", 0)) or 0,
-                "duration_min": dryer.get("duration", 0) or 0,
-                "humidity": dryer.get("humidity", 0),
-            }
-        )
+        uid = int(hub.get("id", 0) or 0)
+        remain_sec = dryer.get("remaining_time", dryer.get("remain_time", 0)) or 0
+        unit = units.setdefault(uid, {"unit": uid, "status": "stop"})
+        # filament_hub — источник истины по остатку/длительности; для остальных
+        # полей берём ненулевое значение, чтобы не затирать данные из mmu_machine.
+        if dryer.get("status"):
+            unit["status"] = dryer["status"]
+        unit["temp"] = dryer.get("temp") or hub.get("temp") or unit.get("temp", 0)
+        unit["target_temp"] = dryer.get("target_temp") or unit.get("target_temp", 0)
+        unit["remaining_min"] = round(remain_sec / 60) or unit.get("remaining_min", 0)
+        unit["duration_min"] = dryer.get("duration", 0) or unit.get("duration_min", 0)
+        unit["humidity"] = dryer.get("humidity") or hub.get("humidity") or unit.get("humidity", 0)
+
     if not units:
         return None
-    units.sort(key=lambda x: (x["status"] != "drying", x["unit"]))
-    return units[0]
+    return sorted(units.values(), key=lambda x: (x["status"] != "drying", x["unit"]))[0]
 
 
 def dryer_unit(dryer: dict | None, requested: int | None = None) -> int:

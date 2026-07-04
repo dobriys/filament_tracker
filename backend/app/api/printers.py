@@ -278,14 +278,35 @@ def printer_overview(
 
     dryer = hub["dryer"]
     if dryer and dryer.get("status") == "drying" and not dryer.get("remaining_min"):
-        # Rinkhals не отдаёт остаток времени — считаем сами по сушкам,
-        # запущенным из приложения (для запущенных с экрана принтера остатка нет).
-        row = db.get(AppSetting, f"dryer_session:{printer.id}")
+        # Rinkhals иногда не прокидывает remain_time в mmu_machine. Для сушек,
+        # запущенных с сайта, используем сохранённую сессию; для ручных запусков
+        # с экрана принтера заводим локальную оценку, если известна duration.
+        key = f"dryer_session:{printer.id}"
+        row = db.get(AppSetting, key)
         sess = (row.value or {}).get("value") if row is not None else None
+        duration_min = int(dryer.get("duration_min") or 0)
+        unit = dryer.get("unit")
+        target_temp = dryer.get("target_temp")
+
+        if duration_min > 0 and (
+            not isinstance(sess, dict)
+            or int(sess.get("duration_min") or 0) != duration_min
+            or sess.get("unit") != unit
+            or sess.get("target_temp") != target_temp
+        ):
+            sess = {
+                "started": time.time(),
+                "duration_min": duration_min,
+                "unit": unit,
+                "target_temp": target_temp,
+                "source": "printer",
+            }
+            settings_service.set_value(db, key, sess)
+
         if isinstance(sess, dict) and sess.get("started"):
             elapsed_min = (time.time() - sess["started"]) / 60
-            dryer["duration_min"] = sess.get("duration_min", 0)
-            dryer["remaining_min"] = max(0, round(sess.get("duration_min", 0) - elapsed_min))
+            dryer["duration_min"] = sess.get("duration_min", duration_min)
+            dryer["remaining_min"] = max(0, round(dryer["duration_min"] - elapsed_min))
 
     return {
         "status": status_data,

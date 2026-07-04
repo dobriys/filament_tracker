@@ -127,23 +127,47 @@ def test_parse_dryer_picks_drying_unit():
 
 
 def test_parse_dryer_reads_raw_filament_hub_duration():
+    # duration — в минутах, remain_time — в секундах.
     payload = {"result": {"status": {"filament_hub": {"filament_hubs": [{
         "id": 0,
         "temp": 43,
+        "humidity": 21,
         "dryer_status": {
             "status": "drying",
             "target_temp": 45,
             "duration": 240,
-            "remain_time": 198,
-            "humidity": 21,
+            "remain_time": 11880,
         },
     }]}}}}
     d = parse_dryer(payload)
     assert d["unit"] == 0 and d["status"] == "drying"
     assert d["target_temp"] == 45
+    assert d["temp"] == 43
     assert d["duration_min"] == 240
     assert d["remaining_min"] == 198
     assert d["humidity"] == 21
+
+
+def test_parse_dryer_merges_mmu_machine_and_filament_hub():
+    # Оба объекта описывают один юнит: mmu_machine без остатка, filament_hub — с ним.
+    payload = {"result": {"status": {
+        "mmu_machine": {
+            "num_units": 1,
+            "unit_0": {"dryer_status": "drying", "dryer_temp": 0,
+                       "dryer_target_temp": 45, "dryer_remaining": 0, "dryer_humidity": 0},
+        },
+        "filament_hub": {"filament_hubs": [{
+            "id": 0,
+            "temp": 45,
+            "dryer_status": {"status": "drying", "target_temp": 45,
+                             "duration": 360, "remain_time": 19238},
+        }]},
+    }}}
+    d = parse_dryer(payload)
+    assert d["unit"] == 0 and d["status"] == "drying"
+    assert d["target_temp"] == 45 and d["temp"] == 45
+    assert d["duration_min"] == 360
+    assert d["remaining_min"] == 321
 
 
 def test_parse_dryer_none_without_hub():
