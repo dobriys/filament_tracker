@@ -106,6 +106,14 @@ function fmtDur(sec) {
   return `${sec} ${t("с")}`;
 }
 
+function fmtDryerRemaining(sec) {
+  sec = Math.max(0, Math.round(sec || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
 function Temp({ label, t, target }) {
   return (
     <div>
@@ -114,6 +122,126 @@ function Temp({ label, t, target }) {
         {t != null ? Math.round(t) + "°" : "—"}
         {target != null && target > 0 && <span className="muted" style={{ fontWeight: 400 }}> / {Math.round(target)}°</span>}
       </div>
+    </div>
+  );
+}
+
+function DryerControls({ printer, dryer, onChanged }) {
+  const [temp, setTemp] = useState(45);
+  const [hours, setHours] = useState(4);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [remainingSec, setRemainingSec] = useState(null);
+  const drying = dryer?.status === "drying";
+
+  useEffect(() => {
+    if (!drying) return;
+    if (dryer?.target_temp > 0) setTemp(dryer.target_temp);
+    if (dryer?.remaining_min > 0) {
+      setHours(Math.max(0.5, Math.round((dryer.remaining_min / 60) * 2) / 2));
+    } else if (dryer?.duration_min > 0) {
+      setHours(Math.max(0.5, Math.round((dryer.duration_min / 60) * 2) / 2));
+    }
+  }, [drying, dryer?.target_temp, dryer?.remaining_min, dryer?.duration_min]);
+
+  useEffect(() => {
+    if (!drying || !dryer?.remaining_min) {
+      setRemainingSec(null);
+      return undefined;
+    }
+    setRemainingSec(Math.max(0, Math.round(dryer.remaining_min * 60)));
+    const timer = setInterval(() => {
+      setRemainingSec((v) => (v == null ? v : Math.max(0, v - 1)));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [drying, dryer?.remaining_min]);
+
+  async function send(action) {
+    setErr(null);
+    setBusy(true);
+    try {
+      await api.post(`/api/printers/${printer.id}/dryer`, {
+        action,
+        temp_c: Number(temp) || null,
+        duration_min: Math.round((Number(hours) || 0) * 60) || null,
+        unit: dryer?.unit ?? null,
+      });
+      await new Promise((r) => setTimeout(r, 2500));
+      await onChanged();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const remainingLabel = remainingSec != null ? fmtDryerRemaining(remainingSec) : null;
+  const durationLabel = dryer?.duration_min > 0 ? fmtDryerRemaining(dryer.duration_min * 60) : null;
+
+  return (
+    <div className="dryer-control">
+      <div className="dryer-head">
+        <div>
+          <div className="dryer-title">{t("Сушка филамента")}</div>
+          <div className={`dryer-state ${drying ? "on" : ""} ${dryer?.status === "heater_err" ? "error" : ""}`}>
+            <span />
+            {drying ? t("Идёт сушка") : dryer?.status === "heater_err" ? t("ошибка нагревателя") : t("выключена")}
+          </div>
+        </div>
+        <button
+          type="button"
+          className={`apple-switch ${drying ? "on" : ""}`}
+          role="switch"
+          aria-checked={drying}
+          aria-label={drying ? t("Выключить") : t("Включить сушку")}
+          title={drying ? t("Выключить") : t("Включить сушку")}
+          disabled={busy}
+          onClick={() => send(drying ? "stop" : "start")}
+        >
+          <span />
+        </button>
+      </div>
+
+      {(drying || dryer?.humidity > 0) && (
+        <div className="dryer-live-panel">
+          {drying && (
+            <>
+              <div className="dryer-live-metric">
+                <span>{t("Температура")}</span>
+                <b>{dryer.target_temp}°C</b>
+              </div>
+              {durationLabel && (
+                <div className="dryer-live-metric">
+                  <span>{t("Длительность")}</span>
+                  <b>{durationLabel}</b>
+                </div>
+              )}
+              <div className="dryer-live-metric">
+                <span>{t("Осталось")}</span>
+                <b>{remainingLabel || "—"}</b>
+              </div>
+            </>
+          )}
+          {dryer?.humidity > 0 && (
+            <div className="dryer-live-metric">
+              <span>{t("Влажность")}</span>
+              <b>{dryer.humidity}%</b>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="dryer-fields">
+        <div>
+          <label>{t("Температура, °C")}</label>
+          <input type="number" min="35" max="70" value={temp} onChange={(e) => setTemp(e.target.value)} disabled={drying || busy} />
+        </div>
+        <div>
+          <label>{t("Время, ч")}</label>
+          <input type="number" min="0.5" max="24" step="0.5" value={hours} onChange={(e) => setHours(e.target.value)} disabled={drying || busy} />
+        </div>
+      </div>
+      {err && <div className="error">{err}</div>}
     </div>
   );
 }
@@ -128,24 +256,33 @@ function MoonrakerCard({ printer, navigate }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
+  const loadOverview = () =>
+    api.get(`/api/printers/${printer.id}/overview`).then((o) => {
+      setStatus(o.status); setGates(o.gates || []); setDryer(o.dryer); setTotals(o.totals); setOffline(false);
+      return o;
+    }).catch(() => setOffline(true));
+
+  const loadJob = () =>
+    api.get(`/api/printers/${printer.id}/moonraker-jobs?limit=1`).then((j) => setJob(j[0] || null)).catch(() => {});
+
   useEffect(() => {
     const visible = () => document.visibilityState === "visible";
-    const loadOverview = () =>
-      api.get(`/api/printers/${printer.id}/overview`).then((o) => {
-        setStatus(o.status); setGates(o.gates || []); setDryer(o.dryer); setTotals(o.totals); setOffline(false);
-      }).catch(() => setOffline(true));
-    const loadJob = () =>
-      api.get(`/api/printers/${printer.id}/moonraker-jobs?limit=1`).then((j) => setJob(j[0] || null)).catch(() => {});
     loadOverview(); loadJob();
-    // живые метрики: лёгкий статус часто, полная сводка — раз в минуту
+    // Живые метрики: обычно часто тянем только статус, но во время сушки
+    // перечитываем overview, потому что параметры ACE Dryer меняются на принтере.
     const fast = setInterval(() => {
-      if (visible()) api.get(`/api/printers/${printer.id}/status`).then(setStatus).catch(() => {});
+      if (!visible()) return;
+      if (dryer?.status === "drying") {
+        loadOverview();
+      } else {
+        api.get(`/api/printers/${printer.id}/status`).then(setStatus).catch(() => {});
+      }
     }, 7000);
     const slow = setInterval(() => {
       if (visible()) { loadOverview(); loadJob(); }
     }, 60000);
     return () => { clearInterval(fast); clearInterval(slow); };
-  }, [printer.id]);
+  }, [printer.id, dryer?.status]);
 
   const canConsume = job && job.status === "completed" && !job.consumed;
   async function consume() {
@@ -165,7 +302,6 @@ function MoonrakerCard({ printer, navigate }) {
   const remaining = isPrinting && status?.progress > 0.02 && elapsed != null
     ? elapsed * (1 / status.progress - 1)
     : null;
-  const drying = dryer?.status === "drying";
 
   return (
     <div className="card moonraker-card">
@@ -227,27 +363,42 @@ function MoonrakerCard({ printer, navigate }) {
             <div className="printer-zone">
               <div className="zone-title">{t("Слоты ACE")}</div>
               <GateChips gates={gates} />
-              {(dryer || totals) && (
+              {dryer && (
                 <div className="dryer-box">
-                  {dryer && (
-                    <div className="zone-row">
-                      <span style={{ fontWeight: 600 }}>{t("Сушка филамента")}</span>
-                      {drying
-                        ? <span className="badge in_use">{dryer.target_temp}°C{dryer.remaining_min ? ` · ${Math.floor(dryer.remaining_min / 60)}:${String(dryer.remaining_min % 60).padStart(2, "0")}` : ""}</span>
-                        : <span className="badge">{t("выключена")}</span>}
-                    </div>
-                  )}
-                  {totals && (
-                    <div className="zone-totals muted">
-                      <span><b>{totals.total_jobs}</b> {t("печатей")}</span>
-                      <span><b>{Math.round((totals.total_print_time_sec || 0) / 3600)}</b> {t("ч печати")}</span>
-                      <span><b>{((totals.total_filament_mm || 0) / 1e6).toFixed(2)}</b> {t("км филамента")}</span>
-                    </div>
-                  )}
+                  <DryerControls printer={printer} dryer={dryer} onChanged={loadOverview} />
                 </div>
               )}
             </div>
           </div>
+          {totals && (
+            <div className="printer-lifetime">
+              <div className="printer-lifetime-head">
+                <div>
+                  <div className="printer-lifetime-title">{t("Ресурс принтера")}</div>
+                  <div className="printer-lifetime-subtitle">{t("Статистика за всё время")}</div>
+                </div>
+              </div>
+              <div className="printer-lifetime-body">
+                <div className="printer-lifetime-hero">
+                  <span>{t("Всего печатей")}</span>
+                  <b>{totals.total_jobs}</b>
+                  <em>{t("завершённых заданий")}</em>
+                </div>
+                <div className="printer-lifetime-grid">
+                  <div className="printer-lifetime-stat">
+                    <span>{t("Время печати")}</span>
+                    <b>{Math.round((totals.total_print_time_sec || 0) / 3600)}</b>
+                    <em>{t("ч печати")}</em>
+                  </div>
+                  <div className="printer-lifetime-stat">
+                    <span>{t("Филамент")}</span>
+                    <b>{((totals.total_filament_mm || 0) / 1e6).toFixed(2)}</b>
+                    <em>{t("км филамента")}</em>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

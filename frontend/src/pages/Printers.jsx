@@ -143,13 +143,17 @@ function MoonrakerPanel({ printer, onClose }) {
     catch (e) { setError(e.message); }
   }
 
-  // При открытии панели сразу подгружаем всё (в т.ч. из deep-link с главной),
-  // дальше живой поллинг: статус часто, полная сводка — раз в минуту.
+  // При открытии панели сразу подгружаем всё (в т.ч. из deep-link с главной).
+  // Во время сушки часто перечитываем overview, чтобы подхватывать ручные
+  // изменения температуры и времени с экрана принтера.
   useEffect(() => {
     loadOverview(); loadJobs();
     const visible = () => document.visibilityState === "visible";
     const fast = setInterval(() => {
-      if (visible()) {
+      if (!visible()) return;
+      if (ov?.dryer?.status === "drying") {
+        loadOverview();
+      } else {
         api.get(`/api/printers/${printer.id}/status`)
           .then((st) => setOv((prev) => (prev ? { ...prev, status: st } : prev)))
           .catch(() => {});
@@ -159,7 +163,7 @@ function MoonrakerPanel({ printer, onClose }) {
       if (visible()) { loadOverview(); loadJobs(); }
     }, 60000);
     return () => { clearInterval(fast); clearInterval(slow); };
-  }, [printer.id]);
+  }, [printer.id, ov?.dryer?.status]);
 
   const st = ov?.status;
   const totals = ov?.totals;
@@ -267,6 +271,20 @@ function MoonrakerPanel({ printer, onClose }) {
   );
 }
 
+function fmtDryerRemaining(sec) {
+  sec = Math.max(0, Math.round(sec || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+const DRYER_PRESETS = [
+  { material: "PLA", temp: 45, hours: 4 },
+  { material: "PETG", temp: 60, hours: 4 },
+  { material: "ABS", temp: 60, hours: 4 },
+];
+
 function SlotsManager({ printer, onClose }) {
   const [slots, setSlots] = useState([]);
   const [spools, setSpools] = useState([]);
@@ -365,15 +383,45 @@ function DryerCard({ printer, dryer, onChanged }) {
   const [hours, setHours] = useState(4);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [remainingSec, setRemainingSec] = useState(null);
   const drying = dryer.status === "drying";
 
-  async function send(action) {
+  useEffect(() => {
+    if (!drying) return;
+    if (dryer?.target_temp > 0) setTemp(dryer.target_temp);
+    if (dryer?.remaining_min > 0) {
+      setHours(Math.max(0.5, Math.round((dryer.remaining_min / 60) * 2) / 2));
+    } else if (dryer?.duration_min > 0) {
+      setHours(Math.max(0.5, Math.round((dryer.duration_min / 60) * 2) / 2));
+    }
+  }, [drying, dryer?.target_temp, dryer?.remaining_min, dryer?.duration_min]);
+
+  useEffect(() => {
+    if (!drying || !dryer?.remaining_min) {
+      setRemainingSec(null);
+      return undefined;
+    }
+    setRemainingSec(Math.max(0, Math.round(dryer.remaining_min * 60)));
+    const timer = setInterval(() => {
+      setRemainingSec((v) => (v == null ? v : Math.max(0, v - 1)));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [drying, dryer?.remaining_min]);
+
+  async function send(action, preset = null) {
     setErr(null); setBusy(true);
+    const nextTemp = preset?.temp ?? Number(temp);
+    const nextHours = preset?.hours ?? Number(hours);
+    if (preset) {
+      setTemp(preset.temp);
+      setHours(preset.hours);
+    }
     try {
       await api.post(`/api/printers/${printer.id}/dryer`, {
         action,
-        temp_c: Number(temp) || null,
-        duration_min: Math.round((Number(hours) || 0) * 60) || null,
+        temp_c: Number(nextTemp) || null,
+        duration_min: Math.round((Number(nextHours) || 0) * 60) || null,
+        unit: dryer?.unit ?? null,
       });
       // ACE применяет команду асинхронно — даём пару секунд перед обновлением
       await new Promise((r) => setTimeout(r, 2500));
@@ -382,18 +430,45 @@ function DryerCard({ printer, dryer, onChanged }) {
     setBusy(false);
   }
 
+  const remainingLabel = remainingSec != null ? fmtDryerRemaining(remainingSec) : null;
+  const durationLabel = dryer?.duration_min > 0 ? fmtDryerRemaining(dryer.duration_min * 60) : null;
+
   return (
     <div className="card" style={{ marginTop: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <h4 style={{ margin: 0 }}>
           🔥 {t("Сушка ACE")}{" "}
           {drying
-            ? <span className="act-tag in_use">{t("сушит")} {dryer.target_temp}°C{dryer.remaining_min ? ` · ${t("осталось")} ${Math.floor(dryer.remaining_min / 60)}:${String(dryer.remaining_min % 60).padStart(2, "0")}` : ""}</span>
+            ? <span className="act-tag in_use">{t("сушит")} {dryer.target_temp}°C{remainingLabel ? ` · ${t("осталось")} ${remainingLabel}` : durationLabel ? ` · ${t("Длительность")} ${durationLabel}` : ""}</span>
             : dryer.status === "heater_err"
             ? <span className="act-tag used">{t("ошибка нагревателя")}</span>
             : <span className="act-tag">{t("выключена")}</span>}
         </h4>
         {dryer.humidity > 0 && <span className="muted" style={{ fontSize: 13 }}>💧 {dryer.humidity}%</span>}
+      </div>
+      <div className="dryer-presets">
+        <div className="dryer-presets-label">{t("Профили сушки")}</div>
+        <div className="dryer-presets-list">
+          {DRYER_PRESETS.map((preset) => (
+            <button
+              key={preset.material}
+              className="dryer-preset"
+              disabled={busy || drying}
+              onClick={() => send("start", preset)}
+              title={
+                drying
+                  ? t("Выключите текущую сушку перед запуском профиля")
+                  : `${preset.material}: ${preset.temp}°C · ${preset.hours} ${t("ч")}`
+              }
+            >
+              <span className="dryer-preset-material">{preset.material}</span>
+              <span className="dryer-preset-values">
+                <span>{preset.temp}°C</span>
+                <span>{preset.hours} {t("ч")}</span>
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 10, flexWrap: "wrap" }}>
         <div style={{ width: 130 }}>

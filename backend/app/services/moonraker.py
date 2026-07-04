@@ -24,6 +24,7 @@ def parse_status(payload: dict) -> dict:
     status = r.get("status", {}) or {}
     ps = status.get("print_stats", {}) or {}
     ds = status.get("display_status", {}) or {}
+    vsd = status.get("virtual_sdcard", {}) or {}
     bed = status.get("heater_bed", {}) or {}
     ext = status.get("extruder", {}) or {}
     fan = status.get("fan", {}) or {}
@@ -36,7 +37,7 @@ def parse_status(payload: dict) -> dict:
         "print_duration_sec": ps.get("print_duration"),
         "total_duration_sec": ps.get("total_duration"),
         "filament_used_mm": ps.get("filament_used"),
-        "progress": ds.get("progress"),
+        "progress": ds.get("progress") if ds.get("progress") is not None else vsd.get("progress"),
         "nozzle_temp": ext.get("temperature"),
         "nozzle_target": ext.get("target"),
         "bed_temp": bed.get("temperature"),
@@ -100,13 +101,40 @@ def parse_dryer(payload: dict) -> dict | None:
                 "temp": u.get("dryer_temp", 0),
                 "target_temp": u.get("dryer_target_temp", 0),
                 "remaining_min": u.get("dryer_remaining", 0),
+                "duration_min": u.get("dryer_duration", 0),
                 "humidity": u.get("dryer_humidity", 0),
+            }
+        )
+    filament_hub = (r.get("status", {}) or {}).get("filament_hub", {}) or {}
+    for hub in filament_hub.get("filament_hubs") or []:
+        if not isinstance(hub, dict):
+            continue
+        dryer = hub.get("dryer_status") or {}
+        if not isinstance(dryer, dict):
+            continue
+        units.append(
+            {
+                "unit": int(hub.get("id", 0) or 0),
+                "status": dryer.get("status", "stop"),
+                "temp": dryer.get("temp", hub.get("temp", 0)),
+                "target_temp": dryer.get("target_temp", 0),
+                "remaining_min": dryer.get("remaining_time", dryer.get("remain_time", 0)) or 0,
+                "duration_min": dryer.get("duration", 0) or 0,
+                "humidity": dryer.get("humidity", 0),
             }
         )
     if not units:
         return None
     units.sort(key=lambda x: (x["status"] != "drying", x["unit"]))
     return units[0]
+
+
+def dryer_unit(dryer: dict | None, requested: int | None = None) -> int:
+    if requested is not None:
+        return requested
+    if isinstance(dryer, dict) and dryer.get("unit") is not None:
+        return int(dryer["unit"])
+    return 0
 
 
 def parse_totals(payload: dict) -> dict:
@@ -268,7 +296,7 @@ class MoonrakerClient:
 
     def get_status(self) -> dict:
         path = (
-            "/printer/objects/query?print_stats&display_status&heater_bed&extruder"
+            "/printer/objects/query?print_stats&display_status&virtual_sdcard&heater_bed&extruder"
             "&fan&gcode_move&fan_generic%20box_fan&fan_generic%20air_filter_fan"
         )
         return parse_status(self._get(path))
@@ -284,7 +312,26 @@ class MoonrakerClient:
         """Гейты + состояние сушки одним запросом."""
         try:
             payload = self._get("/printer/objects/query?ota_filament_hub")
-            return {"gates": parse_hub(payload), "dryer": parse_dryer(payload)}
+            gates = parse_hub(payload)
+            dryer = parse_dryer(payload)
+            if dryer is not None:
+                try:
+                    raw_hub = self._get("/printer/objects/query?filament_hub")
+                    raw_dryer = parse_dryer(raw_hub)
+                    if raw_dryer and (
+                        not dryer.get("remaining_min")
+                        or raw_dryer.get("remaining_min")
+                        or raw_dryer.get("duration_min")
+                    ):
+                        for key in ("unit", "status"):
+                            if raw_dryer.get(key) is not None:
+                                dryer[key] = raw_dryer[key]
+                        for key in ("temp", "target_temp", "remaining_min", "duration_min", "humidity"):
+                            if raw_dryer.get(key):
+                                dryer[key] = raw_dryer[key]
+                except Exception:
+                    pass
+            return {"gates": gates, "dryer": dryer}
         except Exception:
             return {"gates": [], "dryer": None}
 

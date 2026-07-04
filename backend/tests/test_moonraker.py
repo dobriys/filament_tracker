@@ -137,6 +137,20 @@ def test_get_status_parsing():
     assert s["bed_target"] == 60.0
 
 
+def test_status_progress_falls_back_to_virtual_sdcard():
+    payload = {
+        "result": {
+            "status": {
+                "print_stats": {"state": "printing", "filename": "benchy.gcode"},
+                "display_status": {},
+                "virtual_sdcard": {"progress": 0.37},
+            }
+        }
+    }
+
+    assert parse_status(payload)["progress"] == 0.37
+
+
 def test_history_parsing():
     jobs = parse_history(HISTORY)
     assert len(jobs) == 2

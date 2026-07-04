@@ -110,7 +110,7 @@ def test_drying_thresholds():
 
 
 # --- парсер сушки ACE ---
-from app.services.moonraker import parse_dryer
+from app.services.moonraker import dryer_unit, parse_dryer
 
 
 def test_parse_dryer_picks_drying_unit():
@@ -126,5 +126,32 @@ def test_parse_dryer_picks_drying_unit():
     assert d["target_temp"] == 45 and d["remaining_min"] == 120 and d["humidity"] == 18
 
 
+def test_parse_dryer_reads_raw_filament_hub_duration():
+    payload = {"result": {"status": {"filament_hub": {"filament_hubs": [{
+        "id": 0,
+        "temp": 43,
+        "dryer_status": {
+            "status": "drying",
+            "target_temp": 45,
+            "duration": 240,
+            "remain_time": 198,
+            "humidity": 21,
+        },
+    }]}}}}
+    d = parse_dryer(payload)
+    assert d["unit"] == 0 and d["status"] == "drying"
+    assert d["target_temp"] == 45
+    assert d["duration_min"] == 240
+    assert d["remaining_min"] == 198
+    assert d["humidity"] == 21
+
+
 def test_parse_dryer_none_without_hub():
     assert parse_dryer({"result": {"status": {}}}) is None
+
+
+def test_dryer_unit_uses_active_unit_unless_requested():
+    dryer = {"unit": 1, "status": "drying"}
+    assert dryer_unit(dryer) == 1
+    assert dryer_unit(dryer, requested=2) == 2
+    assert dryer_unit(None) == 0

@@ -10,7 +10,7 @@ from app.core.security import decrypt_secret, encrypt_secret
 from app.db.session import get_db
 from app.deps import get_current_user
 from app.models import AppSetting, Printer, PrintJob, User
-from app.services.moonraker import MoonrakerClient
+from app.services.moonraker import MoonrakerClient, dryer_unit
 from app.schemas.printer import (
     PrinterCreate,
     PrinterOut,
@@ -284,6 +284,7 @@ def printer_overview(
         sess = (row.value or {}).get("value") if row is not None else None
         if isinstance(sess, dict) and sess.get("started"):
             elapsed_min = (time.time() - sess["started"]) / 60
+            dryer["duration_min"] = sess.get("duration_min", 0)
             dryer["remaining_min"] = max(0, round(sess.get("duration_min", 0) - elapsed_min))
 
     return {
@@ -299,6 +300,7 @@ class DryerRequest(BaseModel):
     action: str  # "start" | "stop"
     temp_c: int | None = None
     duration_min: int | None = None
+    unit: int | None = None
 
 
 @router.post("/{printer_id}/dryer")
@@ -312,6 +314,8 @@ def control_dryer(
     printer = _own(db, user, printer_id)
     client = _moonraker_client(printer)
     try:
+        if data.unit is not None and data.unit < 0:
+            raise HTTPException(status_code=422, detail="Неизвестное действие")
         if data.action == "start":
             if not data.temp_c or not data.duration_min:
                 raise HTTPException(status_code=422, detail="Укажите температуру и время сушки")
@@ -319,14 +323,17 @@ def control_dryer(
                 raise HTTPException(status_code=422, detail="Температура сушки: 35–70°C")
             if not (1 <= data.duration_min <= 24 * 60):
                 raise HTTPException(status_code=422, detail="Время сушки: от 1 минуты до 24 часов")
-            client.start_drying(temp_c=data.temp_c, duration_min=data.duration_min)
+            dryer = client.get_hub_data()["dryer"]
+            unit = dryer_unit(dryer, data.unit)
+            client.start_drying(temp_c=data.temp_c, duration_min=data.duration_min, unit=unit)
             settings_service.set_value(
                 db,
                 f"dryer_session:{printer.id}",
-                {"started": time.time(), "duration_min": data.duration_min},
+                {"started": time.time(), "duration_min": data.duration_min, "unit": unit},
             )
         elif data.action == "stop":
-            client.stop_drying()
+            dryer = client.get_hub_data()["dryer"]
+            client.stop_drying(unit=dryer_unit(dryer, data.unit))
             settings_service.set_value(db, f"dryer_session:{printer.id}", None)
         else:
             raise HTTPException(status_code=422, detail="Неизвестное действие")
