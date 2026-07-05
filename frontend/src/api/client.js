@@ -1,13 +1,14 @@
-// Адрес API. Приоритет: runtime-конфиг (config.js, задаётся переменной
-// окружения прод-образа без пересборки) → VITE_API_BASE_URL на этапе сборки →
-// хост из адресной строки (http://192.168.0.200:5173 → API :8000).
-// Явно задавать нужно только за reverse-proxy / доменом.
+// Адрес API. По умолчанию пусто = тот же origin: фронт-сервер (nginx в проде,
+// vite proxy в деве) проксирует /api и /health на backend — приложение работает
+// на одном порту. Переопределяют: runtime-конфиг (config.js из переменной
+// окружения прод-образа) → VITE_API_BASE_URL на этапе сборки. Нужно только если
+// API вынесен на отдельный адрес/домен без общего reverse-proxy.
 import { t, tServer } from "../i18n.js";
 
 const BASE =
   window.__FT_CONFIG__?.apiBase ||
   import.meta.env.VITE_API_BASE_URL ||
-  `${window.location.protocol}//${window.location.hostname}:8000`;
+  "";
 
 const TOKEN_KEY = "ft_token";
 
