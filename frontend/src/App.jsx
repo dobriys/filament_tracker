@@ -56,17 +56,17 @@ function Layout({ children }) {
     <div className="app-shell">
       <header className="topnav">
         <div className="topnav-inner">
-          <div className="brand">🧵 Filament Tracker</div>
+          <div className="brand">Filament Tracker</div>
           <nav className="topnav-links">
             <NavLink to="/" end>{t("Панель")}</NavLink>
-            <NavLink to="/spools">{t("Катушки")}</NavLink>
+            <NavLink to="/spools">{t("Мои Катушки")}</NavLink>
             <NavLink to="/printers">{t("Принтеры")}</NavLink>
             <NavLink to="/print-jobs">{t("История")}</NavLink>
             <NavLink to="/settings">{t("Настройки")}</NavLink>
             <div className="nav-more">
               <span className="nav-more-btn">{t("Ещё ▾")}</span>
               <div className="nav-more-menu">
-                <NavLink to="/profiles">{t("Профили")}</NavLink>
+                <NavLink to="/profiles">{t("Профили пластика")}</NavLink>
                 <NavLink to="/locations">{t("Места хранения")}</NavLink>
                 <NavLink to="/gcode">{t("Загрузка gcode")}</NavLink>
               </div>

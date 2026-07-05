@@ -111,7 +111,7 @@ export default function Profiles() {
                   <td className="muted" style={{ fontSize: 13 }}>{temps(p)}</td>
                   <td>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <button className="secondary" title={t("Создать катушку из этого профиля")} onClick={() => navigate(`/spools/new?profile=${p.id}`)}>{t("＋ В инвентарь")}</button>
+                      <button className="secondary" title={t("Создать катушку из этого профиля")} onClick={() => navigate(`/spools/new?profile=${p.id}`)}>{t("＋ В Мои катушки")}</button>
                       <button className="icon-btn" title={t("Изменить")} onClick={() => navigate(`/profiles/${p.id}/edit`)}>✎</button>
                       <button className="icon-btn" title={t("Дублировать (новый цвет)")} onClick={() => duplicate(p.id, true)}>⧉</button>
                       <button className="icon-btn danger" title={t("Удалить")} onClick={() => remove(p.id)}>🗑</button>
@@ -142,7 +142,7 @@ export default function Profiles() {
                         <td style={{ width: "26%" }}><span className="swatch" style={{ background: p.color_hex || "#666", marginRight: 6 }} />{p.color_name || "—"}</td>
                         <td className="muted" style={{ fontSize: 13 }}>{temps(p)}</td>
                         <td style={{ textAlign: "right", paddingRight: 16 }}>
-                          <button className="secondary" title={t("Создать катушку из этой записи")} onClick={() => navigate("/spools/new", { state: { catalog: p } })}>{t("＋ В инвентарь")}</button>
+                          <button className="secondary" title={t("Создать катушку из этой записи")} onClick={() => navigate("/spools/new", { state: { catalog: p } })}>{t("＋ В Мои катушки")}</button>
                         </td>
                       </tr>
                     ))}
