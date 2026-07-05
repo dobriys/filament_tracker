@@ -77,6 +77,14 @@ export const EN = {
   "Импорт из Spoolman": "Import from Spoolman",
   "Перенос катушек из вашего Spoolman по сети. Повторный импорт пропускает уже добавленные катушки.":
     "Bring spools over from your Spoolman across the network. Re-importing skips spools already added.",
+  "Каталог филамента (SpoolmanDB)": "Filament catalog (SpoolmanDB)",
+  "Автозаполнение катушки по базе филаментов": "Spool autofill from the filament database",
+  "записей": "entries",
+  "Снапшот встроен и работает офлайн; кнопка ниже подтягивает свежую версию.":
+    "A snapshot is bundled and works offline; the button below pulls the latest version.",
+  "Обновить из SpoolmanDB": "Update from SpoolmanDB",
+  "Обновление…": "Updating…",
+  "Каталог филамента обновлён:": "Filament catalog updated:",
   "Импортировать": "Import",
   "Импорт…": "Importing…",
   "Импорт из Spoolman: добавлено": "Imported from Spoolman: added",

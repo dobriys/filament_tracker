@@ -264,4 +264,12 @@ administrator again.
 
 ---
 
+## Credits
+
+The filament catalog used for spool autofill is a snapshot of
+[SpoolmanDB](https://github.com/Donkie/SpoolmanDB) (MIT License). Full license text
+and attribution are in [NOTICE.md](NOTICE.md).
+
+---
+
 <p align="center"><sub>Self-hosted · your data stays with you · interface in English and Russian</sub></p>

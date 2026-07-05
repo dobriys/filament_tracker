@@ -70,8 +70,12 @@ export default function SpoolForm() {
   async function searchCatalog(q) {
     setCatalogQ(q);
     if (q.trim().length < 2) { setCatalogResults([]); return; }
-    const r = await api.get(`/api/filament-profiles?q=${encodeURIComponent(q)}`).catch(() => []);
-    setCatalogResults(r.slice(0, 12));
+    // Профили (свои + курируемый каталог) и общий каталог SpoolmanDB.
+    const [profiles, sdb] = await Promise.all([
+      api.get(`/api/filament-profiles?q=${encodeURIComponent(q)}`).catch(() => []),
+      api.get(`/api/filament-catalog/search?q=${encodeURIComponent(q)}&limit=12`).catch(() => []),
+    ]);
+    setCatalogResults([...(profiles || []).slice(0, 8), ...(sdb || [])].slice(0, 20));
   }
   function pickCatalog(p) {
     const specs = { ...(p.specs || {}) };
@@ -82,9 +86,11 @@ export default function SpoolForm() {
       max_volumetric_speed: p.max_volumetric_speed, pressure_advance: p.pressure_advance,
     };
     for (const [k, v] of Object.entries(map)) if (v != null) specs[k] = Number(v);
+    const w = (v, cur) => (v != null ? String(Number(v)) : cur);
     setForm((f) => ({
       ...f,
-      filament_profile_id: p.id,
+      // Записи SpoolmanDB — не локальный профиль, линковать нечего.
+      filament_profile_id: p.source === "spoolmandb" ? null : p.id,
       manufacturer: p.brand || f.manufacturer,
       label: f.label || p.name || p.brand || "",
       material: p.material || f.material,
@@ -93,6 +99,8 @@ export default function SpoolForm() {
       diameter_mm: p.diameter_mm ? String(Number(p.diameter_mm)) : f.diameter_mm,
       hotend_temp: p.nozzle_temp_max != null ? String(p.nozzle_temp_max) : f.hotend_temp,
       bed_temp: p.bed_temp_max != null ? String(p.bed_temp_max) : f.bed_temp,
+      initial_filament_weight_g: w(p.initial_filament_weight_g, f.initial_filament_weight_g),
+      empty_spool_weight_g: w(p.empty_spool_weight_g, f.empty_spool_weight_g),
       specs,
     }));
     setCatalogQ(""); setCatalogResults([]);
@@ -180,10 +188,10 @@ export default function SpoolForm() {
           {catalogResults.length > 0 && (
             <div className="kebab-menu" style={{ left: 0, right: 0, maxWidth: 480, maxHeight: 280, overflowY: "auto" }}>
               {catalogResults.map((p) => (
-                <button type="button" key={p.id} onClick={() => pickCatalog(p)}>
+                <button type="button" key={p.id || p.catalog_id} onClick={() => pickCatalog(p)}>
                   <strong>{[p.brand, p.name].filter(Boolean).join(" ")}</strong>
                   <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
-                    {p.material}{p.nozzle_temp_max ? ` · ${t("сопло")} ~${p.nozzle_temp_max}°C` : ""}
+                    {p.material}{p.nozzle_temp_max ? ` · ${t("сопло")} ~${p.nozzle_temp_max}°C` : ""}{p.source === "spoolmandb" ? " · SpoolmanDB" : ""}
                   </span>
                 </button>
               ))}

@@ -263,4 +263,12 @@ QIDI, FLSUN, ELEGOO, Kingroon, Artillery, BIQU, Prusa и др.), но подой
 
 ---
 
+## Благодарности
+
+Каталог филамента для автозаполнения катушки — снапшот
+[SpoolmanDB](https://github.com/Donkie/SpoolmanDB) (лицензия MIT). Полный текст
+лицензии и атрибуция — в [NOTICE.md](NOTICE.md).
+
+---
+
 <p align="center"><sub>Self-hosted · ваши данные остаются у вас · интерфейс на русском и английском</sub></p>

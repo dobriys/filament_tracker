@@ -15,12 +15,26 @@ export default function Settings() {
   const [serverVersion, setServerVersion] = useState(null);
   const [spoolmanUrl, setSpoolmanUrl] = useState("");
   const [spoolmanBusy, setSpoolmanBusy] = useState(false);
+  const [catalogInfo, setCatalogInfo] = useState(null);
+  const [catalogBusy, setCatalogBusy] = useState(false);
   const fileRef = useRef();
 
   useEffect(() => {
     api.get("/api/settings").then(setS).catch(() => {});
     api.get("/health").then((h) => setServerVersion(h.version)).catch(() => {});
+    api.get("/api/filament-catalog/info").then(setCatalogInfo).catch(() => {});
   }, []);
+
+  async function refreshCatalog() {
+    setMsg(null);
+    setCatalogBusy(true);
+    try {
+      const r = await api.post("/api/filament-catalog/refresh");
+      setCatalogInfo(r);
+      setMsg(`${t("Каталог филамента обновлён:")} ${r.count} ${t("записей")}`);
+    } catch (err) { setMsg(err.message); }
+    setCatalogBusy(false);
+  }
 
   // Применяем ответ сервера (PUT возвращает полное состояние), а не оптимистично:
   // при ошибке состояние не меняется — переключатель сам «откатится».
@@ -139,6 +153,19 @@ export default function Settings() {
             {spoolmanBusy ? t("Импорт…") : t("Импортировать")}
           </button>
         </div>
+      </div>
+
+      <div className="card">
+        <h3>{t("Каталог филамента (SpoolmanDB)")}</h3>
+        <p className="muted">
+          {t("Автозаполнение катушки по базе филаментов")}{" "}
+          <a href="https://github.com/Donkie/SpoolmanDB" target="_blank" rel="noreferrer">SpoolmanDB</a>
+          {catalogInfo?.count ? ` · ${catalogInfo.count} ${t("записей")}` : ""}.{" "}
+          {t("Снапшот встроен и работает офлайн; кнопка ниже подтягивает свежую версию.")}
+        </p>
+        <button className="secondary" onClick={refreshCatalog} disabled={catalogBusy}>
+          {catalogBusy ? t("Обновление…") : t("Обновить из SpoolmanDB")}
+        </button>
       </div>
 
       <div className="card">

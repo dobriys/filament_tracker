@@ -13,6 +13,7 @@ from app.api import (
     backup,
     settings,
     dashboard,
+    catalog,
 )
 
 api_router = APIRouter(prefix="/api")
@@ -28,3 +29,4 @@ api_router.include_router(print_jobs.router)
 api_router.include_router(backup.router)
 api_router.include_router(settings.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(catalog.router)
