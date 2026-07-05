@@ -246,6 +246,12 @@ No. Without a printer, keep inventory by hand and deduct usage by uploading gcod
 files. With Moonraker (including Rinkhals on Anycubic) deduction becomes
 semi-automatic.
 
+**Why don't I see the remaining time at the start of a print?**
+The remaining-time estimate appears once the print is past ~2% progress. It's
+computed from elapsed time and progress, and near-zero progress makes it unreliable
+(it could read "hundreds of hours"), so it's hidden at the very beginning. As soon
+as progress crosses the threshold, the estimate shows up on its own.
+
 **Which printers are supported?**
 Any printer with Moonraker: the catalog already has 50+ models (Anycubic, Creality,
 Sovol, QIDI, FLSUN, ELEGOO, Kingroon, Artillery, BIQU, Prusa and more), but any other
