@@ -14,14 +14,30 @@ router = APIRouter(prefix="/filament-catalog", tags=["catalog"])
 def search_catalog(
     q: str | None = None,
     material: str | None = None,
+    brand: str | None = None,
     limit: int = 20,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Поиск по SpoolmanDB. Возвращает записи в форме для автозаполнения катушки."""
-    if not q or len(q.strip()) < 2:
+    """Поиск/просмотр SpoolmanDB. Записи в форме для автозаполнения катушки.
+
+    Нужен хотя бы один критерий: запрос (≥2 символов), бренд или материал. При
+    просмотре по бренду сортируем A→Я и разрешаем больший лимит.
+    """
+    has_q = bool(q and len(q.strip()) >= 2)
+    if not (has_q or brand or material):
         return []
-    return spoolmandb.search(db, q=q, material=material, limit=min(limit, 50))
+    browse = bool(brand or material) and not has_q
+    return spoolmandb.search(
+        db, q=q, material=material, brand=brand,
+        limit=min(limit, 500 if browse else 50), sort=browse,
+    )
+
+
+@router.get("/brands")
+def catalog_brands(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Список брендов каталога (A→Я) с числом моделей."""
+    return spoolmandb.brands(db)
 
 
 @router.get("/info")

@@ -566,6 +566,21 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
   border-left: 4px solid var(--brand, var(--accent)); border-radius: var(--radius-sm);
 }
 
+/* Каталог SpoolmanDB — аккордеон по брендам (Профили) */
+.cat-brand { border-bottom: 1px solid var(--border-soft); }
+.cat-brand:last-child { border-bottom: none; }
+.cat-brand-head {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: transparent; color: var(--text); border: none;
+  padding: 12px 16px; font-size: 15px; font-weight: 600; cursor: pointer;
+  border-radius: 0; min-height: 0;
+}
+.cat-brand-head:hover { background: var(--hover-row); }
+.cat-brand-head .cat-chevron { color: var(--muted-2); width: 14px; font-size: 12px; }
+.cat-brand-head .muted { margin-left: auto; font-weight: 400; }
+.cat-brand table { border-top: 1px solid var(--border-soft); }
+.cat-brand td { border-bottom: 1px solid var(--border-soft); }
+
 /* Сегментный переключатель режимов (Настройки → Moonraker) */
 .seg-toggle {
   display: flex;

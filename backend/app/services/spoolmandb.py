@@ -67,14 +67,24 @@ def map_entry(e: dict) -> dict:
     }
 
 
-def search(db: Session, q: str | None = None, material: str | None = None, limit: int = 20) -> list[dict]:
+def search(
+    db: Session,
+    q: str | None = None,
+    material: str | None = None,
+    brand: str | None = None,
+    limit: int = 20,
+    sort: bool = False,
+) -> list[dict]:
     # По словам (AND), чтобы «prusament pla» находило запись, где между брендом и
     # материалом стоит название цвета.
     tokens = (q or "").strip().lower().split()
     mat = (material or "").strip().upper()
+    br = (brand or "").strip().lower()
     out, seen = [], set()
     for e in _entries(db):
         if mat and (e.get("material") or "").upper() != mat:
+            continue
+        if br and (e.get("manufacturer") or "").strip().lower() != br:
             continue
         if tokens:
             hay = f"{e.get('manufacturer', '')} {e.get('name', '')} {e.get('material', '')}".lower()
@@ -86,9 +96,27 @@ def search(db: Session, q: str | None = None, material: str | None = None, limit
             continue
         seen.add(key)
         out.append(map_entry(e))
-        if len(out) >= limit:
+        if not sort and len(out) >= limit:
             break
+    if sort:
+        out.sort(key=lambda x: ((x["brand"] or "").lower(), (x["material"] or ""), (x["name"] or "").lower()))
+        out = out[:limit]
     return out
+
+
+def brands(db: Session) -> list[dict]:
+    """Бренды каталога с числом моделей, отсортированы A→Я."""
+    counts: dict[str, set] = {}
+    for e in _entries(db):
+        b = (e.get("manufacturer") or "").strip()
+        if not b:
+            continue
+        key = (e.get("name"), e.get("material"), e.get("color_hex"))
+        counts.setdefault(b, set()).add(key)
+    return [
+        {"brand": b, "count": len(v)}
+        for b, v in sorted(counts.items(), key=lambda kv: kv[0].lower())
+    ]
 
 
 def info(db: Session) -> dict:

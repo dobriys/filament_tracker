@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, useLocation, Link } from "react-router-dom";
 import { api } from "../api/client.js";
 import { SPEC_GROUPS, SPEC_FIELDS, MATERIALS } from "../specFields.js";
 import { t } from "../i18n.js";
@@ -36,6 +36,7 @@ export default function SpoolForm() {
   const editing = !!id;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const [form, setForm] = useState(EMPTY);
   const [locations, setLocations] = useState([]);
   const [error, setError] = useState(null);
@@ -54,6 +55,9 @@ export default function SpoolForm() {
         f.specs = s.specs || {};
         setForm(f);
       }).catch(() => {});
+    } else if (location.state?.catalog) {
+      // Предзаполнение из каталога SpoolmanDB (кнопка «В инвентарь» на /profiles).
+      pickCatalog(location.state.catalog);
     } else {
       // Предзаполнение из профиля (кнопка «В инвентарь» на /profiles).
       const profileId = searchParams.get("profile");

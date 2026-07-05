@@ -42,6 +42,36 @@ def test_search_by_query_and_material():
         spoolmandb._cache = None
 
 
+def test_search_brand_filter_and_sort():
+    spoolmandb._cache = [
+        {"manufacturer": "Zeta", "name": "Black", "material": "PLA"},
+        {"manufacturer": "Alpha", "name": "White", "material": "PLA"},
+        {"manufacturer": "Alpha", "name": "Red", "material": "PETG"},
+    ]
+    try:
+        res = spoolmandb.search(db=None, brand="alpha")
+        assert {r["brand"] for r in res} == {"Alpha"} and len(res) == 2
+        # сортировка A→Я по бренду/материалу/имени при просмотре
+        srt = spoolmandb.search(db=None, material="PLA", sort=True)
+        assert [r["brand"] for r in srt] == ["Alpha", "Zeta"]
+    finally:
+        spoolmandb._cache = None
+
+
+def test_brands_sorted_with_counts():
+    spoolmandb._cache = [
+        {"manufacturer": "Zeta", "name": "Black", "material": "PLA", "color_hex": "000"},
+        {"manufacturer": "Alpha", "name": "White", "material": "PLA", "color_hex": "fff"},
+        {"manufacturer": "Alpha", "name": "White", "material": "PLA", "color_hex": "fff"},  # дубль
+    ]
+    try:
+        b = spoolmandb.brands(db=None)
+        assert [x["brand"] for x in b] == ["Alpha", "Zeta"]
+        assert b[0]["count"] == 1  # дубль схлопнут
+    finally:
+        spoolmandb._cache = None
+
+
 def test_bundled_snapshot_present():
     spoolmandb._cache = None
     data = spoolmandb._load_bundled()
