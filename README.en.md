@@ -101,6 +101,8 @@ The app shows printer status and job history. For a finished job just press
 confirm which spools to deduct from. Already-deducted jobs are marked and won't be
 deducted twice.
 
+Add as many printers as you like.
+
 ![Printers and Moonraker](docs/screenshots/en/printers.png)
 
 ### 📄 gcode upload
@@ -136,7 +138,7 @@ material was deducted.
   skips ones already added.
 - **Moonraker: automation** — auto-import of finished prints (on by default) and full
   auto-deduction when everything maps to slots (optional).
-- **Deduction** — allow the remaining amount to go negative (admin only).
+- **Deduction** — allow the remaining amount to go negative.
 
 ![Settings](docs/screenshots/en/settings.png)
 
