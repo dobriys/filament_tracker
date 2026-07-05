@@ -199,12 +199,13 @@ docker compose up -d
 
 1. **Stacks → Add stack → Web editor**, задайте имя (например `filament-tracker`).
 2. Вставьте содержимое файла [`docker-compose.yml`](docker-compose.yml)
-3. Раскройте **Environment variables** и добавьте как минимум
-   `SECRET_KEY`, `ENCRYPTION_KEY` (сгенерируйте, см. ниже) и
-   `POSTGRES_PASSWORD` — свой пароль БД.
+3. Раскройте **Environment variables** и задайте `POSTGRES_PASSWORD` — свой пароль БД.
+   `SECRET_KEY` и `ENCRYPTION_KEY` **необязательны** — если не задать, приложение
+   сгенерирует их при первом старте и сохранит в БД. Задайте вручную (см. ниже),
+   только если хотите держать ключи вне базы.
 4. **Deploy the stack** и откройте `http://<адрес-сервера>:5173`.
 
-Сгенерировать ключи (на любой машине):
+Сгенерировать ключи вручную (необязательно, на любой машине):
 
 ```bash
 echo "SECRET_KEY=$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=')"

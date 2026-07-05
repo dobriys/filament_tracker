@@ -201,12 +201,13 @@ Just paste the compose and hit Deploy.
 
 1. **Stacks → Add stack → Web editor**, give it a name (e.g. `filament-tracker`).
 2. Paste the contents of [`docker-compose.yml`](docker-compose.yml)
-3. Expand **Environment variables** and add at least
-   `SECRET_KEY`, `ENCRYPTION_KEY` (generate them, see below) and
-   `POSTGRES_PASSWORD` — your own database password.
+3. Expand **Environment variables** and set `POSTGRES_PASSWORD` — your own database
+   password. `SECRET_KEY` and `ENCRYPTION_KEY` are **optional** — if omitted, the app
+   generates them on first start and stores them in the database. Set them manually
+   (see below) only if you'd rather keep the keys outside the database.
 4. **Deploy the stack** and open `http://<server-address>:5173`.
 
-Generate the keys (on any machine):
+Generate the keys manually (optional, on any machine):
 
 ```bash
 echo "SECRET_KEY=$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=')"

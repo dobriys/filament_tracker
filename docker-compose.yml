@@ -41,8 +41,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-filament}
       POSTGRES_DB: ${POSTGRES_DB:-filament_tracker}
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      # Необязательны: если пусто — генерируются при первом старте и хранятся в БД.
+      SECRET_KEY: ${SECRET_KEY:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
       # Адреса по умолчанию определяются автоматически по адресу в браузере.
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
@@ -67,8 +68,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-filament}
       POSTGRES_DB: ${POSTGRES_DB:-filament_tracker}
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      SECRET_KEY: ${SECRET_KEY:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       MOONRAKER_POLL_INTERVAL: ${MOONRAKER_POLL_INTERVAL:-30}
     depends_on:
       db:

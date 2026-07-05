@@ -9,6 +9,7 @@ from app.core import request_context
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services.catalog_seed import seed_catalog
+from app.services.secret_service import ensure_secrets
 
 
 @asynccontextmanager
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI):
     # через форму первичной настройки (/api/auth/setup) при первом входе.
     db = SessionLocal()
     try:
+        ensure_secrets(db)  # авто-генерация ключей, если не заданы через env
         seed_catalog(db)
     finally:
         db.close()
