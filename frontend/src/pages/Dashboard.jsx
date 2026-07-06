@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api } from "../api/client.js";
 import { fmtMoney } from "../format.js";
@@ -265,8 +265,16 @@ function MoonrakerCard({ printer, navigate }) {
       return o;
     }).catch(() => setOffline(true));
 
+  // Последнее известное задание и признак «печатали в прошлый тик» — в ref,
+  // чтобы быстрый интервал видел свежие значения без пересоздания эффекта.
+  const jobRef = useRef(null);
+  const wasPrintingRef = useRef(false);
+  const watchUntilRef = useRef(0);
+
   const loadJob = () =>
-    api.get(`/api/printers/${printer.id}/moonraker-jobs?limit=1`).then((j) => setJob(j[0] || null)).catch(() => {});
+    api.get(`/api/printers/${printer.id}/moonraker-jobs?limit=1`)
+      .then((j) => { jobRef.current = j[0] || null; setJob(jobRef.current); })
+      .catch(() => {});
 
   useEffect(() => {
     const visible = () => document.visibilityState === "visible";
@@ -278,7 +286,18 @@ function MoonrakerCard({ printer, navigate }) {
       if (dryer?.status === "drying") {
         loadOverview();
       } else {
-        api.get(`/api/printers/${printer.id}/status`).then(setStatus).catch(() => {});
+        api.get(`/api/printers/${printer.id}/status`).then((s) => {
+          setStatus(s);
+          const printing = s?.state === "printing";
+          // Печать только что завершилась — сразу показываем её в «Последней
+          // печати» и открываем окно частого опроса, чтобы поймать авто-списание
+          // (воркер списывает в фоне через ~30с) без перезагрузки страницы.
+          if (wasPrintingRef.current && !printing) watchUntilRef.current = Date.now() + 180000;
+          wasPrintingRef.current = printing;
+          if (!printing && Date.now() < watchUntilRef.current && !jobRef.current?.consumed) {
+            loadJob();
+          }
+        }).catch(() => {});
       }
     }, 7000);
     const slow = setInterval(() => {
