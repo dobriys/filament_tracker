@@ -340,7 +340,7 @@ function MoonrakerCard({ printer, navigate }) {
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "10px 0 6px" }}>
                     <span className="mono" style={{ fontSize: 26, fontWeight: 600 }}>{pct != null ? pct + "%" : "—"}</span>
-                    {remaining != null && <span className="muted" style={{ fontSize: 13 }}>{t("осталось ~")}{fmtDur(remaining)}</span>}
+                    <span className="muted" style={{ fontSize: 13 }}>{t("осталось ~")}{remaining != null ? fmtDur(remaining) : t("считаем…")}</span>
                   </div>
                   <div className="progress"><div style={{ width: `${pct || 0}%`, background: "var(--accent)" }} /></div>
                   <div className="zone-metrics">

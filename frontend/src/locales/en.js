@@ -370,6 +370,7 @@ export const EN = {
   "нет данных": "no data",
   "новая": "new",
   "осталось ~": "remaining ~",
+  "считаем…": "calculating…",
   "остаток": "remaining",
   "отменено": "cancelled",
   "ошибка": "error",
