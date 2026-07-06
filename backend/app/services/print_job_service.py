@@ -102,8 +102,9 @@ def jobs_cost(db: Session, job_ids: list) -> dict:
 
     Цена за грамм берётся из spool_service.price_per_gram (учитывает вес
     катушки на момент заведения — початая катушка не занижает итог).
-    Возвращает {job_id: {cost, currency, partial}}, где partial=True — часть
-    списаний была с катушек без цены (итог занижен).
+    Возвращает {job_id: {cost, currency, partial, grams}}, где partial=True —
+    часть списаний была с катушек без цены (итог занижен); grams — суммарный
+    фактически списанный вес по всем катушкам печати.
     """
     if not job_ids:
         return {}
@@ -117,7 +118,10 @@ def jobs_cost(db: Session, job_ids: list) -> dict:
     ppg = spool_service.price_per_gram(db, list({r[1] for r in rows}))
     out: dict = {}
     for jid, spool_id, used_g in rows:
-        entry = out.setdefault(jid, {"cost": 0.0, "currency": None, "partial": False})
+        entry = out.setdefault(
+            jid, {"cost": 0.0, "currency": None, "partial": False, "grams": 0.0}
+        )
+        entry["grams"] += float(used_g)
         p = ppg.get(spool_id)
         if p is None:
             entry["partial"] = True

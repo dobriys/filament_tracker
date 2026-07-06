@@ -256,6 +256,11 @@ def _annotate_consumption(db: Session, user: User, jobs: list[dict]) -> list[dic
         c = costs.get(cost_pj.id) if cost_pj is not None else None
         j["cost"] = round(c["cost"], 2) if c else None
         j["cost_currency"] = c["currency"] if c else None
+        # Слайсер не всегда кладёт вес в метаданные Moonraker (temp-файлы), но
+        # при списании граммы посчитались из длины по катушке — показываем их,
+        # чтобы «Расход» не был прочерком у уже списанной печати.
+        if j.get("filament_total_g") is None and c and c.get("grams"):
+            j["filament_total_g"] = round(c["grams"], 2)
     return jobs
 
 
