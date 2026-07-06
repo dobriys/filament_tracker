@@ -1,4 +1,21 @@
+import { useState } from "react";
 import { t } from "../i18n.js";
+
+// Slug принтера для файла иллюстрации: тот же формат, что и key пресета на
+// бэке (printer_presets._preset). Свой SVG для модели кладётся в
+// public/icons/printers/<slug>.svg — например anycubic-kobra-s1-combo.svg.
+// Если файла нет, показываем сгенерированный силуэт (заглушку).
+export function printerSlug(brand, model) {
+  const s = `${brand || ""} ${model || ""}`
+    .toLowerCase()
+    .replace(/\//g, " ")
+    .replace(/\+/g, "plus")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .join("-");
+  return s || null;
+}
 
 // Цвет бренда для акцентов карточки/иллюстрации. Неизвестный бренд → акцент темы.
 const BRAND_ACCENT = {
@@ -20,8 +37,28 @@ export function brandAccent(brand) {
 
 // Силуэт FDM-принтера, тонированный цветом бренда. Меняется по возможностям:
 // камера (has_chamber) — корпус вокруг, мультиподача (has_mmu) — внешний бокс со слотами.
-export function PrinterArt({ caps = {}, brand, size = 92 }) {
+export function PrinterArt({ caps = {}, brand, model, size = 92 }) {
   const accent = brandAccent(brand);
+  const slug = printerSlug(brand, model);
+  // Запоминаем именно слаг, для которого файла не нашлось: при смене модели
+  // (например, в форме добавления принтера) картинка пробуется заново.
+  const [failedSlug, setFailedSlug] = useState(null);
+
+  // Есть готовая иллюстрация под эту модель — показываем её вместо силуэта.
+  // onError (нет файла) → откатываемся на сгенерированный силуэт.
+  if (slug && failedSlug !== slug) {
+    return (
+      <img
+        src={`/icons/printers/${slug}.svg`}
+        width={size}
+        height={size}
+        alt={t("Иллюстрация принтера")}
+        onError={() => setFailedSlug(slug)}
+        style={{ flex: "0 0 auto", objectFit: "contain" }}
+      />
+    );
+  }
+
   const enclosed = !!caps.has_chamber;
   const n = caps.has_mmu ? Math.max(1, Math.min(6, caps.mmu_slots || 4)) : 0;
 

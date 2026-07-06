@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-250 -190 480 380" width="1024" height="1024">
+  <polygon points="-164.52 93.628 -0.525 188.313 -0.525 1.856 -164.52 -92.828" fill="#1C1C2E" stroke="#0B091D" stroke-width="2.0" stroke-linejoin="round" style=""/>
+  <polygon points="163.47 93.628 -0.525 188.313 -0.525 1.856 163.47 -92.828" fill="#33334A" stroke="#0B091D" stroke-width="2.0" stroke-linejoin="round" style=""/>
+  <polygon points="-0.525 -187.52 163.47 -92.828 -0.525 1.856 -164.52 -92.828" fill="#4B4B63" stroke="#0B091D" stroke-width="2.0" stroke-linejoin="round" style=""/>
+  <polygon points="141.022 83.577 17.392 154.954 17.392 35.505 141.022 -35.873" fill="#5C5D78" fill-opacity="0.72" stroke="#9092AC" stroke-width="2" stroke-linejoin="round" style=""/>
+  <polygon points="131.175 -15.333 100.905 2.147 116.04 60.415 131.175 51.675" fill="#FFFFFF" fill-opacity="0.1" style=""/>
+  <polygon points="89.047 39.001 61.297 55.026 61.297 63.766 89.047 47.742" fill="#f5a623" style=""/>
+  <polygon points="143.673 88.02 14.989 162.311 14.989 168.138 143.673 93.846" fill="#f5a623" fill-opacity="0.85" style=""/>
+  <polygon points="-3.045 -156.92 52.455 -124.88 22.185 -107.4 -33.33 -139.44" fill="#0E1630" stroke="#CDCAD9" stroke-width="1.5" stroke-linejoin="round" style=""/>
+</svg>

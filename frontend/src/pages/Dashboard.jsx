@@ -334,7 +334,7 @@ function MoonrakerCard({ printer, navigate }) {
   return (
     <div className="card moonraker-card" style={{ "--brand": accent }}>
       <div className="printer-head">
-        <PrinterArt caps={caps} brand={printer.brand} size={62} />
+        <PrinterArt caps={caps} brand={printer.brand} model={printer.model} size={62} />
         <div className="printer-head-main">
           <h3>{printer.name}</h3>
           {modelLine && <div className="printer-head-sub">{modelLine}</div>}

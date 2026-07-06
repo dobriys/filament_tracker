@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-250 -190 480 380" width="1024" height="1024">
+  <polygon points="-120.49 96.906 35.306 186.861 35.306 154.15 -120.49 64.195" fill="#1C1C2E" stroke="#0B091D" stroke-width="2.0" stroke-linejoin="round" style=""/>
+  <polygon points="158.068 115.987 35.306 186.861 35.306 154.15 158.068 83.276" fill="#33334A" stroke="#0B091D" stroke-width="2.0" stroke-linejoin="round" style=""/>
+  <polygon points="2.256 -6.677 158.068 83.276 35.306 154.15 -120.49 64.195" fill="#4B4B63" stroke="#0B091D" stroke-width="2.0" stroke-linejoin="round" style=""/>
+  <polygon points="2.256 4.226 127.374 76.462 37.665 128.254 -87.441 56.017" fill="#63657E" stroke="#0B091D" stroke-width="1.6" stroke-linejoin="round" style=""/>
+  <polygon points="2.256 11.04 113.213 75.099 37.665 118.713 -73.279 54.655" fill="#3F3F56" fill-opacity="0.9" style=""/>
+  <polygon points="-4.818 8.315 9.343 16.492 9.343 -163.42 -4.818 -171.6" fill="#1C1C2E" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="23.503 8.315 9.343 16.492 9.343 -163.42 23.503 -171.6" fill="#3F3F56" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="9.343 -179.77 23.503 -171.6 9.343 -163.42 -4.818 -171.6" fill="#63657E" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="117.928 79.188 132.103 87.366 132.103 -92.546 117.928 -100.72" fill="#1C1C2E" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="146.265 79.188 132.103 87.366 132.103 -92.546 146.265 -100.72" fill="#3F3F56" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="132.103 -108.9 146.265 -100.72 132.103 -92.546 117.928 -100.72" fill="#63657E" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="-4.818 -163.42 132.103 -84.369 132.103 -100.72 -4.818 -179.77" fill="#1C1C2E" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="146.265 -92.546 132.103 -84.369 132.103 -100.72 146.265 -108.9" fill="#3F3F56" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="9.343 -187.95 146.265 -108.9 132.103 -100.72 -4.818 -179.77" fill="#63657E" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="42.394 -89.816 73.088 -72.099 73.088 -96.634 42.394 -114.35" fill="#1C1C2E" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="96.694 -85.728 73.088 -72.099 73.088 -96.634 96.694 -110.26" fill="#3F3F56" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="66.001 -127.98 96.694 -110.26 73.088 -96.634 42.394 -114.35" fill="#63657E" stroke="#0B091D" stroke-width="1.4" stroke-linejoin="round" style=""/>
+  <polygon points="66.001 -89.816 73.088 -85.728 69.544 -71.418" fill="#e8412b" style=""/>
+</svg>

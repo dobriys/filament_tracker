@@ -126,7 +126,7 @@ export default function Printers() {
           </div>
           {form.preset_key && (
             <div className="preset-preview" style={{ "--brand": brandAccent(form.brand) }}>
-              <PrinterArt caps={form.capabilities || {}} brand={form.brand} size={56} />
+              <PrinterArt caps={form.capabilities || {}} brand={form.brand} model={form.model} size={56} />
               <div>
                 {(form.brand || form.model) && <div className="printer-head-sub">{[form.brand, form.model].filter(Boolean).join(" ")}</div>}
                 <CapabilityChips caps={form.capabilities || {}} />
@@ -250,7 +250,7 @@ function MoonrakerPanel({ printer, onClose }) {
     <div className="card moonraker-card" style={{ "--brand": brandAccent(printer.brand) }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <PrinterArt caps={ov?.capabilities || printer.capabilities || {}} brand={printer.brand} size={50} />
+          <PrinterArt caps={ov?.capabilities || printer.capabilities || {}} brand={printer.brand} model={printer.model} size={50} />
           <div>
             <h3 style={{ margin: 0 }}>Moonraker — {printer.name}</h3>
             {[printer.brand, printer.model].filter(Boolean).length > 0 && (
