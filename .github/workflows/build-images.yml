@@ -62,3 +62,40 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             APP_VERSION=${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
+
+  # GitHub Release на каждый тег vX.Y.Z — после успешной сборки образов.
+  # Заметки генерируются автоматически из коммитов, плюс блоки «Образы/Обновление».
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Derive version
+        id: ver
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "minor=${v%.*}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Filament Tracker ${{ steps.ver.outputs.version }}
+          generate_release_notes: true
+          body: |
+            ## Образы
+
+            ```
+            ghcr.io/${{ github.repository }}/backend:${{ steps.ver.outputs.version }}
+            ghcr.io/${{ github.repository }}/frontend:${{ steps.ver.outputs.version }}
+            ```
+            Также обновлены теги `${{ steps.ver.outputs.minor }}` и `latest`.
+
+            ## Обновление
+
+            ```bash
+            docker compose pull
+            docker compose up -d
+            ```
