@@ -639,7 +639,7 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
 .zone-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 14px; }
 .printer-lifetime {
   position: relative; overflow: hidden;
-  margin-top: 18px; padding: 18px; border-radius: var(--radius);
+  margin: 0 0 16px; padding: 18px; border-radius: var(--radius);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--panel) 96%, var(--accent)) 0%, var(--panel) 52%, var(--panel-2) 100%);
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);

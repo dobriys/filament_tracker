@@ -247,11 +247,10 @@ function DryerControls({ printer, dryer, onChanged }) {
   );
 }
 
-function MoonrakerCard({ printer, navigate }) {
+function MoonrakerCard({ printer, navigate, onTotals }) {
   const [status, setStatus] = useState(null);
   const [gates, setGates] = useState([]);
   const [dryer, setDryer] = useState(null);
-  const [totals, setTotals] = useState(null);
   const [caps, setCaps] = useState(printer.capabilities || {});
   const [job, setJob] = useState(null);
   const [offline, setOffline] = useState(false);
@@ -260,8 +259,9 @@ function MoonrakerCard({ printer, navigate }) {
 
   const loadOverview = () =>
     api.get(`/api/printers/${printer.id}/overview`).then((o) => {
-      setStatus(o.status); setGates(o.gates || []); setDryer(o.dryer); setTotals(o.totals);
+      setStatus(o.status); setGates(o.gates || []); setDryer(o.dryer);
       setCaps(o.capabilities || {}); setOffline(false);
+      onTotals?.(printer.id, o.totals);
       return o;
     }).catch(() => setOffline(true));
 
@@ -409,37 +409,43 @@ function MoonrakerCard({ printer, navigate }) {
               </div>
             )}
           </div>
-          {totals && (
-            <div className="printer-lifetime">
-              <div className="printer-lifetime-head">
-                <div>
-                  <div className="printer-lifetime-title">{t("Ресурс принтера")}</div>
-                  <div className="printer-lifetime-subtitle">{t("Статистика за всё время")}</div>
-                </div>
-              </div>
-              <div className="printer-lifetime-body">
-                <div className="printer-lifetime-hero">
-                  <span>{t("Всего печатей")}</span>
-                  <b>{totals.total_jobs}</b>
-                  <em>{t("завершённых заданий")}</em>
-                </div>
-                <div className="printer-lifetime-grid">
-                  <div className="printer-lifetime-stat">
-                    <span>{t("Время печати")}</span>
-                    <b>{Math.round((totals.total_print_time_sec || 0) / 3600)}</b>
-                    <em>{t("ч печати")}</em>
-                  </div>
-                  <div className="printer-lifetime-stat">
-                    <span>{t("Филамент")}</span>
-                    <b>{((totals.total_filament_mm || 0) / 1e6).toFixed(2)}</b>
-                    <em>{t("км филамента")}</em>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </>
       )}
+    </div>
+  );
+}
+
+// Блок «Ресурс принтера» — статистика за всё время. Вынесен из карточки принтера,
+// чтобы показываться отдельным блоком в общем потоке дашборда.
+function PrinterLifetime({ totals, name }) {
+  if (!totals) return null;
+  return (
+    <div className="printer-lifetime">
+      <div className="printer-lifetime-head">
+        <div>
+          <div className="printer-lifetime-title">{t("Ресурс принтера")}</div>
+          <div className="printer-lifetime-subtitle">{name || t("Статистика за всё время")}</div>
+        </div>
+      </div>
+      <div className="printer-lifetime-body">
+        <div className="printer-lifetime-hero">
+          <span>{t("Всего печатей")}</span>
+          <b>{totals.total_jobs}</b>
+          <em>{t("завершённых заданий")}</em>
+        </div>
+        <div className="printer-lifetime-grid">
+          <div className="printer-lifetime-stat">
+            <span>{t("Время печати")}</span>
+            <b>{Math.round((totals.total_print_time_sec || 0) / 3600)}</b>
+            <em>{t("ч печати")}</em>
+          </div>
+          <div className="printer-lifetime-stat">
+            <span>{t("Филамент")}</span>
+            <b>{((totals.total_filament_mm || 0) / 1e6).toFixed(2)}</b>
+            <em>{t("км филамента")}</em>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -460,7 +466,9 @@ function Kpi({ label, value, sub, icon, bg }) {
 export default function Dashboard() {
   const [d, setD] = useState(null);
   const [mrPrinters, setMrPrinters] = useState([]);
+  const [lifetimes, setLifetimes] = useState({}); // printerId -> totals (поднято из карточек)
   const navigate = useNavigate();
+  const onTotals = (id, totals) => setLifetimes((prev) => ({ ...prev, [id]: totals }));
 
   useEffect(() => {
     api.get("/api/dashboard").then(setD).catch(() => {});
@@ -488,7 +496,7 @@ export default function Dashboard() {
 
       {mrPrinters.length > 0 && (
         <div className="dash-printers">
-          {mrPrinters.map((p) => <MoonrakerCard key={p.id} printer={p} navigate={navigate} />)}
+          {mrPrinters.map((p) => <MoonrakerCard key={p.id} printer={p} navigate={navigate} onTotals={onTotals} />)}
         </div>
       )}
 
@@ -504,33 +512,6 @@ export default function Dashboard() {
               <h3 className="card-title">{t("Распределение по материалам")}</h3>
               <div className="card-sub">{t("Текущие запасы по типу материала.")}</div>
               {d.material_distribution.length ? <Donut data={d.material_distribution} /> : <div className="muted">{t("Нет данных")}</div>}
-            </div>
-          </div>
-
-          <div className="card">
-            <h3 className="card-title">{t("Недавняя активность")}</h3>
-            <div className="act-list">
-              {d.recent_activity.map((a, i) => {
-                const neg = a.amount && a.amount.startsWith("-");
-                const pos = a.amount && a.amount.startsWith("+");
-                return (
-                  <div className="act-item" key={i}>
-                    <div style={{ minWidth: 0 }}>
-                      <span className="act-name">{a.name}</span>{" "}
-                      <span className={`act-tag ${a.type}`} style={{ marginLeft: 6 }}>{{ used: t("Расход"), added: t("Добавлено"), updated: t("Изменено"), moved: t("Перемещено") }[a.type] || a.type}</span>
-                      <div className="act-sub">{tReason(a.sub)}</div>
-                    </div>
-                    <div className="act-right">
-                      <div className={`act-amount ${neg ? "neg" : pos ? "pos" : ""}`}>{a.amount || "—"}</div>
-                      <div className="act-time">{timeAgo(a.created_at)}</div>
-                    </div>
-                  </div>
-                );
-              })}
-              {d.recent_activity.length === 0 && <div className="muted">{t("Пока нет активности")}</div>}
-            </div>
-            <div style={{ textAlign: "right", marginTop: 8 }}>
-              <Link to="/print-jobs">{t("Вся история →")}</Link>
             </div>
           </div>
         </div>
@@ -584,6 +565,41 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {mrPrinters.map((p) => lifetimes[p.id] && (
+        <PrinterLifetime
+          key={p.id}
+          totals={lifetimes[p.id]}
+          name={mrPrinters.length > 1 ? p.name : undefined}
+        />
+      ))}
+
+      <div className="card">
+        <h3 className="card-title">{t("Недавняя активность")}</h3>
+        <div className="act-list">
+          {d.recent_activity.slice(0, 3).map((a, i) => {
+            const neg = a.amount && a.amount.startsWith("-");
+            const pos = a.amount && a.amount.startsWith("+");
+            return (
+              <div className="act-item" key={i}>
+                <div style={{ minWidth: 0 }}>
+                  <span className="act-name">{a.name}</span>{" "}
+                  <span className={`act-tag ${a.type}`} style={{ marginLeft: 6 }}>{{ used: t("Расход"), added: t("Добавлено"), updated: t("Изменено"), moved: t("Перемещено") }[a.type] || a.type}</span>
+                  <div className="act-sub">{tReason(a.sub)}</div>
+                </div>
+                <div className="act-right">
+                  <div className={`act-amount ${neg ? "neg" : pos ? "pos" : ""}`}>{a.amount || "—"}</div>
+                  <div className="act-time">{timeAgo(a.created_at)}</div>
+                </div>
+              </div>
+            );
+          })}
+          {d.recent_activity.length === 0 && <div className="muted">{t("Пока нет активности")}</div>}
+        </div>
+        <div style={{ textAlign: "right", marginTop: 8 }}>
+          <Link to="/print-jobs">{t("Вся история →")}</Link>
         </div>
       </div>
     </div>
