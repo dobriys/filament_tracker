@@ -4,7 +4,7 @@ import { api } from "../api/client.js";
 import { fmtMoney } from "../format.js";
 import { t, tReason } from "../i18n.js";
 import { GateChips } from "../components/HubGates.jsx";
-import { PrinterArt, CapabilityChips, brandAccent } from "../components/PrinterArt.jsx";
+import { PrinterArt, brandAccent } from "../components/PrinterArt.jsx";
 
 const MAT_COLORS = ["#2e6be6", "#3d4657", "#17a34a", "#f6a723", "#8a5fbf", "#e0526e", "#17a2a6", "#9aa1ab"];
 
@@ -16,7 +16,7 @@ function timeAgo(iso) {
 }
 
 function BarChart({ data }) {
-  const W = 420, H = 230, padL = 34, padB = 24, padT = 8;
+  const W = 420, H = 165, padL = 34, padB = 24, padT = 8;
   const max = Math.max(1, ...data.map((d) => d.grams));
   // «красивый» потолок чуть выше максимума — столбики читаются при любых данных
   const unit = Math.pow(10, Math.floor(Math.log10(max)));
@@ -57,7 +57,7 @@ function Donut({ data }) {
   let offset = 0;
   return (
     <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
-      <svg viewBox="0 0 160 160" width="150" height="150">
+      <svg viewBox="0 0 160 160" width="128" height="128">
         <g transform="rotate(-90 80 80)">
           {data.map((d, i) => {
             const frac = d.grams / total;
@@ -329,7 +329,6 @@ function MoonrakerCard({ printer, navigate, onTotals }) {
   const hasMmu = caps.has_mmu ?? gates.length > 0;
   const mmuTitle = caps.mmu_name ? `${t("Слоты")} ${caps.mmu_name}` : t("Слоты мультиподачи");
   const accent = brandAccent(printer.brand);
-  const modelLine = [printer.brand, printer.model].filter(Boolean).join(" ");
 
   return (
     <div className="card moonraker-card" style={{ "--brand": accent }}>
@@ -337,8 +336,6 @@ function MoonrakerCard({ printer, navigate, onTotals }) {
         <PrinterArt caps={caps} brand={printer.brand} model={printer.model} size={62} />
         <div className="printer-head-main">
           <h3>{printer.name}</h3>
-          {modelLine && <div className="printer-head-sub">{modelLine}</div>}
-          <CapabilityChips caps={caps} />
         </div>
         <div className="printer-head-status">
           {job?.consumed && <span className="badge added">{t("Списано")}</span>}
