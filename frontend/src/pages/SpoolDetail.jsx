@@ -348,17 +348,17 @@ export default function SpoolDetail() {
 
           <div className="card">
             <h3 className="card-title">{t("🕑 История использования")}</h3>
-            <table style={{ marginTop: 10 }}>
+            <table className="cards-mobile" style={{ marginTop: 10 }}>
               <thead><tr><th>{t("Дата")}</th><th>{t("Событие")}</th><th>{t("Объём")}</th><th>{t("Статус")}</th></tr></thead>
               <tbody>
                 {events.map((ev) => (
                   <tr key={ev.id}>
-                    <td>{fmtDate(ev.created_at)}</td>
-                    <td>{tReason(ev.reason) || EVENT_RU[ev.event_type] || ev.event_type}</td>
-                    <td style={{ color: ev.delta_g < 0 ? "var(--danger)" : ev.delta_g > 0 ? "var(--ok)" : "var(--text)" }}>
+                    <td data-label={t("Дата")}>{fmtDate(ev.created_at)}</td>
+                    <td data-label={t("Событие")}>{tReason(ev.reason) || EVENT_RU[ev.event_type] || ev.event_type}</td>
+                    <td data-label={t("Объём")} style={{ color: ev.delta_g < 0 ? "var(--danger)" : ev.delta_g > 0 ? "var(--ok)" : "var(--text)" }}>
                       {ev.delta_g != null ? `${ev.delta_g > 0 ? "+" : ""}${Number(ev.delta_g).toFixed(0)}${t("г")}` : "—"}
                     </td>
-                    <td><span className="act-tag updated">{EVENT_RU[ev.event_type] || ev.event_type}</span></td>
+                    <td data-label={t("Статус")}><span className="act-tag updated">{EVENT_RU[ev.event_type] || ev.event_type}</span></td>
                   </tr>
                 ))}
                 {events.length === 0 && <tr><td colSpan={4} className="muted">{t("Пока нет событий")}</td></tr>}

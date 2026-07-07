@@ -52,8 +52,12 @@ function LangSwitch() {
 function Layout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const doLogout = () => { setMoreOpen(false); logout(); navigate("/login"); };
+  const closeMore = () => setMoreOpen(false);
   return (
     <div className="app-shell">
+      {/* Десктопная шапка */}
       <header className="topnav">
         <div className="topnav-inner">
           <div className="brand">Filament Tracker</div>
@@ -80,7 +84,52 @@ function Layout({ children }) {
           </div>
         </div>
       </header>
+
+      {/* Мобильный топбар */}
+      <header className="mobile-topbar">
+        <div className="brand">Filament Tracker</div>
+        <div className="mobile-topbar-actions">
+          <ThemeToggle />
+          <button className="icon-btn mobile-more-btn" onClick={() => setMoreOpen(true)} aria-label={t("Ещё")}>
+            <span aria-hidden="true">☰</span>
+          </button>
+        </div>
+      </header>
+
       <main className="app-content">{children}</main>
+
+      {/* Мобильная нижняя навигация */}
+      <nav className="bottom-nav" aria-label={t("Навигация")}>
+        <NavLink to="/" end className="bn-item"><span className="bn-ico" aria-hidden="true">▦</span>{t("Панель")}</NavLink>
+        <NavLink to="/spools" className="bn-item"><span className="bn-ico" aria-hidden="true">🧵</span>{t("Катушки")}</NavLink>
+        <NavLink to="/printers" className="bn-item"><span className="bn-ico" aria-hidden="true">🖨</span>{t("Принтеры")}</NavLink>
+        <NavLink to="/print-jobs" className="bn-item"><span className="bn-ico" aria-hidden="true">🗒</span>{t("История")}</NavLink>
+        <button className={`bn-item bn-more ${moreOpen ? "active" : ""}`} onClick={() => setMoreOpen(true)}>
+          <span className="bn-ico" aria-hidden="true">☰</span>{t("Ещё")}
+        </button>
+      </nav>
+
+      {/* Шторка «Ещё» — вторичные разделы и действия */}
+      {moreOpen && (
+        <div className="sheet-backdrop" onClick={closeMore}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={t("Ещё")}>
+            <div className="sheet-handle" />
+            <div className="sheet-links">
+              <NavLink to="/settings" onClick={closeMore}>⚙️ {t("Настройки")}</NavLink>
+              <NavLink to="/profiles" onClick={closeMore}>🧩 {t("Профили пластика")}</NavLink>
+              <NavLink to="/locations" onClick={closeMore}>📦 {t("Места хранения")}</NavLink>
+              <NavLink to="/gcode" onClick={closeMore}>📄 {t("Загрузка gcode")}</NavLink>
+            </div>
+            <div className="sheet-footer">
+              <div className="sheet-footer-row">
+                <LangSwitch />
+                <button className="secondary" onClick={doLogout}>{t("Выйти")}</button>
+              </div>
+              {user?.email && <div className="muted sheet-email">{user.email}</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

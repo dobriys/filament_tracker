@@ -34,7 +34,10 @@ export default function Spools() {
   const [profiles, setProfiles] = useState([]);
   const [locations, setLocations] = useState([]);
   const [selected, setSelected] = useState({});
-  const [view, setView] = useState("list");
+  // На узких экранах сетка (карточки) читается лучше «списка»-таблицы.
+  const [view, setView] = useState(
+    typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches ? "grid" : "list"
+  );
   const [search, setSearch] = useState("");
   const [matFilter, setMatFilter] = useState("");
   const [locFilter, setLocFilter] = useState("");

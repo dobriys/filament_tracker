@@ -54,25 +54,25 @@ export default function PrintJobs() {
     <div>
       <h2>{t("История печати")}</h2>
       <div className="card">
-        <table>
+        <table className="cards-mobile">
           <thead><tr><th>{t("Дата")}</th><th>{t("Файл")}</th><th>{t("Расход, г")}</th><th>{t("Цена")}</th><th>{t("Статус")}</th><th></th></tr></thead>
           <tbody>
             {jobs.map((j) => (
               <tr key={j.id}>
-                <td className="muted" style={{ whiteSpace: "nowrap" }}>{fmtWhen(j.completed_at || j.created_at)}</td>
-                <td style={{ maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={j.file_name || ""}>
+                <td data-label={t("Дата")} className="muted" style={{ whiteSpace: "nowrap" }}>{fmtWhen(j.completed_at || j.created_at)}</td>
+                <td data-label={t("Файл")} style={{ maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={j.file_name || ""}>
                   {(j.file_name || "—").split("/").pop()}
                   {j.slicer_name && <span className="muted" style={{ fontSize: 12 }}> · {j.slicer_name}</span>}
                 </td>
-                <td>{j.total_filament_used_g != null ? Number(j.total_filament_used_g).toFixed(2) : "—"}</td>
-                <td title={j.cost_partial ? t("Часть катушек без цены — итог занижен") : undefined}>
+                <td data-label={t("Расход, г")}>{j.total_filament_used_g != null ? Number(j.total_filament_used_g).toFixed(2) : "—"}</td>
+                <td data-label={t("Цена")} title={j.cost_partial ? t("Часть катушек без цены — итог занижен") : undefined}>
                   {j.cost != null ? <>{fmtMoney(j.cost, j.cost_currency)}{j.cost_partial ? <span className="muted">*</span> : null}</> : "—"}
                 </td>
-                <td>
+                <td data-label={t("Статус")}>
                   <span className="badge">{STATUS[j.status] || j.status}</span>
                   {j.failed && <span className="badge empty" style={{ marginLeft: 6 }}>{t("брак")}</span>}
                 </td>
-                <td><button className="secondary" onClick={() => open(j.id)}>{t("Открыть")}</button></td>
+                <td data-label=""><button className="secondary" onClick={() => open(j.id)}>{t("Открыть")}</button></td>
               </tr>
             ))}
             {jobs.length === 0 && <tr><td colSpan={6} className="muted">{t("Печатей пока нет")}</td></tr>}

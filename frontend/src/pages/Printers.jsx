@@ -159,16 +159,16 @@ export default function Printers() {
       )}
 
       <div className="card">
-        <table>
+        <table className="cards-mobile">
           <thead><tr><th>{t("Название")}</th><th>{t("Модель")}</th><th>{t("Интеграция")}</th><th>{t("Активен")}</th><th></th></tr></thead>
           <tbody>
             {printers.map((p) => (
               <tr key={p.id}>
-                <td>{p.name}</td>
-                <td className="muted">{[p.brand, p.model].filter(Boolean).join(" ") || "—"}</td>
-                <td>{p.integration_type}</td>
-                <td>{p.is_active ? t("да") : t("нет")}</td>
-                <td>
+                <td data-label={t("Название")}>{p.name}</td>
+                <td data-label={t("Модель")} className="muted">{[p.brand, p.model].filter(Boolean).join(" ") || "—"}</td>
+                <td data-label={t("Интеграция")}>{p.integration_type}</td>
+                <td data-label={t("Активен")}>{p.is_active ? t("да") : t("нет")}</td>
+                <td data-label="">
                   <button className="secondary" onClick={() => setSelected(p)}>{t("Слоты")}</button>{" "}
                   {p.integration_type === "moonraker" && (
                     <button className="secondary" onClick={() => setMrPrinter(p)}>Moonraker</button>

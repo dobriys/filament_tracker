@@ -405,8 +405,11 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
   input, select, textarea { font-size: 16px; }
 
   /* Сетки в одну колонку на узком экране */
-  .dash-kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .kpi-value { font-size: 22px; }
+  .dash-kpis { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .kpi-value { font-size: 20px; }
+  .kpi { gap: 3px; }
+  .kpi-label { font-size: 12.5px; }
+  .kpi-sub { font-size: 12px; }
   .field-2 { grid-template-columns: 1fr; }
   .spec-grid { grid-template-columns: 1fr; }
   .spec-form-grid { grid-template-columns: 1fr 1fr; }
@@ -414,11 +417,15 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
   .hub-gates { grid-template-columns: 1fr 1fr; }
   .hub-stats { grid-template-columns: 1fr 1fr; }
 
-  .card { padding: 16px; }
-  h2 { font-size: 21px; }
+  /* Компактнее: меньше паддинги карточек и промежутки */
+  .card { padding: 13px 14px; margin-bottom: 10px; }
+  h2 { font-size: 20px; margin-bottom: 4px; }
+  .dash-printers { gap: 14px; margin-bottom: 16px; }
+  .inv-toolbar { padding: 10px; gap: 8px; margin-bottom: 12px; }
+  .card-sub { margin: 4px 0 12px; }
 }
 
-@media (max-width: 400px) {
+@media (max-width: 359px) {
   .dash-kpis { grid-template-columns: 1fr; }
 }
 
@@ -752,4 +759,126 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
   .printer-lifetime-hero,
   .printer-lifetime-stat { min-height: 104px; }
   .printer-lifetime-hero b { font-size: 42px; }
+}
+
+/* ============================================================
+   Мобильная оболочка: топбар + нижняя навигация + шторка «Ещё»
+   ============================================================ */
+.mobile-topbar, .bottom-nav { display: none; }
+
+@media (max-width: 760px) {
+  /* Прячем десктопную шапку, показываем мобильную оболочку */
+  .topnav { display: none; }
+
+  .mobile-topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    position: sticky; top: 0; z-index: 30;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+    backdrop-filter: blur(8px);
+    padding: 8px 14px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+  .mobile-topbar .brand { font-size: 16px; }
+  .mobile-topbar-actions { display: flex; align-items: center; gap: 8px; }
+  .mobile-more-btn {
+    min-height: 38px; min-width: 42px; font-size: 17px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+
+  /* Отступ снизу — чтобы контент не пропадал под нижней навигацией */
+  .app-content {
+    padding-top: 12px;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-bottom: calc(60px + env(safe-area-inset-bottom) + 14px);
+  }
+
+  .bottom-nav {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    background: color-mix(in srgb, var(--panel) 90%, transparent);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--border);
+    padding: 4px 4px;
+    padding-bottom: calc(4px + env(safe-area-inset-bottom));
+  }
+  .bn-item {
+    flex: 1 1 0; min-width: 0; min-height: 0;
+    background: transparent; border: none;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 4px 2px; border-radius: 10px; cursor: pointer;
+    color: var(--muted); font-size: 10px; font-weight: 600; text-align: center;
+    white-space: nowrap; transition: color 0.15s;
+  }
+  .bn-item:hover { background: transparent; }
+  .bn-ico { font-size: 18px; line-height: 1; }
+  .bn-item.active { color: var(--accent); }
+}
+
+/* Шторка «Ещё» */
+.sheet-backdrop {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0, 0, 0, 0.42);
+  display: flex; align-items: flex-end;
+  animation: sheet-fade 0.16s ease;
+}
+.sheet {
+  width: 100%; background: var(--panel);
+  border-radius: 22px 22px 0 0;
+  padding: 8px 16px;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  box-shadow: 0 -10px 44px rgba(0, 0, 0, 0.28);
+  animation: sheet-up 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sheet-handle { width: 40px; height: 4px; border-radius: 2px; background: var(--border); margin: 6px auto 14px; }
+.sheet-links { display: flex; flex-direction: column; gap: 2px; }
+.sheet-links a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 12px; border-radius: 12px;
+  color: var(--text); font-size: 16px; font-weight: 500;
+}
+.sheet-links a:hover, .sheet-links a.active { background: var(--hover-row); color: var(--accent); }
+.sheet-footer { margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
+.sheet-footer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sheet-footer-row button { min-height: 38px; }
+.sheet-email { font-size: 12px; margin-top: 12px; text-align: center; }
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes sheet-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ============================================================
+   Таблицы → карточки на узких экранах (data-label)
+   ============================================================ */
+@media (max-width: 640px) {
+  table.cards-mobile { display: block; }
+  table.cards-mobile thead { display: none; }
+  table.cards-mobile tbody { display: block; }
+  table.cards-mobile tr {
+    display: block; margin-bottom: 8px; padding: 2px 4px 4px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--panel);
+  }
+  table.cards-mobile tr:hover { background: var(--panel); }
+  table.cards-mobile td {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 7px 10px; border-bottom: 1px solid var(--border-soft);
+    white-space: normal; text-align: right;
+  }
+  table.cards-mobile td:last-child { border-bottom: none; }
+  table.cards-mobile td::before {
+    content: attr(data-label); flex: 0 0 auto;
+    color: var(--muted); font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em; text-align: left;
+  }
+  /* Ячейки без метки (кнопки/действия) — на всю ширину */
+  table.cards-mobile td[data-label=""] { justify-content: stretch; gap: 8px; padding-top: 9px; }
+  table.cards-mobile td[data-label=""] button,
+  table.cards-mobile td[data-label=""] > div > button { min-height: 36px; }
+  table.cards-mobile td[data-label=""]::before { display: none; }
+  table.cards-mobile td[data-label=""] > button,
+  table.cards-mobile td[data-label=""] > a { width: 100%; }
+  table.cards-mobile td[data-label=""] { flex-wrap: wrap; }
+  /* Обёртка-flex с несколькими действиями — во всю ширину и с переносом */
+  table.cards-mobile td[data-label=""] > div { width: 100%; flex-wrap: wrap; }
 }

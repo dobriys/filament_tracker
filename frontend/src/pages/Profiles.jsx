@@ -97,19 +97,19 @@ export default function Profiles() {
 
       {tab === "mine" ? (
         <div className="card" style={{ padding: 0 }}>
-          <table>
+          <table className="cards-mobile">
             <thead>
               <tr><th style={{ paddingLeft: 16 }}>{t("Бренд")}</th><th>{t("Название")}</th><th>{t("Материал")}</th><th>{t("Цвет")}</th><th>{t("Сопло / Стол")}</th><th>{t("Действия")}</th></tr>
             </thead>
             <tbody>
               {rows.map((p) => (
                 <tr key={p.id}>
-                  <td style={{ paddingLeft: 16 }}>{p.brand || "—"}</td>
-                  <td>{p.name}</td>
-                  <td>{p.material}</td>
-                  <td><span className="swatch" style={{ background: p.color_hex || "#666", marginRight: 6 }} />{p.color_name || "—"}</td>
-                  <td className="muted" style={{ fontSize: 13 }}>{temps(p)}</td>
-                  <td>
+                  <td data-label={t("Бренд")} style={{ paddingLeft: 16 }}>{p.brand || "—"}</td>
+                  <td data-label={t("Название")}>{p.name}</td>
+                  <td data-label={t("Материал")}>{p.material}</td>
+                  <td data-label={t("Цвет")}><span className="swatch" style={{ background: p.color_hex || "#666", marginRight: 6 }} />{p.color_name || "—"}</td>
+                  <td data-label={t("Сопло / Стол")} className="muted" style={{ fontSize: 13 }}>{temps(p)}</td>
+                  <td data-label="">
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <button className="secondary" title={t("Создать катушку из этого профиля")} onClick={() => navigate(`/spools/new?profile=${p.id}`)}>{t("＋ В Мои катушки")}</button>
                       <button className="icon-btn" title={t("Изменить")} onClick={() => navigate(`/profiles/${p.id}/edit`)}>✎</button>

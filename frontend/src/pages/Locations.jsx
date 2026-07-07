@@ -38,14 +38,14 @@ export default function Locations() {
       </form>
 
       <div className="card">
-        <table>
+        <table className="cards-mobile">
           <thead><tr><th>{t("Название")}</th><th>{t("Описание")}</th><th></th></tr></thead>
           <tbody>
             {locations.map((l) => (
               <tr key={l.id}>
-                <td>{l.name}</td>
-                <td className="muted">{l.description || ""}</td>
-                <td><button className="danger" onClick={() => remove(l.id)}>{t("Удалить")}</button></td>
+                <td data-label={t("Название")}>{l.name}</td>
+                <td data-label={t("Описание")} className="muted">{l.description || ""}</td>
+                <td data-label=""><button className="danger" onClick={() => remove(l.id)}>{t("Удалить")}</button></td>
               </tr>
             ))}
             {locations.length === 0 && <tr><td colSpan={3} className="muted">{t("Пока нет мест хранения")}</td></tr>}
