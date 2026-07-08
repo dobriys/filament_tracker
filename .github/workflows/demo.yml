@@ -7,7 +7,7 @@ name: Deploy demo
 #   1. Settings → Pages → Source = «GitHub Actions».
 #   2. (Опционально, но рекомендуется) свой домен: задайте переменную репозитория
 #      DEMO_DOMAIN (Settings → Secrets and variables → Actions → Variables),
-#      например demo.filamenttracker.su, и добавьте DNS-запись CNAME на
+#      например demo.fmtracker.ru, и добавьте DNS-запись CNAME на
 #      <username>.github.io. Демо обслуживается из корня домена (HashRouter
 #      не требует серверных rewrite-правил).
 
