@@ -17,18 +17,6 @@ export function spoolTitle(brand, name) {
   return [brand, name].filter(Boolean).join(" ") || t("Без метки");
 }
 
-function SpoolThumb({ color, photo }) {
-  if (photo) return <img className="inv-thumb" src={photo} alt="" style={{ objectFit: "cover" }} />;
-  return (
-    <span className="inv-thumb">
-      <svg viewBox="0 0 24 24" width="26" height="26">
-        <circle cx="12" cy="12" r="10" fill={color || "var(--muted)"} stroke="var(--border)" />
-        <circle cx="12" cy="12" r="3.5" fill="var(--bg)" />
-      </svg>
-    </span>
-  );
-}
-
 export default function Spools() {
   const [spools, setSpools] = useState([]);
   const [profiles, setProfiles] = useState([]);
@@ -213,13 +201,7 @@ export default function Spools() {
                 <tr key={s.id} className="inv-row">
                   <td style={{ paddingLeft: 16 }}><input type="checkbox" style={{ width: "auto" }} checked={!!selected[s.id]} onChange={(ev) => setSelected({ ...selected, [s.id]: ev.target.checked })} /></td>
                   <td>
-                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      <SpoolThumb color={e.colorHex} photo={e.photo} />
-                      <div>
-                        <Link to={`/spools/${s.id}`}>{e.title}</Link>
-                        <div className="muted" style={{ fontSize: 12 }}>{e.sku}</div>
-                      </div>
-                    </div>
+                    <Link to={`/spools/${s.id}`}>{e.title}</Link>
                   </td>
                   <td><span className="mat-pill">{e.material}</span></td>
                   <td>
@@ -269,13 +251,11 @@ export default function Spools() {
       ) : (
         <div className="inv-grid">
           {rows.map(({ s, e }) => (
-            <div key={s.id} className="card" style={{ cursor: "pointer" }} onClick={() => navigate(`/spools/${s.id}`)}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <SpoolThumb color={e.colorHex} photo={e.photo} />
+            <div key={s.id} className="card" style={{ cursor: "pointer", display: "flex", flexDirection: "column" }} onClick={() => navigate(`/spools/${s.id}`)}>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <input type="checkbox" style={{ width: "auto" }} checked={!!selected[s.id]} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setSelected({ ...selected, [s.id]: ev.target.checked })} />
               </div>
-              <div style={{ marginTop: 10, fontWeight: 600 }}>{e.title}</div>
-              <div className="muted" style={{ fontSize: 12 }}>{e.sku}</div>
+              <div style={{ fontWeight: 600 }}>{e.title}</div>
               <div style={{ marginTop: 8, display: "flex", gap: 6, alignItems: "center" }}>
                 <span className="mat-pill">{e.material}</span>
                 <span className="swatch" style={{ background: e.colorHex || "var(--muted)" }} />
@@ -288,7 +268,7 @@ export default function Spools() {
                   ? <span className="muted">📍 {e.locName}</span>
                   : <span className="muted">{t("📍 не указано")}</span>}
               </div>
-              <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+              <div style={{ marginTop: "auto", paddingTop: 10, display: "flex", justifyContent: "space-between", fontSize: 13 }}>
                 <span>{e.remaining.toFixed(0)}{" "}{t("г")}</span><span className="muted">{Math.round(e.pct * 100)}%</span>
               </div>
               <div className="progress" style={{ marginTop: 6 }}><div style={{ width: `${Math.round(e.pct * 100)}%`, background: barColor(e) }} /></div>
