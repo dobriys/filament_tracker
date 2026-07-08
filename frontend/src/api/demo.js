@@ -12,7 +12,7 @@ export const DEMO =
   import.meta.env.VITE_DEMO === "1" ||
   import.meta.env.VITE_DEMO === true;
 
-const STORE_KEY = "ft_demo_db_v1";
+const STORE_KEY = "ft_demo_db_v2";
 const TOKEN_KEY = "ft_token";
 
 // Плотности (г/см³) для оценки веса по длине — совпадают с фронтом/бэком.
@@ -40,6 +40,63 @@ function densityFor(material) {
 function gramsFromMm(mm, diameter, material) {
   const d = Number(diameter) || 1.75;
   return (Math.PI * (d / 2) ** 2 * Number(mm)) / 1000 * densityFor(material);
+}
+
+// Расширенные характеристики филамента по материалу (для блока «Характеристики
+// филамента» на карточке). Ключи — из specFields.js (SPEC_GROUPS).
+const MATERIAL_SPECS = {
+  PLA: {
+    material_type: "Basic", softening_temp: 60, shrinkage: 0.3,
+    nozzle_min: 190, nozzle_max: 220, bed_min: 45, bed_max: 60,
+    fan_min: 60, fan_max: 100, bridge_fan: 100, fan_disable_layers: "0-1",
+    fl_wall_speed: 50, fl_infill_speed: 60, outer_wall_speed: 200, top_surface_speed: 150,
+    ironing_flow: 10, ironing_speed: 30, max_volumetric_speed: 21, flow_ratio: 0.98,
+    drying_temp: 45, dry_time_hours: 6, td: 4.2,
+    ams_compatibility: ["AMS (A)", "AMS 2 Pro (A2)", "AMS Lite (L)"],
+    build_plates: ["Textured PEI", "Smooth PEI", "Cool Plate"],
+  },
+  PETG: {
+    material_type: "Basic", softening_temp: 80, shrinkage: 0.4,
+    nozzle_min: 230, nozzle_max: 250, bed_min: 70, bed_max: 80,
+    fan_min: 30, fan_max: 50, bridge_fan: 60, fan_disable_layers: "0-2",
+    fl_wall_speed: 40, fl_infill_speed: 50, outer_wall_speed: 160, top_surface_speed: 120,
+    max_volumetric_speed: 12, flow_ratio: 0.95, drying_temp: 65, dry_time_hours: 6, td: 3.6,
+    ams_compatibility: ["AMS (A)", "AMS 2 Pro (A2)"],
+    build_plates: ["Textured PEI", "Engineering Plate"],
+  },
+  ASA: {
+    material_type: "Basic", softening_temp: 100, chamber_temp: 40, shrinkage: 0.6,
+    nozzle_min: 240, nozzle_max: 260, bed_min: 90, bed_max: 100,
+    fan_min: 0, fan_max: 20, bridge_fan: 30,
+    fl_wall_speed: 40, fl_infill_speed: 50, outer_wall_speed: 150, top_surface_speed: 110,
+    max_volumetric_speed: 10, flow_ratio: 0.96, drying_temp: 70, dry_time_hours: 4, td: 3.1,
+    ams_compatibility: ["AMS 2 Pro (A2)", "AMS HT (HT)"],
+    build_plates: ["Textured PEI", "Engineering Plate", "Garolite"],
+  },
+  ABS: {
+    material_type: "Basic", softening_temp: 105, chamber_temp: 45, shrinkage: 0.8,
+    nozzle_min: 240, nozzle_max: 260, bed_min: 95, bed_max: 110,
+    fan_min: 0, fan_max: 0, bridge_fan: 20,
+    fl_wall_speed: 40, fl_infill_speed: 50, outer_wall_speed: 150, top_surface_speed: 110,
+    max_volumetric_speed: 15, flow_ratio: 0.96, drying_temp: 65, dry_time_hours: 4, td: 3.0,
+    ams_compatibility: ["AMS 2 Pro (A2)", "AMS HT (HT)"],
+    build_plates: ["Textured PEI", "Garolite"],
+  },
+  TPU: {
+    material_type: "95A", softening_temp: 80, shrinkage: 0.8,
+    nozzle_min: 220, nozzle_max: 235, bed_min: 40, bed_max: 50,
+    fan_min: 40, fan_max: 60, bridge_fan: 60,
+    fl_wall_speed: 20, fl_infill_speed: 25, outer_wall_speed: 40, top_surface_speed: 35,
+    max_volumetric_speed: 5, flow_ratio: 1.0, drying_temp: 50, dry_time_hours: 8, td: 2.4,
+    ams_compatibility: ["AMS Lite (L)"],
+    build_plates: ["Textured PEI", "Smooth PEI"],
+  },
+};
+// Материалы, склонные к «шелковистой» вариации (замедляем поток).
+function specsForSpool(material, extra = {}) {
+  const key = (material || "").toUpperCase().replace(/\s/g, "").replace(/\+$/, "");
+  const base = MATERIAL_SPECS[key] || MATERIAL_SPECS.PLA;
+  return { density: densityFor(material), ...base, ...extra };
 }
 
 const uid = () =>
@@ -94,7 +151,7 @@ function seed() {
       label: o.label, sku: o.sku || null, manufacturer: o.brand || null, barcode: null, photo: null,
       material: o.material, color_name: o.color_name || null, color_hex: o.color_hex || null,
       diameter_mm: 1.75, hotend_temp: o.nozzle || null, bed_temp: o.bed || null, fan_speed: o.fan ?? null,
-      flow_rate: o.flow ?? null, specs: o.specs || { density: densityFor(o.material) },
+      flow_rate: o.flow ?? null, specs: o.specs || specsForSpool(o.material, o.specExtra),
       initial_filament_weight_g: initial, empty_spool_weight_g: empty, current_weight_g: current,
       purchase_date: (o.purchased || daysAgo(90)).slice(0, 10), opened_date: o.opened ? o.opened.slice(0, 10) : null,
       price: o.price ?? null, currency: "RUB", notes: o.notes || null, status,
@@ -103,15 +160,15 @@ function seed() {
     };
   };
   const spools = [
-    mkSpool({ id: "sp-pla-black", label: "PLA Чёрный", sku: "BL-PLA-BK", brand: "Bambu Lab", material: "PLA", color_name: "Чёрный", color_hex: "#1a1a1a", profile: "prof-bambu-pla-black", location: "loc-shelf", initial: 1000, current: 640, nozzle: 210, bed: 55, price: 1490, opened: daysAgo(40), created: daysAgo(85) }),
+    mkSpool({ id: "sp-pla-black", label: "PLA Чёрный", sku: "BL-PLA-BK", brand: "Bambu Lab", material: "PLA", color_name: "Чёрный", color_hex: "#1a1a1a", profile: "prof-bambu-pla-black", location: "loc-shelf", initial: 1000, current: 640, nozzle: 210, bed: 55, price: 1490, opened: daysAgo(40), created: daysAgo(85), specExtra: { gtin: "6975337000201", product_url: "https://bambulab.com/filament/pla-basic", datasheet_url: "https://bambulab.com/filament/pla-basic#tds" } }),
     mkSpool({ id: "sp-pla-white", label: "PLA Белый", sku: "BL-PLA-WT", brand: "Bambu Lab", material: "PLA", color_name: "Белый", color_hex: "#f4f4f4", profile: "prof-bambu-pla-white", location: "loc-shelf", initial: 1000, current: 815, nozzle: 210, bed: 55, price: 1490, opened: daysAgo(20), created: daysAgo(60) }),
-    mkSpool({ id: "sp-petg-blue", label: "PETG Синий", sku: "ES-PETG-BL", brand: "eSun", material: "PETG", color_name: "Синий", color_hex: "#1d5fd6", profile: "prof-esun-petg-blue", location: "loc-shelf", initial: 1000, current: 470, nozzle: 240, bed: 75, price: 1290, opened: daysAgo(70), created: daysAgo(100) }),
+    mkSpool({ id: "sp-petg-blue", label: "PETG Синий", sku: "ES-PETG-BL", brand: "eSun", material: "PETG", color_name: "Синий", color_hex: "#1d5fd6", profile: "prof-esun-petg-blue", location: "loc-shelf", initial: 1000, current: 470, nozzle: 240, bed: 75, price: 1290, opened: daysAgo(70), created: daysAgo(100), specExtra: { gtin: "6926492200085", product_url: "https://esun3d.com/petg-product" } }),
     mkSpool({ id: "sp-asa-grey", label: "ASA Серый", sku: "PM-ASA-GY", brand: "Polymaker", material: "ASA", color_name: "Серый", color_hex: "#7a7d82", profile: "prof-poly-asa-grey", location: "loc-drybox", initial: 1000, current: 910, nozzle: 250, bed: 95, price: 2190, opened: daysAgo(10), created: daysAgo(50) }),
     mkSpool({ id: "sp-tpu-red", label: "TPU Красный", sku: "SL-TPU-RD", brand: "SUNLU", material: "TPU", color_name: "Красный", color_hex: "#d6263a", profile: "prof-sunlu-tpu", location: "loc-drybox", initial: 1000, current: 780, nozzle: 228, bed: 45, fan: 60, price: 1690, opened: daysAgo(30), created: daysAgo(45) }),
     mkSpool({ id: "sp-pla-orange", label: "PLA Оранжевый", sku: "SL-PLA-OR", brand: "SUNLU", material: "PLA", color_name: "Оранжевый", color_hex: "#f6811f", location: "loc-shelf", initial: 1000, current: 42, nozzle: 205, bed: 55, price: 990, status: "almost_empty", opened: daysAgo(120), created: daysAgo(130) }),
     mkSpool({ id: "sp-pla-green", label: "PLA Зелёный", sku: "SL-PLA-GR", brand: "SUNLU", material: "PLA", color_name: "Зелёный", color_hex: "#17a34a", location: "loc-shelf", initial: 1000, current: 0, nozzle: 205, bed: 55, price: 990, status: "empty", opened: daysAgo(150), created: daysAgo(160) }),
     mkSpool({ id: "sp-petg-black", label: "PETG Чёрный (запас)", sku: "ES-PETG-BK", brand: "eSun", material: "PETG", color_name: "Чёрный", color_hex: "#141414", location: "loc-stock", initial: 1000, current: 1000, nozzle: 240, bed: 75, price: 1290, status: "new", created: daysAgo(15) }),
-    mkSpool({ id: "sp-pla-silk-gold", label: "PLA Silk Золото", sku: "ES-SILK-GD", brand: "eSun", material: "PLA", color_name: "Золото", color_hex: "#c9a227", location: "loc-shelf", initial: 1000, current: 355, nozzle: 215, bed: 55, price: 1590, opened: daysAgo(55), created: daysAgo(75) }),
+    mkSpool({ id: "sp-pla-silk-gold", label: "PLA Silk Золото", sku: "ES-SILK-GD", brand: "eSun", material: "PLA", color_name: "Золото", color_hex: "#c9a227", location: "loc-shelf", initial: 1000, current: 355, nozzle: 215, bed: 55, price: 1590, opened: daysAgo(55), created: daysAgo(75), specExtra: { material_type: "Silk", max_volumetric_speed: 10, drying_temp: 55, gtin: "6926492201099" } }),
     mkSpool({ id: "sp-abs-natural", label: "ABS Натуральный", sku: "PM-ABS-NT", brand: "Polymaker", material: "ABS", color_name: "Натуральный", color_hex: "#e8e2d4", location: "loc-drybox", initial: 1000, current: 585, nozzle: 245, bed: 100, fan: 0, price: 1890, opened: daysAgo(48), created: daysAgo(70) }),
   ];
 
