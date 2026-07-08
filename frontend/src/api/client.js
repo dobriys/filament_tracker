@@ -4,6 +4,7 @@
 // окружения прод-образа) → VITE_API_BASE_URL на этапе сборки. Нужно только если
 // API вынесен на отдельный адрес/домен без общего reverse-proxy.
 import { t, tServer } from "../i18n.js";
+import { DEMO, demoRequest, demoBlob } from "./demo.js";
 
 const BASE =
   window.__FT_CONFIG__?.apiBase ||
@@ -21,6 +22,7 @@ export function setToken(t) {
 }
 
 async function request(path, { method = "GET", body, form } = {}) {
+  if (DEMO) return demoRequest(method, path, { body, form });
   const headers = {};
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -45,6 +47,7 @@ async function request(path, { method = "GET", body, form } = {}) {
 }
 
 async function postFile(path, file) {
+  if (DEMO) return demoRequest("POST", path, { fileName: file?.name });
   const headers = {};
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -61,6 +64,18 @@ async function postFile(path, file) {
 
 // Скачивает авторизованный файл (PDF) и сохраняет под именем filename.
 async function download(path, { method = "GET", body, filename = "file" } = {}) {
+  if (DEMO) {
+    const { blob, filename: fn } = await demoBlob(method, path, { body });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || fn || "file";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return;
+  }
   const headers = {};
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -87,6 +102,10 @@ async function download(path, { method = "GET", body, filename = "file" } = {}) 
 
 // Загружает файл и возвращает object URL (для предпросмотра PDF в новой вкладке).
 async function blobUrl(path, { method = "GET", body } = {}) {
+  if (DEMO) {
+    const { blob } = await demoBlob(method, path, { body });
+    return URL.createObjectURL(blob);
+  }
   const headers = {};
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;

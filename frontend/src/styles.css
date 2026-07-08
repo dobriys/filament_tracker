@@ -923,3 +923,30 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
   /* Обёртка-flex с несколькими действиями — во всю ширину и с переносом */
   table.cards-mobile td[data-label=""] > div { width: 100%; flex-wrap: wrap; }
 }
+
+/* --- Демо-режим --- */
+.demo-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 16px;
+  font-size: 13px;
+  color: #fff;
+  background: linear-gradient(90deg, var(--accent), #7c3aed);
+}
+.demo-banner-dot { color: #b9f6ca; font-size: 10px; animation: demo-pulse 2s ease-in-out infinite; }
+@keyframes demo-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.demo-banner-text { flex: 1 1 auto; min-width: 200px; }
+.demo-banner-text b { font-weight: 700; }
+.demo-banner-link {
+  color: #fff; text-decoration: underline; opacity: 0.9; font-size: 12px; white-space: nowrap;
+}
+.demo-banner-link:hover { opacity: 1; }
+.demo-banner-reset {
+  padding: 4px 12px; font-size: 12px; border-radius: 999px; cursor: pointer;
+  color: #fff; background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.4); min-height: 0;
+}
+.demo-banner-reset:hover { background: rgba(255, 255, 255, 0.3); }
+

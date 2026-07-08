@@ -9,6 +9,10 @@ where it went — all in one place. The app tallies usage from your printer
 (Moonraker) or from an uploaded gcode file, prints QR-coded labels, and keeps all
 your data on your own server. Interface in English and Russian.
 
+> 🕹️ **[Live demo →](https://demo.filamenttracker.su)** — try the interface on
+> sample data with no install. It runs entirely in the browser (no backend), edits
+> are stored locally, and the "Reset demo" button restores the original data.
+
 ![Dashboard](docs/screenshots/en/dashboard.png)
 
 ---

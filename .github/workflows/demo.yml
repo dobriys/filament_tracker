@@ -1,0 +1,83 @@
+name: Deploy demo
+
+# Собирает статичную демо-сборку фронтенда (VITE_DEMO=1 — весь API мокается в
+# браузере, бэкенд не нужен) и публикует её на GitHub Pages.
+#
+# Одноразовая настройка:
+#   1. Settings → Pages → Source = «GitHub Actions».
+#   2. (Опционально, но рекомендуется) свой домен: задайте переменную репозитория
+#      DEMO_DOMAIN (Settings → Secrets and variables → Actions → Variables),
+#      например demo.filamenttracker.su, и добавьте DNS-запись CNAME на
+#      <username>.github.io. Демо обслуживается из корня домена (HashRouter
+#      не требует серверных rewrite-правил).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/demo.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: demo-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # База путей: корень «/» для своего домена, иначе подпапка проекта
+      # (<user>.github.io/<repo>/). HashRouter делает роутинг без базового пути.
+      - name: Compute base path
+        id: base
+        run: |
+          if [ -n "${{ vars.DEMO_DOMAIN }}" ]; then
+            echo "path=/" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=/${{ github.event.repository.name }}/" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build demo
+        env:
+          VITE_DEMO: "1"
+        run: npm run build -- --base=${{ steps.base.outputs.path }}
+
+      - name: SPA fallback (404 → index)
+        run: cp dist/index.html dist/404.html
+
+      - name: Custom domain (CNAME)
+        if: ${{ vars.DEMO_DOMAIN != '' }}
+        run: echo "${{ vars.DEMO_DOMAIN }}" > dist/CNAME
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

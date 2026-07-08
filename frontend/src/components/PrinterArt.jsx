@@ -49,7 +49,7 @@ export function PrinterArt({ caps = {}, brand, model, size = 92 }) {
   if (slug && failedSlug !== slug) {
     return (
       <img
-        src={`/icons/printers/${slug}.svg`}
+        src={`${import.meta.env.BASE_URL}icons/printers/${slug}.svg`}
         width={size}
         height={size}
         alt={t("Иллюстрация принтера")}
