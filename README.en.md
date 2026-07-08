@@ -26,6 +26,7 @@ your data on your own server. Interface in English and Russian.
 - [First steps after install](#first-steps-after-install)
 - [Backups](#backups)
 - [FAQ](#faq)
+- [Support the project](#support-the-project)
 
 ---
 
@@ -274,6 +275,13 @@ Reset the password hash directly in the database or (if you don't mind losing da
 clear the `users` table — on the next login the service will offer to create an
 administrator again.
 
+
+---
+
+## Support the project
+
+If you find this project useful, you can support further development:
+https://boosty.to/fmtracker/donate
 
 ---
 
