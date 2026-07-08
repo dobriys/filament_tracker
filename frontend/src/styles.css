@@ -429,6 +429,12 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
   .inv-toolbar { padding: 10px; gap: 8px; margin-bottom: 12px; }
   .card-sub { margin: 4px 0 12px; }
 
+  /* Мобайл: «Быстрые действия» (с «Добавить катушку») — над графиками
+     «Расход по месяцам» / «Распределение по материалам». Десктоп (2 колонки)
+     не затрагивается — правило только для одноколоночной раскладки. */
+  .dash-main > div:first-child { order: 2; }
+  .dash-main > div:last-child { order: 1; }
+
   /* Катушки: сетка в 2 колонки и плотнее; поиск на всю строку, фильтры делят
      следующую строку поровну. */
   .inv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
