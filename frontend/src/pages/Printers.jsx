@@ -327,16 +327,16 @@ function MoonrakerPanel({ printer, onClose }) {
       )}
 
       {jobs && (
-        <table style={{ marginTop: 12 }}>
+        <table className="cards-mobile" style={{ marginTop: 12 }}>
           <thead><tr><th>{t("Файл")}</th><th>{t("Статус")}</th><th>{t("Филамент, г")}</th><th>{t("Слайсер")}</th><th></th></tr></thead>
           <tbody>
             {jobs.map((j) => (
               <tr key={j.job_id}>
-                <td>{(j.filename || "").split("/").pop()}</td>
-                <td>{j.status}</td>
-                <td>{j.filament_total_g != null ? Number(j.filament_total_g).toFixed(1) : (j.filament_used_mm != null ? Math.round(j.filament_used_mm) + " " + t("мм") : "—")}</td>
-                <td>{j.slicer || "—"}</td>
-                <td>
+                <td data-label={t("Файл")}>{(j.filename || "").split("/").pop()}</td>
+                <td data-label={t("Статус")}>{j.status}</td>
+                <td data-label={t("Филамент, г")}>{j.filament_total_g != null ? Number(j.filament_total_g).toFixed(1) : (j.filament_used_mm != null ? Math.round(j.filament_used_mm) + " " + t("мм") : "—")}</td>
+                <td data-label={t("Слайсер")}>{j.slicer || "—"}</td>
+                <td data-label="">
                   {j.consumed ? (
                     <span className="badge added" title={j.consumed_via === "manual" ? t("Файл уже списан вручную") : t("Уже списано из Moonraker")}>
                       {t("✓ Списано")}{j.cost != null ? ` · ${fmtMoney(j.cost, j.cost_currency)}` : ""}
@@ -414,14 +414,14 @@ function SlotsManager({ printer, onClose }) {
           <button className="secondary" onClick={onClose}>{t("Закрыть")}</button>
         </div>
       </div>
-      <table>
+      <table className="cards-mobile">
         <thead><tr><th>{t("Слот")}</th><th>{t("Текущая катушка")}</th><th>{t("Назначить")}</th><th></th></tr></thead>
         <tbody>
           {slots.map((s) => (
             <tr key={s.id}>
-              <td>{s.name || `Slot ${s.slot_index}`}</td>
-              <td>{s.current_spool_id ? <span className="badge in_use">{s.current_spool_label}</span> : <span className="muted">{t("пусто")}</span>}</td>
-              <td>
+              <td data-label={t("Слот")}>{s.name || `Slot ${s.slot_index}`}</td>
+              <td data-label={t("Текущая катушка")}>{s.current_spool_id ? <span className="badge in_use">{s.current_spool_label}</span> : <span className="muted">{t("пусто")}</span>}</td>
+              <td data-label={t("Назначить")}>
                 <select defaultValue="" onChange={(e) => assign(s.id, e.target.value)}>
                   <option value="">{t("— выбрать катушку —")}</option>
                   {spools.map((sp) => (
@@ -429,7 +429,7 @@ function SlotsManager({ printer, onClose }) {
                   ))}
                 </select>
               </td>
-              <td>
+              <td data-label="">
                 {s.current_spool_id && <button className="secondary" onClick={() => unassign(s.id)}>{t("Снять")}</button>}{" "}
                 <button className="secondary" onClick={() => showHistory(s.id)}>{t("История")}</button>
               </td>
@@ -442,14 +442,14 @@ function SlotsManager({ printer, onClose }) {
       {history && (
         <div style={{ marginTop: 12 }}>
           <h4>{t("История назначений")}</h4>
-          <table>
+          <table className="cards-mobile">
             <thead><tr><th>{t("Катушка")}</th><th>{t("Назначена")}</th><th>{t("Снята")}</th></tr></thead>
             <tbody>
               {history.rows.map((r) => (
                 <tr key={r.id}>
-                  <td>{spoolLabel(r.spool_id)}</td>
-                  <td>{new Date(r.assigned_at).toLocaleString(dateLocale())}</td>
-                  <td>{r.unassigned_at ? new Date(r.unassigned_at).toLocaleString(dateLocale()) : <span className="badge in_use">{t("сейчас")}</span>}</td>
+                  <td data-label={t("Катушка")}>{spoolLabel(r.spool_id)}</td>
+                  <td data-label={t("Назначена")}>{new Date(r.assigned_at).toLocaleString(dateLocale())}</td>
+                  <td data-label={t("Снята")}>{r.unassigned_at ? new Date(r.unassigned_at).toLocaleString(dateLocale()) : <span className="badge in_use">{t("сейчас")}</span>}</td>
                 </tr>
               ))}
               {history.rows.length === 0 && <tr><td colSpan={3} className="muted">{t("Пусто")}</td></tr>}

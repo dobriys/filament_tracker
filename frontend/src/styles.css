@@ -428,6 +428,13 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
   .dash-printers { gap: 14px; margin-bottom: 16px; }
   .inv-toolbar { padding: 10px; gap: 8px; margin-bottom: 12px; }
   .card-sub { margin: 4px 0 12px; }
+
+  /* Катушки: сетка в 2 колонки и плотнее; поиск на всю строку, фильтры делят
+     следующую строку поровну. */
+  .inv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .inv-grid .card { padding: 11px; margin-bottom: 0; }
+  .inv-search { min-width: 100%; }
+  .inv-toolbar .filter-chip { flex: 1 1 90px; min-width: 90px; }
 }
 
 @media (max-width: 359px) {
@@ -767,8 +774,13 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
   .dryer-head { align-items: flex-start; }
   .dryer-live-panel { grid-template-columns: 1fr; }
   .dryer-fields { grid-template-columns: 1fr; }
-  .dryer-presets-list { grid-template-columns: 1fr; }
-  .dryer-preset { min-height: 72px; }
+  /* Сушка компактнее: профили в ряд (3 в строку), а не столбиком. */
+  .dryer-presets { padding: 10px; }
+  .dryer-presets-label { margin-bottom: 8px; }
+  .dryer-presets-list { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .dryer-preset { min-height: 0; padding: 9px 8px; gap: 6px; }
+  .dryer-preset-material { font-size: 15px; }
+  .dryer-preset-values { flex-direction: column; align-items: flex-start; gap: 4px; }
   /* Компактный «Ресурс принтера»: короткий hero + ряд из двух плиток вместо
      трёх высоких столбиком. */
   .printer-lifetime { padding: 12px; }
