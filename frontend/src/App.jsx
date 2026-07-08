@@ -18,6 +18,16 @@ import { t, getLang, setLang } from "./i18n.js";
 import { getTheme, setTheme } from "./theme.js";
 import { useState } from "react";
 
+// Логотип сайта — иконка катушки (бывший SpoolThumb): кольцо с отверстием.
+function Logo({ size = 22 }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      <circle cx="12" cy="12" r="10" fill="var(--accent)" />
+      <circle cx="12" cy="12" r="3.5" fill="var(--bg)" />
+    </svg>
+  );
+}
+
 export function ThemeToggle() {
   const [theme, set] = useState(getTheme());
   const next = theme === "dark" ? "light" : "dark";
@@ -60,7 +70,7 @@ function Layout({ children }) {
       {/* Десктопная шапка */}
       <header className="topnav">
         <div className="topnav-inner">
-          <div className="brand">Filament Tracker</div>
+          <div className="brand"><Logo /> Filament Tracker</div>
           <nav className="topnav-links">
             <NavLink to="/" end>{t("Панель")}</NavLink>
             <NavLink to="/spools">{t("Мои Катушки")}</NavLink>
@@ -87,7 +97,7 @@ function Layout({ children }) {
 
       {/* Мобильный топбар */}
       <header className="mobile-topbar">
-        <div className="brand">Filament Tracker</div>
+        <div className="brand"><Logo size={20} /> Filament Tracker</div>
         <div className="mobile-topbar-actions">
           <ThemeToggle />
           <button className="icon-btn mobile-more-btn" onClick={() => setMoreOpen(true)} aria-label={t("Ещё")}>
