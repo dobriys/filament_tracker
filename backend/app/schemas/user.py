@@ -27,6 +27,11 @@ class UserOut(UserBase):
 
     id: uuid.UUID
     created_at: datetime
+    theme: str | None = None
+
+
+class ThemeUpdate(BaseModel):
+    theme: str  # "light" | "dark"
 
 
 class PasswordChange(BaseModel):

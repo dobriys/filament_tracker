@@ -8,7 +8,7 @@ from app.db.session import get_db
 from app.deps import get_current_user
 from app.models import User
 from app.schemas.auth import SetupRequest, Token
-from app.schemas.user import UserOut
+from app.schemas.user import ThemeUpdate, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -72,4 +72,19 @@ def logout():
 
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.put("/me/theme", response_model=UserOut)
+def set_theme(
+    data: ThemeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Сохраняет тему интерфейса в аккаунте — чтобы следовала за пользователем."""
+    if data.theme not in ("light", "dark"):
+        raise HTTPException(status_code=422, detail="Тема должна быть light или dark")
+    current_user.theme = data.theme
+    db.commit()
+    db.refresh(current_user)
     return current_user

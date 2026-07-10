@@ -18,3 +18,7 @@ class User(Base, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False, default="user")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Тема интерфейса, привязанная к аккаунту ("light"/"dark"); null = не задана,
+    # тогда берётся выбор из браузера. Следует за пользователем между
+    # устройствами и адресами.
+    theme: Mapped[str | None] = mapped_column(String)

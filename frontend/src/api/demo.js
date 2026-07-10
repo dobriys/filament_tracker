@@ -114,6 +114,7 @@ const USER = {
   username: "demo",
   role: "admin",
   is_active: true,
+  theme: null,
   created_at: daysAgo(210),
 };
 
@@ -712,6 +713,11 @@ function dispatch(method, rawPath, { body, form, fileName } = {}) {
   if (path === "/api/auth/setup-status") return { needs_setup: false };
   if (path === "/api/auth/login") return { access_token: "demo-token", token_type: "bearer" };
   if (path === "/api/auth/me") return db.user;
+  if (path === "/api/auth/me/theme" && M === "PUT") {
+    db.user = { ...db.user, theme: body?.theme };
+    save();
+    return db.user;
+  }
   if (path === "/api/auth/logout") return { detail: "ok" };
 
   // --- settings ---

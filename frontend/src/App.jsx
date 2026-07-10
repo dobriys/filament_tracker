@@ -16,6 +16,7 @@ import SpoolByQr from "./pages/SpoolByQr.jsx";
 import Settings from "./pages/Settings.jsx";
 import { t, getLang, setLang } from "./i18n.js";
 import { getTheme, setTheme } from "./theme.js";
+import { api } from "./api/client.js";
 import { useState } from "react";
 
 // Логотип сайта — иконка катушки (бывший SpoolThumb): кольцо с отверстием.
@@ -30,12 +31,19 @@ function Logo({ size = 22 }) {
 
 export function ThemeToggle() {
   const [theme, set] = useState(getTheme());
+  const { user } = useAuth();
   const next = theme === "dark" ? "light" : "dark";
+  const toggle = () => {
+    setTheme(next);
+    set(next);
+    // Залогиненным сохраняем выбор в аккаунт, чтобы он следовал за пользователем.
+    if (user) api.put("/api/auth/me/theme", { theme: next }).catch(() => {});
+  };
   return (
     <button
       className="secondary theme-btn"
       title={next === "dark" ? t("Тёмная тема") : t("Светлая тема")}
-      onClick={() => { setTheme(next); set(next); }}
+      onClick={toggle}
     >
       {theme === "dark" ? "☀️" : "🌙"}
     </button>
