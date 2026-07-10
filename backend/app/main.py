@@ -8,6 +8,7 @@ from app.api import api_router
 from app.core import request_context
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.services import diagnostics
 from app.services.catalog_seed import seed_catalog
 from app.services.secret_service import ensure_secrets
 
@@ -20,6 +21,7 @@ async def lifespan(app: FastAPI):
     try:
         ensure_secrets(db)  # авто-генерация ключей, если не заданы через env
         seed_catalog(db)
+        diagnostics.load_enabled(db)  # кэшируем флаг записи ошибок из БД
     finally:
         db.close()
     yield
@@ -56,6 +58,10 @@ async def capture_frontend_origin(request: Request, call_next):
                 origin = f"{p.scheme}://{p.netloc}"
     request_context.set_frontend_origin(origin)
     return await call_next(request)
+
+
+# Пишет необработанные исключения в диагностический журнал (если включён).
+app.middleware("http")(diagnostics.error_capture_middleware)
 
 
 app.include_router(api_router)

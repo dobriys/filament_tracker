@@ -10,7 +10,9 @@ export default function Settings() {
     allow_negative_consumption: false,
     moonraker_auto_import: true,
     moonraker_auto_consume: false,
+    error_logging: false,
   });
+  const [log, setLog] = useState(null); // null = не загружен, [] = пусто
   const [msg, setMsg] = useState(null);
   const [serverVersion, setServerVersion] = useState(null);
   const [spoolmanUrl, setSpoolmanUrl] = useState("");
@@ -96,6 +98,26 @@ export default function Settings() {
         {hint && <div className="muted" style={{ marginLeft: 24, fontSize: 13 }}>{hint}</div>}
       </div>
     );
+  }
+
+  async function loadLog() {
+    setMsg(null);
+    try {
+      const r = await api.get("/api/diagnostics/log");
+      setLog(r.entries);
+    } catch (err) { setMsg(err.message); }
+  }
+  async function clearLog() {
+    setMsg(null);
+    try {
+      await api.post("/api/diagnostics/clear");
+      setLog([]);
+      setMsg(t("Журнал очищен"));
+    } catch (err) { setMsg(err.message); }
+  }
+  function downloadLog() {
+    api.download("/api/diagnostics/log.txt", { filename: "filament-tracker-errors.txt" })
+      .catch((e) => setMsg(e.message));
   }
 
   async function importSpoolman() {
@@ -202,6 +224,40 @@ export default function Settings() {
           label={t("Разрешить списание катушки в минус при нехватке остатка")}
         />
         {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
+      </div>
+
+      <div className="card">
+        <h3>{t("Журнал ошибок (диагностика)")}</h3>
+        <p className="muted">
+          {t("Если что-то работает не так, включите запись, повторите проблемные действия, затем скачайте журнал и приложите его к issue на GitHub. Ошибки хранятся только в памяти сервера (последние 500) и стираются при перезапуске.")}
+        </p>
+        <Toggle
+          k="error_logging"
+          label={t("Записывать ошибки (бэкенд + браузер)")}
+        />
+        {isAdmin && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            <button className="secondary" onClick={loadLog}>{t("Показать журнал")}</button>
+            <button className="secondary" onClick={downloadLog}>{t("Скачать журнал (.txt)")}</button>
+            <button className="secondary" onClick={clearLog}>{t("Очистить")}</button>
+          </div>
+        )}
+        {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
+        {log !== null && (
+          log.length === 0 ? (
+            <div className="muted" style={{ marginTop: 10 }}>{t("Журнал пуст.")}</div>
+          ) : (
+            <pre style={{
+              marginTop: 10, maxHeight: 320, overflow: "auto", fontSize: 12,
+              background: "var(--panel-2)", border: "1px solid var(--border)",
+              padding: 10, borderRadius: 6, whiteSpace: "pre-wrap",
+            }}>
+              {log.map((e) => (
+                `[${e.time}] ${e.source} ${e.method || ""} ${e.path || ""} — ${e.kind || ""}\n  ${e.message || ""}\n`
+              )).join("")}
+            </pre>
+          )
+        )}
       </div>
 
       <div className="muted" style={{ fontSize: 12 }}>

@@ -119,8 +119,27 @@ async function blobUrl(path, { method = "GET", body } = {}) {
   return URL.createObjectURL(await res.blob());
 }
 
+// Отправляет ошибку из браузера в диагностический журнал (fire-and-forget).
+// Бэкенд молча игнорирует, если запись выключена. Свои сбои глушим, чтобы не
+// зациклиться (ошибка отправки ошибки). Не шлём в демо и без авторизации.
+let _reporting = false;
+function reportError({ message, kind, path, stack }) {
+  const token = getToken();
+  if (DEMO || !token || _reporting || !message) return;
+  _reporting = true;
+  fetch(`${BASE}/api/diagnostics/client`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ message: String(message).slice(0, 2000), kind, path, stack }),
+    keepalive: true,
+  })
+    .catch(() => {})
+    .finally(() => { _reporting = false; });
+}
+
 export const api = {
   get: (p) => request(p),
+  reportError,
   post: (p, body) => request(p, { method: "POST", body }),
   postForm: (p, form) => request(p, { method: "POST", form }),
   postFile,

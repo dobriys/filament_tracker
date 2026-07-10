@@ -271,7 +271,7 @@ function seed() {
   return {
     user: USER, locations, profiles, spools, events, printers, slots, slotHistory,
     mrJobs, printJobs,
-    settings: { allow_negative_consumption: false, moonraker_auto_import: true, moonraker_auto_consume: false },
+    settings: { allow_negative_consumption: false, moonraker_auto_import: true, moonraker_auto_consume: false, error_logging: false },
     seq: 4100,
   };
 }
@@ -718,6 +718,14 @@ function dispatch(method, rawPath, { body, form, fileName } = {}) {
   if (r === "settings") {
     if (M === "GET") return db.settings;
     if (M === "PUT") { Object.assign(db.settings, body || {}); save(); return db.settings; }
+  }
+
+  // --- diagnostics (в демо бэкенда нет — журнал всегда пуст) ---
+  if (r === "diagnostics") {
+    if (parts[1] === "log" && M === "GET")
+      return { enabled: !!db.settings.error_logging, count: 0, entries: [] };
+    if (parts[1] === "clear") return null;
+    if (parts[1] === "client") return null;
   }
 
   // --- dashboard ---

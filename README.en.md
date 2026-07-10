@@ -25,6 +25,7 @@ your data on your own server. Interface in English and Russian.
 - [Install via Portainer](#install-via-portainer)
 - [First steps after install](#first-steps-after-install)
 - [Backups](#backups)
+- [How to report a bug](#how-to-report-a-bug)
 - [FAQ](#faq)
 - [Support the project](#support-the-project)
 
@@ -144,6 +145,9 @@ material was deducted.
 - **Moonraker: automation** — auto-import of finished prints (on by default) and full
   auto-deduction when everything maps to slots (optional).
 - **Deduction** — allow the remaining amount to go negative.
+- **Error log (diagnostics)** — opt-in error recording for debugging: when something
+  breaks, turn recording on, reproduce the problem, download the log and attach it to
+  an issue. See [How to report a bug](#how-to-report-a-bug).
 
 ![Settings](docs/screenshots/en/settings.png)
 
@@ -241,6 +245,26 @@ images.
 
 Under **Settings → Backup** you can download a full JSON export and restore from it
 (data is added, not overwritten). It's recommended to export before major changes.
+
+---
+
+## How to report a bug
+
+If something misbehaves, attach a diagnostics log to your
+[GitHub issue](https://github.com/dobriys/filament_tracker/issues) — it makes the
+problem visible and much easier to fix:
+
+1. **Settings → Error log (diagnostics)** → turn on **"Record errors (backend +
+   browser)"** (admin only).
+2. Reproduce the steps that trigger the problem.
+3. Click **"Download log (.txt)"** and attach the file to the issue (or copy the text
+   from **"Show log"**). Describe what you did and what you expected.
+4. Afterwards you can turn recording off and **"Clear"** the log.
+
+What goes into the log: unhandled server errors (type, message, traceback, request
+method and path) and browser errors. The log is kept **in server memory only** (last
+500 entries) and is wiped on restart — nothing is sent to any external service.
+Tracebacks usually contain no personal data, but review the file before posting.
 
 ---
 

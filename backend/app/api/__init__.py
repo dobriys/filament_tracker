@@ -14,6 +14,7 @@ from app.api import (
     settings,
     dashboard,
     catalog,
+    diagnostics,
 )
 
 api_router = APIRouter(prefix="/api")
@@ -30,3 +31,4 @@ api_router.include_router(backup.router)
 api_router.include_router(settings.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(catalog.router)
+api_router.include_router(diagnostics.router)
