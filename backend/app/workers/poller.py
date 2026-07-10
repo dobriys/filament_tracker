@@ -9,7 +9,7 @@ import time
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.services import moonraker_sync
+from app.services import diagnostics, moonraker_sync
 from app.services.secret_service import ensure_secrets
 
 logging.basicConfig(
@@ -30,9 +30,15 @@ def main() -> None:
     while True:
         db = SessionLocal()
         try:
+            # Отдельный процесс — обновляем кэш флага журнала из БД каждый цикл.
+            diagnostics.load_enabled(db)
             moonraker_sync.poll_all(db)
-        except Exception:
+        except Exception as e:
             log.exception("poll cycle failed")
+            diagnostics.event(
+                "error", "poller", f"Цикл опроса упал: {e}", category="poll",
+                context={"type": e.__class__.__name__},
+            )
         finally:
             db.close()
         time.sleep(interval)

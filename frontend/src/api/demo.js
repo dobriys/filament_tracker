@@ -723,7 +723,7 @@ function dispatch(method, rawPath, { body, form, fileName } = {}) {
   // --- diagnostics (в демо бэкенда нет — журнал всегда пуст) ---
   if (r === "diagnostics") {
     if (parts[1] === "log" && M === "GET")
-      return { enabled: !!db.settings.error_logging, count: 0, entries: [] };
+      return { enabled: !!db.settings.error_logging, total: 0, entries: [] };
     if (parts[1] === "clear") return null;
     if (parts[1] === "client") return null;
   }

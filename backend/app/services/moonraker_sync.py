@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import decrypt_secret
 from app.models import AppSetting, Printer, PrinterSlot, PrintJob, User
-from app.services import print_job_service, settings_service
+from app.services import diagnostics, print_job_service, settings_service
 from app.services.moonraker import MoonrakerClient, job_to_parsed
 
 log = logging.getLogger("moonraker_sync")
@@ -149,6 +149,10 @@ def poll_printer(db: Session, printer: Printer, *, auto_consume: bool) -> dict:
             db, owner=owner, printer_id=printer.id, parsed=parsed, source="moonraker"
         )
         imported += 1
+        diagnostics.event(
+            "info", "poller", f"Импортирована печать «{job.file_name}»",
+            category="import", context={"printer": printer.name},
+        )
         if auto_consume:
             mappings = resolve_slot_mappings(parsed.get("tools", []), slots)
             if mappings:
@@ -157,10 +161,35 @@ def poll_printer(db: Session, printer: Printer, *, auto_consume: bool) -> dict:
                         db, job, user=owner, mappings=mappings
                     )
                     consumed += 1
+                    diagnostics.event(
+                        "info", "poller", f"Автосписание: «{job.file_name}»",
+                        category="consume",
+                        context={"printer": printer.name, "mappings": mappings},
+                    )
                 except print_job_service.ConsumptionError as e:
                     log.warning(
                         "auto-consume %s (%s): %s", job.file_name, printer.name, e.problems
                     )
+                    diagnostics.event(
+                        "warning", "poller",
+                        f"Автосписание не выполнено: «{job.file_name}» — печать осталась черновиком",
+                        category="consume",
+                        context={"printer": printer.name, "problems": e.problems},
+                    )
+            else:
+                diagnostics.event(
+                    "warning", "poller",
+                    f"Автосписание пропущено: инструменты не сопоставлены со слотами — «{job.file_name}» осталась черновиком",
+                    category="consume",
+                    context={
+                        "printer": printer.name,
+                        "tools": parsed.get("tools", []),
+                        "slots": [
+                            {"slot_index": s.slot_index, "has_spool": bool(s.current_spool_id)}
+                            for s in slots
+                        ],
+                    },
+                )
     if newest > watermark:
         settings_service.set_value(db, wm_key, newest)
     return {"printer": printer.name, "imported": imported, "consumed": consumed}
@@ -189,5 +218,9 @@ def poll_all(db: Session) -> list[dict]:
             results.append(res)
         except Exception as e:  # принтер офлайн и т.п. — не валим цикл
             log.debug("poll %s failed: %s", p.name, e)
+            diagnostics.event(
+                "warning", "poller", f"Опрос принтера «{p.name}» не удался: {e}",
+                category="poll", context={"printer": p.name, "type": e.__class__.__name__},
+            )
             results.append({"printer": p.name, "error": str(e)})
     return results

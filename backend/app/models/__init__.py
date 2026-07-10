@@ -9,6 +9,7 @@ from app.models.print_job import (
     PrintJobSpoolUsage,
 )
 from app.models.app_setting import AppSetting
+from app.models.diagnostic_event import DiagnosticEvent
 
 __all__ = [
     "User",
@@ -23,4 +24,5 @@ __all__ = [
     "PrintJobToolUsage",
     "PrintJobSpoolUsage",
     "AppSetting",
+    "DiagnosticEvent",
 ]

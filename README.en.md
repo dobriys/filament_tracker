@@ -145,9 +145,9 @@ material was deducted.
 - **Moonraker: automation** — auto-import of finished prints (on by default) and full
   auto-deduction when everything maps to slots (optional).
 - **Deduction** — allow the remaining amount to go negative.
-- **Error log (diagnostics)** — opt-in error recording for debugging: when something
-  breaks, turn recording on, reproduce the problem, download the log and attach it to
-  an issue. See [How to report a bug](#how-to-report-a-bug).
+- **Diagnostics log** — opt-in recording of actions and errors for debugging: when
+  something breaks, turn recording on, reproduce the problem, download the log and
+  attach it to an issue. See [How to report a bug](#how-to-report-a-bug).
 
 ![Settings](docs/screenshots/en/settings.png)
 
@@ -254,17 +254,21 @@ If something misbehaves, attach a diagnostics log to your
 [GitHub issue](https://github.com/dobriys/filament_tracker/issues) — it makes the
 problem visible and much easier to fix:
 
-1. **Settings → Error log (diagnostics)** → turn on **"Record errors (backend +
-   browser)"** (admin only).
+1. **Settings → Diagnostics log** → turn on **"Record actions and errors"** (admin
+   only).
 2. Reproduce the steps that trigger the problem.
-3. Click **"Download log (.txt)"** and attach the file to the issue (or copy the text
-   from **"Show log"**). Describe what you did and what you expected.
+3. Click **"Download (.txt)"** and attach the file to the issue (or filter entries in
+   place and expand "details"). Describe what you did and what you expected.
 4. Afterwards you can turn recording off and **"Clear"** the log.
 
-What goes into the log: unhandled server errors (type, message, traceback, request
-method and path) and browser errors. The log is kept **in server memory only** (last
-500 entries) and is wiped on restart — nothing is sent to any external service.
-Tracebacks usually contain no personal data, but review the file before posting.
+What goes into the log (while it's on): user actions as server requests (method, path,
+response code, duration, body — secrets stripped) and the error text on failure;
+background printer automation (print imports, auto-deduction and why it didn't fire,
+printer polling); unhandled server errors with tracebacks; browser errors. Passwords,
+keys and tokens in request bodies are **stripped automatically**. The log is stored in
+your database (last 5000 entries, older ones evicted) — nothing is sent to any
+external service. Entries usually contain no personal data, but review the file before
+posting.
 
 ---
 

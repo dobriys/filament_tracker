@@ -12,7 +12,8 @@ export default function Settings() {
     moonraker_auto_consume: false,
     error_logging: false,
   });
-  const [log, setLog] = useState(null); // null = не загружен, [] = пусто
+  const [log, setLog] = useState(null); // null = не загружен, {entries,total} = загружен
+  const [logFilter, setLogFilter] = useState({ level: "", source: "", q: "" });
   const [msg, setMsg] = useState(null);
   const [serverVersion, setServerVersion] = useState(null);
   const [spoolmanUrl, setSpoolmanUrl] = useState("");
@@ -100,23 +101,28 @@ export default function Settings() {
     );
   }
 
-  async function loadLog() {
+  async function loadLog(f = logFilter) {
     setMsg(null);
+    const qs = new URLSearchParams();
+    if (f.level) qs.set("level", f.level);
+    if (f.source) qs.set("source", f.source);
+    if (f.q) qs.set("q", f.q);
+    qs.set("limit", "200");
     try {
-      const r = await api.get("/api/diagnostics/log");
-      setLog(r.entries);
+      const r = await api.get(`/api/diagnostics/log?${qs.toString()}`);
+      setLog(r);
     } catch (err) { setMsg(err.message); }
   }
   async function clearLog() {
     setMsg(null);
     try {
       await api.post("/api/diagnostics/clear");
-      setLog([]);
+      setLog({ entries: [], total: 0 });
       setMsg(t("Журнал очищен"));
     } catch (err) { setMsg(err.message); }
   }
   function downloadLog() {
-    api.download("/api/diagnostics/log.txt", { filename: "filament-tracker-errors.txt" })
+    api.download("/api/diagnostics/log.txt", { filename: "filament-tracker-diagnostics.txt" })
       .catch((e) => setMsg(e.message));
   }
 
@@ -227,36 +233,94 @@ export default function Settings() {
       </div>
 
       <div className="card">
-        <h3>{t("Журнал ошибок (диагностика)")}</h3>
+        <h3>{t("Диагностический журнал")}</h3>
         <p className="muted">
-          {t("Если что-то работает не так, включите запись, повторите проблемные действия, затем скачайте журнал и приложите его к issue на GitHub. Ошибки хранятся только в памяти сервера (последние 500) и стираются при перезапуске.")}
+          {t("Для отладки: включите запись, повторите проблемные действия, затем скачайте журнал и приложите его к issue на GitHub. Пишутся действия (запросы к серверу с результатом), автоматизация принтера (импорт, автосписание, сушка) и ошибки — бэкенда и браузера. Хранится в базе (последние 5000 записей).")}
         </p>
         <Toggle
           k="error_logging"
-          label={t("Записывать ошибки (бэкенд + браузер)")}
+          label={t("Записывать действия и ошибки")}
+          hint={t("Личных данных в записях обычно нет, но перед публикацией просмотрите журнал: секреты (пароли, ключи) вырезаются автоматически.")}
         />
-        {isAdmin && (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-            <button className="secondary" onClick={loadLog}>{t("Показать журнал")}</button>
-            <button className="secondary" onClick={downloadLog}>{t("Скачать журнал (.txt)")}</button>
-            <button className="secondary" onClick={clearLog}>{t("Очистить")}</button>
-          </div>
-        )}
         {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
-        {log !== null && (
-          log.length === 0 ? (
-            <div className="muted" style={{ marginTop: 10 }}>{t("Журнал пуст.")}</div>
-          ) : (
-            <pre style={{
-              marginTop: 10, maxHeight: 320, overflow: "auto", fontSize: 12,
-              background: "var(--panel-2)", border: "1px solid var(--border)",
-              padding: 10, borderRadius: 6, whiteSpace: "pre-wrap",
-            }}>
-              {log.map((e) => (
-                `[${e.time}] ${e.source} ${e.method || ""} ${e.path || ""} — ${e.kind || ""}\n  ${e.message || ""}\n`
-              )).join("")}
-            </pre>
-          )
+        {isAdmin && (
+          <>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
+              <select
+                style={{ width: "auto" }}
+                value={logFilter.level}
+                onChange={(e) => { const f = { ...logFilter, level: e.target.value }; setLogFilter(f); loadLog(f); }}
+              >
+                <option value="">{t("Все уровни")}</option>
+                <option value="info">info</option>
+                <option value="warning">warning</option>
+                <option value="error">error</option>
+              </select>
+              <select
+                style={{ width: "auto" }}
+                value={logFilter.source}
+                onChange={(e) => { const f = { ...logFilter, source: e.target.value }; setLogFilter(f); loadLog(f); }}
+              >
+                <option value="">{t("Все источники")}</option>
+                <option value="http">http</option>
+                <option value="poller">poller</option>
+                <option value="backend">backend</option>
+                <option value="frontend">frontend</option>
+              </select>
+              <input
+                style={{ flex: "1 1 160px" }}
+                placeholder={t("Поиск по тексту/пути")}
+                value={logFilter.q}
+                onChange={(e) => setLogFilter({ ...logFilter, q: e.target.value })}
+                onKeyDown={(e) => { if (e.key === "Enter") loadLog(); }}
+              />
+              <button className="secondary" onClick={() => loadLog()}>{t("Показать")}</button>
+              <button className="secondary" onClick={downloadLog}>{t("Скачать (.txt)")}</button>
+              <button className="secondary" onClick={clearLog}>{t("Очистить")}</button>
+            </div>
+            {log !== null && (
+              log.entries.length === 0 ? (
+                <div className="muted" style={{ marginTop: 10 }}>{t("Журнал пуст.")}</div>
+              ) : (
+                <>
+                  <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+                    {t("Показано")} {log.entries.length} {t("из")} {log.total}
+                  </div>
+                  <div style={{
+                    marginTop: 6, maxHeight: 360, overflow: "auto", fontSize: 12,
+                    background: "var(--panel-2)", border: "1px solid var(--border)", borderRadius: 6,
+                  }}>
+                    {log.entries.map((e) => (
+                      <div key={e.id} style={{ padding: "6px 10px", borderBottom: "1px solid var(--border-soft)" }}>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <span className="badge" style={{
+                            background: `var(--badge-${e.level === "error" ? "danger" : e.level === "warning" ? "warn" : "info"}-bg)`,
+                            color: `var(--badge-${e.level === "error" ? "danger" : e.level === "warning" ? "warn" : "info"}-text)`,
+                          }}>{e.level}</span>
+                          <span className="mono muted">{e.time}</span>
+                          <span className="mono">{e.source}</span>
+                          {e.status != null && <span className="mono muted">{e.status}</span>}
+                          {e.duration_ms != null && <span className="mono muted">{e.duration_ms}ms</span>}
+                        </div>
+                        <div className="mono" style={{ marginTop: 2 }}>
+                          {e.action || `${e.method || ""} ${e.path || ""}`}
+                        </div>
+                        {e.message && <div style={{ marginTop: 2 }}>{e.message}</div>}
+                        {e.context && (
+                          <details style={{ marginTop: 2 }}>
+                            <summary className="muted" style={{ cursor: "pointer" }}>{t("подробнее")}</summary>
+                            <pre style={{ whiteSpace: "pre-wrap", margin: "4px 0 0", fontSize: 11 }}>
+                              {JSON.stringify(e.context, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )
+            )}
+          </>
         )}
       </div>
 

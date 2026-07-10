@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import api_router
 from app.core import request_context
 from app.core.config import settings
+from app.core.diagnostics_middleware import DiagnosticsMiddleware
 from app.db.session import SessionLocal
 from app.services import diagnostics
 from app.services.catalog_seed import seed_catalog
@@ -60,8 +61,10 @@ async def capture_frontend_origin(request: Request, call_next):
     return await call_next(request)
 
 
-# Пишет необработанные исключения в диагностический журнал (если включён).
-app.middleware("http")(diagnostics.error_capture_middleware)
+# Диагностический журнал: изменяющие запросы + необработанные исключения (когда
+# включён). Чистый ASGI-слой — снаружи CORS/origin-middleware, чтобы видеть код
+# итогового ответа и корректно читать тело запроса.
+app.add_middleware(DiagnosticsMiddleware)
 
 
 app.include_router(api_router)
