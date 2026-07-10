@@ -98,7 +98,11 @@ def pick_new_jobs(
 
 
 def resolve_slot_mappings(tools: list[dict], slots: list) -> list[dict] | None:
-    """Сопоставление tool_index → слот (slot_index == tool_index, катушка есть).
+    """Сопоставление tool_index → слот (slot_index == tool_index + 1, катушка есть).
+
+    tool_index приходит от слайсера/хаба и нумеруется с 0 (это номер гейта),
+    а слоты приложения — с 1 (конвенция «gate N ↔ slot_index N+1», см.
+    parse_hub и printers.py). Поэтому гейт 0 = слот 1 и т.д.
 
     Возвращает mappings для confirm_usage или None, если хотя бы один
     инструмент с расходом не сопоставился (тогда оставляем черновик).
@@ -109,7 +113,7 @@ def resolve_slot_mappings(tools: list[dict], slots: list) -> list[dict] | None:
         # tool «используется», если есть граммы или хотя бы длина (fallback).
         if float(t.get("used_g") or 0) <= 0 and float(t.get("used_mm") or 0) <= 0:
             continue
-        slot = by_index.get(t["tool_index"])
+        slot = by_index.get(t["tool_index"] + 1)
         if slot is None:
             return None
         mappings.append({"tool_index": t["tool_index"], "slot_id": slot.id})

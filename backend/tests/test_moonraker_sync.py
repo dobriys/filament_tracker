@@ -39,28 +39,35 @@ def _slot(idx, spool=True):
 
 
 def test_resolve_mappings_full_match():
+    # tool_index (гейт) с 0, слоты с 1: гейт 2 → слот 3.
     tools = [
         {"tool_index": 0, "used_g": 0},      # нулевой расход — пропускается
         {"tool_index": 2, "used_g": 127.75},
     ]
-    m = resolve_slot_mappings(tools, [_slot(0), _slot(2)])
-    assert m == [{"tool_index": 2, "slot_id": "slot2"}]
+    m = resolve_slot_mappings(tools, [_slot(1), _slot(3)])
+    assert m == [{"tool_index": 2, "slot_id": "slot3"}]
+
+
+def test_resolve_mappings_gate_zero_maps_to_slot_one():
+    # Регресс: печать на гейте 0 должна списываться со слота 1, а не оставаться черновиком.
+    tools = [{"tool_index": 0, "used_g": 85.1}]
+    assert resolve_slot_mappings(tools, [_slot(1)]) == [{"tool_index": 0, "slot_id": "slot1"}]
 
 
 def test_resolve_mappings_missing_slot_returns_none():
-    tools = [{"tool_index": 1, "used_g": 10}]
-    assert resolve_slot_mappings(tools, [_slot(0)]) is None          # слота 1 нет
-    assert resolve_slot_mappings(tools, [_slot(1, spool=False)]) is None  # слот пуст
+    tools = [{"tool_index": 1, "used_g": 10}]      # гейт 1 → слот 2
+    assert resolve_slot_mappings(tools, [_slot(1)]) is None          # слота 2 нет
+    assert resolve_slot_mappings(tools, [_slot(2, spool=False)]) is None  # слот пуст
 
 
 def test_resolve_mappings_no_usage_returns_none():
-    assert resolve_slot_mappings([{"tool_index": 0, "used_g": 0}], [_slot(0)]) is None
+    assert resolve_slot_mappings([{"tool_index": 0, "used_g": 0}], [_slot(1)]) is None
 
 
 def test_resolve_mappings_uses_length_when_no_grams():
     # Fallback-tool без граммов, но с длиной — тоже маппится (граммы посчитает confirm).
     tools = [{"tool_index": 0, "used_g": None, "used_mm": 40904.0}]
-    assert resolve_slot_mappings(tools, [_slot(0)]) == [{"tool_index": 0, "slot_id": "slot0"}]
+    assert resolve_slot_mappings(tools, [_slot(1)]) == [{"tool_index": 0, "slot_id": "slot1"}]
 
 
 def test_grams_from_length():
