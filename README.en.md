@@ -254,21 +254,11 @@ If something misbehaves, attach a diagnostics log to your
 [GitHub issue](https://github.com/dobriys/filament_tracker/issues) — it makes the
 problem visible and much easier to fix:
 
-1. **Settings → Diagnostics log** → turn on **"Record actions and errors"** (admin
-   only).
+1. **Settings → Diagnostics log** → turn on **"Record actions and errors"**.
 2. Reproduce the steps that trigger the problem.
 3. Click **"Download (.txt)"** and attach the file to the issue (or filter entries in
    place and expand "details"). Describe what you did and what you expected.
 4. Afterwards you can turn recording off and **"Clear"** the log.
-
-What goes into the log (while it's on): user actions as server requests (method, path,
-response code, duration, body — secrets stripped) and the error text on failure;
-background printer automation (print imports, auto-deduction and why it didn't fire,
-printer polling); unhandled server errors with tracebacks; browser errors. Passwords,
-keys and tokens in request bodies are **stripped automatically**. The log is stored in
-your database (last 5000 entries, older ones evicted) — nothing is sent to any
-external service. Entries usually contain no personal data, but review the file before
-posting.
 
 ---
 
