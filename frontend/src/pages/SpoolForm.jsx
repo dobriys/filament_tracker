@@ -51,6 +51,11 @@ export default function SpoolForm() {
           if (k === "specs" || k === "photo") continue;
           if (s[k] != null) f[k] = String(s[k]);
         }
+        // В БД current_weight_g — чистый пластик; поле формы = вес катушки целиком
+        // (как на весах), поэтому прибавляем тару, чтобы значение корректно round-trip'илось.
+        if (s.current_weight_g != null) {
+          f.current_weight_g = String(Number(s.current_weight_g) + Number(s.empty_spool_weight_g || 0));
+        }
         f.photo = s.photo || "";
         f.specs = s.specs || {};
         setForm(f);
@@ -141,6 +146,9 @@ export default function SpoolForm() {
   async function save() {
     setError(null);
     if (!form.label) { setError(t("Укажите название катушки")); return; }
+    // Поле «текущий вес» — вес катушки целиком; в БД храним чистый пластик = вес − тара.
+    const grossG = num(form.current_weight_g);
+    const netCurrentG = grossG == null ? null : Math.max(0, grossG - (num(form.empty_spool_weight_g) || 0));
     const body = {
       label: form.label, manufacturer: form.manufacturer || null, sku: form.sku || null,
       photo: form.photo || null, material: form.material || null,
@@ -148,7 +156,7 @@ export default function SpoolForm() {
       diameter_mm: num(form.diameter_mm), location_id: form.location_id || null,
       initial_filament_weight_g: num(form.initial_filament_weight_g),
       empty_spool_weight_g: num(form.empty_spool_weight_g),
-      current_weight_g: num(form.current_weight_g),
+      current_weight_g: netCurrentG,
       purchase_date: form.purchase_date || null, price: num(form.price), currency: form.currency,
       barcode: form.barcode || null, hotend_temp: num(form.hotend_temp),
       bed_temp: num(form.bed_temp), fan_speed: num(form.fan_speed), flow_rate: num(form.flow_rate),
@@ -167,7 +175,10 @@ export default function SpoolForm() {
   }
 
   const capacity = num(form.initial_filament_weight_g) || 1000;
-  const remaining = num(form.current_weight_g) ?? 0;
+  const tare = num(form.empty_spool_weight_g) || 0;
+  const grossInput = num(form.current_weight_g);
+  // Поле — вес катушки целиком; чистый остаток = вес − тара. Пусто = полная катушка.
+  const remaining = grossInput == null ? capacity : Math.max(0, grossInput - tare);
   const pct = Math.max(0, Math.min(1, remaining / capacity));
   const benchys = Math.round(remaining / 30);
 
@@ -269,8 +280,13 @@ export default function SpoolForm() {
             <h3 className="card-title">{t("Учёт и покупка")}</h3>
             <div className="field-2" style={{ marginTop: 12 }}>
               <div>
-                <label>{t("Текущий остаток")} <span className="req">*</span></label>
-                <div className="unit-input"><input type="number" value={form.current_weight_g} onChange={set("current_weight_g")} placeholder="750" /><span className="unit">{t("г")}</span></div>
+                <label>{t("Текущий вес катушки целиком (на весах)")} <span className="req">*</span></label>
+                <div className="unit-input"><input type="number" value={form.current_weight_g} onChange={set("current_weight_g")} placeholder="1232" /><span className="unit">{t("г")}</span></div>
+                {grossInput != null && tare > 0 && (
+                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    − {t("тара")} {tare.toFixed(0)}{t("г")} → {remaining.toFixed(0)}{t("г")} {t("чистого филамента")}
+                  </div>
+                )}
               </div>
               <div>
                 <label>{t("Место хранения")}</label>

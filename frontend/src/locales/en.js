@@ -297,6 +297,8 @@ export const EN = {
   "Текущие запасы по типу материала.": "Current stock by material type.",
   "Текущие катушки по каждому слоту всех принтеров.": "Current spools in every slot of all printers.",
   "Текущий остаток": "Current remaining",
+  "Текущий вес катушки целиком (на весах)": "Total spool weight (on the scale)",
+  "чистого филамента": "of net filament",
   "Тест соединения": "Test connection",
   "Тип интеграции": "Integration type",
   "Тип материала": "Material type",
