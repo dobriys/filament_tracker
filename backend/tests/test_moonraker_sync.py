@@ -1,6 +1,8 @@
 """Чистые функции автоимпорта/автосписания (без БД и сети)."""
 from types import SimpleNamespace
 
+import pytest
+
 from app.services.moonraker_sync import pick_new_jobs, resolve_slot_mappings
 
 
@@ -94,8 +96,62 @@ def test_match_gate_ok_close_color_and_material_subset():
     assert match_gate(_gate(), "PLA+/Pro", "#BB1E10") == "match"
 
 
-def test_match_gate_mismatch_color():
-    assert match_gate(_gate(color="#FFFFFF"), "PLA+/Pro", "#000000") == "mismatch"
+def test_match_gate_color_diff_is_soft():
+    # разошёлся только оттенок — мягкий вердикт, не предупреждение
+    assert match_gate(_gate(color="#FFFFFF"), "PLA+/Pro", "#000000") == "color_diff"
+
+
+def test_match_gate_ok_same_color_family_across_palettes():
+    # на принтере цвет выбран вручную из грубой палитры (#F40031), у катушки
+    # точный цвет бренда (#bb1e10) — глазом один красный, тревожить незачем
+    assert match_gate(_gate(material="ABS", color="#F40031"), "ABS+", "#bb1e10") == "match"
+
+
+def test_match_gate_mismatch_material_is_hard():
+    assert match_gate(_gate(material="PLA", color="#B81B0E"), "ABS", "#B81B0E") == "mismatch"
+
+
+# --- базовый материал (_base_material) ---
+from app.services.moonraker import _base_material
+
+
+@pytest.mark.parametrize(
+    "raw,base",
+    [
+        # вариант марки — тот же базовый материал
+        ("ABS+", "ABS"),
+        ("PLA+/Pro", "PLA"),
+        ("PETG+", "PETG"),
+        ("PETG-CF", "PETG"),
+        ("PLA Silk", "PLA"),
+        # PET-G — то же, что PETG, просто другое написание
+        ("PET-G", "PETG"),
+        # PA и Nylon — один материал под разными именами
+        ("PA (Nylon)", "PA"),
+        ("Nylon", "PA"),
+        # разные материалы не должны схлопываться друг в друга
+        ("PET", "PET"),
+        ("PETG", "PETG"),
+        ("PC", "PC"),
+        ("PCTG", "PCTG"),
+        # неизвестный материал — срезаем хотя бы маркер варианта
+        ("FOO+", "FOO"),
+        (None, ""),
+    ],
+)
+def test_base_material(raw, base):
+    assert _base_material(raw) == base
+
+
+def test_match_gate_variant_matches_base():
+    # принтер знает только грубый ABS, в приложении марка ABS+ — это совпадение
+    assert match_gate(_gate(material="ABS", color="#B81B0E"), "ABS+", "#B81B0E") == "match"
+
+
+def test_match_gate_near_materials_are_not_confused():
+    # подстрочная проверка прятала расхождение: 'PET' in 'PETG', 'PC' in 'PCTG'
+    assert match_gate(_gate(material="PET", color="#B81B0E"), "PETG", "#B81B0E") == "mismatch"
+    assert match_gate(_gate(material="PC", color="#B81B0E"), "PCTG", "#B81B0E") == "mismatch"
 
 
 def test_match_gate_unassigned_and_empty():

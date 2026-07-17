@@ -4,6 +4,8 @@
 отдельными функциями, чтобы их можно было тестировать без живого принтера.
 Аутентификация — заголовок X-Api-Key (если задан ключ).
 """
+import re
+
 import httpx
 
 DEFAULT_TIMEOUT = 5.0
@@ -175,21 +177,77 @@ def parse_totals(payload: dict) -> dict:
 
 
 def _norm_material(s: str | None) -> str:
-    return (s or "").upper().replace(" ", "")
+    """Верхний регистр без разделителей: 'PET-G' → 'PETG', 'PA (Nylon)' → 'PA(NYLON)'."""
+    return re.sub(r"[\s_-]", "", (s or "").upper())
 
 
-def _color_distance(a: str | None, b: str | None) -> float | None:
-    """Евклидово расстояние RGB (0..441); None, если один из цветов не задан."""
+# Базовые материалы, длинные первыми: PETG не должен схлопнуться в PET, а
+# PCTG — в PC. Вариант марки (ABS+, PLA+/Pro, PETG-CF) — тот же базовый
+# материал, поэтому его достаточно срезать; а вот PET и PETG — разные.
+_BASE_MATERIALS = tuple(
+    sorted(
+        ("PCTG", "PETG", "NYLON", "HIPS", "PLA", "PET", "ABS", "ASA",
+         "TPU", "TPE", "PVA", "PC", "PA", "PP"),
+        key=len,
+        reverse=True,
+    )
+)
+
+# Разные написания одного материала.
+_MATERIAL_ALIASES = {"NYLON": "PA"}
+
+
+def _base_material(s: str | None) -> str:
+    """Базовый материал без варианта марки: 'ABS+' → 'ABS', 'PA (Nylon)' → 'PA'."""
+    up = _norm_material(s)
+    for base in _BASE_MATERIALS:
+        if up.startswith(base):
+            return _MATERIAL_ALIASES.get(base, base)
+    # Материала нет в списке — срезаем хотя бы явные маркеры варианта.
+    return re.split(r"[+/]", up)[0]
+
+
+def _srgb_to_lab(color: str | None) -> tuple[float, float, float] | None:
+    """sRGB (#rrggbb) → CIELAB (D65); None, если цвет не разобрать."""
     try:
-        a, b = a.lstrip("#"), b.lstrip("#")
-        av = [int(a[i : i + 2], 16) for i in (0, 2, 4)]
-        bv = [int(b[i : i + 2], 16) for i in (0, 2, 4)]
-        return sum((x - y) ** 2 for x, y in zip(av, bv)) ** 0.5
+        h = (color or "").lstrip("#")
+        rgb = [int(h[i : i + 2], 16) / 255 for i in (0, 2, 4)]
     except Exception:
         return None
 
+    def gamma(c: float) -> float:
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
-COLOR_MATCH_THRESHOLD = 60.0
+    def f(t: float) -> float:
+        return t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116
+
+    r, g, b = (gamma(c) for c in rgb)
+    # линейный RGB → XYZ (D65), сразу нормируя на точку белого
+    x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+    fx, fy, fz = f(x), f(y), f(z)
+    return 116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)
+
+
+def _color_distance(a: str | None, b: str | None) -> float | None:
+    """Перцептивное расстояние ΔE (CIE76); None, если один из цветов не задан.
+
+    Считаем в Lab, а не в сыром RGB: евклидова дистанция по RGB не отражает
+    восприятие. Два одинаково красных оттенка (#F40031 и #BB1E10) расходятся в
+    ней на 72 — больше строгого порога, — хотя глазом это один цвет.
+    """
+    la, lb = _srgb_to_lab(a), _srgb_to_lab(b)
+    if la is None or lb is None:
+        return None
+    return sum((x - y) ** 2 for x, y in zip(la, lb)) ** 0.5
+
+
+# Граница «практически неразличимо» → «видно глазом». Отделить «тот же цвет»
+# от «другого» порогом нельзя: в ΔE76 доминирует светлота, и синий/тёмно-синий
+# (57) расходятся сильнее, чем красный/оранжевый (47). Это терпимо — за порогом
+# начинается мягкий color_diff, а не предупреждение, так что цена ошибки низкая.
+COLOR_MATCH_THRESHOLD = 30.0
 
 
 def match_gate(gate: dict, spool_material: str | None, spool_color: str | None) -> str:
@@ -197,7 +255,10 @@ def match_gate(gate: dict, spool_material: str | None, spool_color: str | None) 
 
     Возвращает вердикт:
       match      — материал и цвет согласуются;
-      mismatch   — принтер видит другой филамент (или слот пуст, а катушка назначена);
+      color_diff — материал тот же, разошёлся только оттенок. Мягкий вердикт:
+                   на принтере цвет выбирают из грубой палитры вручную, поэтому
+                   расхождение с точным цветом бренда — норма, а не проблема;
+      mismatch   — принтер видит другой материал (или слот пуст, а катушка назначена);
       unassigned — филамент в принтере есть, катушка в приложении не привязана;
       empty      — и гейт пуст, и катушки нет.
     """
@@ -206,11 +267,12 @@ def match_gate(gate: dict, spool_material: str | None, spool_color: str | None) 
         return "mismatch" if has_spool else "empty"
     if not has_spool:
         return "unassigned"
-    hub_m, sp_m = _norm_material(gate.get("material")), _norm_material(spool_material)
-    material_ok = not hub_m or not sp_m or hub_m in sp_m or sp_m in hub_m
+    hub_m, sp_m = _base_material(gate.get("material")), _base_material(spool_material)
+    material_ok = not hub_m or not sp_m or hub_m == sp_m
+    if not material_ok:
+        return "mismatch"
     dist = _color_distance(gate.get("color_hex"), spool_color)
-    color_ok = dist is None or dist <= COLOR_MATCH_THRESHOLD
-    return "match" if material_ok and color_ok else "mismatch"
+    return "match" if dist is None or dist <= COLOR_MATCH_THRESHOLD else "color_diff"
 
 
 def parse_history(payload: dict) -> list[dict]:

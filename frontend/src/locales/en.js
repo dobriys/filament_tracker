@@ -506,6 +506,7 @@ export const EN = {
   "Слоты ACE": "ACE slots",
   "— что принтер видит в слотах и совпадает ли это с привязанными катушками": "— what the printer sees in its slots and whether it matches the assigned spools",
   "Совпадает": "Matches",
+  "Материал совпадает, оттенок отличается": "Material matches, shade differs",
   "Не совпадает с катушкой": "Does not match the spool",
   "Катушка не привязана": "No spool assigned",
   "Слот пуст": "Slot is empty",
