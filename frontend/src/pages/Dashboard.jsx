@@ -112,13 +112,24 @@ function fmtPrinterError(raw) {
   return human ? (code ? `${human} (${t("код")} ${code})` : human) : s;
 }
 
-// Распознанные ошибки прошивки. В API приходит «внутренняя» форма от Klipper
-// (напр. "Probe samples exceed samples_tolerance"), а на экране принтера —
-// пользовательский код Anycubic (10237) со своей страницей решения. Прямой
-// таблицы «внутренний код → экранный» у Anycubic нет, поэтому сопоставляем по
-// смыслу сообщения. code — экранный код Anycubic (для ссылки на вики).
+// Распознанные ошибки прошивки. В API приходит текст, который прошивка Anycubic
+// кладёт в сообщение Klipper (англоязычный — напр. "Probe samples exceed
+// samples_tolerance"), а на экране принтера — пользовательский код Anycubic со
+// своей страницей решения. Прямой таблицы «текст → экранный код» у Anycubic нет:
+// re строим по характерному фрагменту сообщения (совпадает с заголовком страницы
+// вики), code — экранный код Anycubic для ссылки на решение. Регэкспы намеренно
+// узкие: промах безвреден (баннер уйдёт на поиск в Google), а ложное совпадение
+// увело бы на чужую страницу. При новой реальной ошибке пару текст↔код сверять.
 const KNOWN_PRINTER_ERRORS = [
   { re: /samples_tolerance|autoleve|auto[_\s-]?level/i, code: "10237", label: () => t("Ошибка автокалибровки стола") },
+  { re: /extruder heating abnormal|heating abnormal/i,  code: "10122", label: () => t("Аномальный нагрев сопла") },
+  { re: /nozzle must be heated/i,                       code: "10539", label: () => t("Сопло не нагрето") },
+  { re: /filament broken/i,                             code: "10402", label: () => t("Филамент оборван") },
+  { re: /abnormal filament/i,                           code: "10107", label: () => t("Проблема с филаментом") },
+  { re: /clogging/i,                                    code: "11518", label: () => t("Засор филамента") },
+  { re: /feeding timeout|abnormal feeding/i,            code: "11511", label: () => t("Таймаут подачи филамента") },
+  { re: /unknown feed location/i,                       code: "11504", label: () => t("Филамент для подачи не выбран") },
+  { re: /color engine motor|rotation of the color/i,    code: "11521", label: () => t("Сбой мотора ACE") },
 ];
 
 function recognizePrinterError(raw) {
