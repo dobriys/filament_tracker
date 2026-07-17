@@ -472,6 +472,18 @@ class MoonrakerClient:
     def stop_drying(self, *, unit: int = 0) -> dict:
         return self._post("/server/filament_hub/stop_drying", {"id": unit})
 
+    def reset_print_state(self) -> dict:
+        """Сбросить защёлкнутое состояние печати (Klipper SDCARD_RESET_FILE).
+
+        Klipper держит print_stats.state=error от прерванной печати до старта
+        новой; ручные операции с экрана его не сбрасывают. SDCARD_RESET_FILE
+        вызывает print_stats.reset() → state возвращается в standby, а сообщение
+        об ошибке очищается.
+        """
+        from urllib.parse import quote
+
+        return self._post(f"/printer/gcode/script?script={quote('SDCARD_RESET_FILE')}", {})
+
     def get_totals(self) -> dict | None:
         try:
             return parse_totals(self._get("/server/history/totals"))

@@ -117,6 +117,22 @@ def test_test_connection_unauthorized():
     assert "401" in res["detail"]
 
 
+def test_reset_print_state_sends_sdcard_reset():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["script"] = request.url.params.get("script")
+        return httpx.Response(200, json={"result": "ok"})
+
+    c = MoonrakerClient("http://printer.local:7125", transport=httpx.MockTransport(handler))
+    assert c.reset_print_state()["result"] == "ok"
+    assert seen["method"] == "POST"
+    assert seen["path"] == "/printer/gcode/script"
+    assert seen["script"] == "SDCARD_RESET_FILE"
+
+
 def test_test_connection_no_network():
     # несуществующий транспорт -> ConnectError, не должно бросать
     def handler(request):

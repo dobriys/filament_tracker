@@ -152,6 +152,9 @@ function errorSearchUrl(raw, brand) {
   return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
 }
 
+// Ключ localStorage для «закрытого» пользователем баннера ошибки принтера.
+const errDismissKey = (printerId) => `ft_err_dismiss_${printerId}`;
+
 function fmtDur(sec) {
   if (sec == null) return "—";
   sec = Math.round(sec);
@@ -311,6 +314,13 @@ function MoonrakerCard({ printer, navigate, onTotals }) {
   const [offline, setOffline] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  // Текст ошибки, который пользователь закрыл вручную (чтобы не мозолил глаза,
+  // пока принтер держит state=error после уже решённой проблемы). Переживает
+  // перезагрузку; сбрасывается, когда принтер выходит из ошибки, — тогда такая
+  // же ошибка в будущем покажется снова.
+  const [dismissedErr, setDismissedErr] = useState(() => {
+    try { return localStorage.getItem(errDismissKey(printer.id)); } catch { return null; }
+  });
 
   const loadOverview = () =>
     api.get(`/api/printers/${printer.id}/overview`).then((o) => {
@@ -376,6 +386,33 @@ function MoonrakerCard({ printer, navigate, onTotals }) {
   // Текст ошибки принтера: распознанный (описание + код + вики) либо сырой + гугл.
   const errMsg = st === "error" ? status?.message : null;
   const knownErr = recognizePrinterError(errMsg);
+  const showError = errMsg && errMsg !== dismissedErr;
+
+  // Принтер вышел из ошибки — забываем ручное закрытие.
+  useEffect(() => {
+    if (status && st !== "error" && dismissedErr) {
+      setDismissedErr(null);
+      try { localStorage.removeItem(errDismissKey(printer.id)); } catch { /* ignore */ }
+    }
+  }, [st, status, dismissedErr, printer.id]);
+
+  function dismissError() {
+    setDismissedErr(errMsg);
+    try { localStorage.setItem(errDismissKey(printer.id), errMsg); } catch { /* ignore */ }
+  }
+
+  // Сброс на принтере: шлём SDCARD_RESET_FILE, print_stats возвращается в
+  // standby, и ошибка исчезает по-настоящему (а не скрывается локально).
+  async function resetError() {
+    if (!window.confirm(t("Отправить принтеру команду сброса ошибки? Состояние вернётся в «Ожидание»."))) return;
+    setErr(null); setBusy(true);
+    try {
+      await api.post(`/api/printers/${printer.id}/reset-error`);
+      await loadOverview();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  }
+
   const file = (status?.filename || job?.filename || "").split("/").pop();
   const pct = status?.progress != null ? Math.round(status.progress * 100) : null;
   const elapsed = status?.print_duration_sec;
@@ -405,18 +442,22 @@ function MoonrakerCard({ printer, navigate, onTotals }) {
         <div className="muted">{t("Не удалось связаться с принтером.")}</div>
       ) : (
         <>
-          {errMsg && fmtPrinterError(errMsg) && (
+          {showError && fmtPrinterError(errMsg) && (
             <div className="printer-error" title={errMsg}>
               <div className="printer-error-main">
                 <span>
                   ⚠ {knownErr ? knownErr.label() : fmtPrinterError(errMsg)}
                   {knownErr && <b className="printer-error-code"> · {printer.brand || "Anycubic"} {knownErr.code}</b>}
                 </span>
-                {knownErr ? (
-                  <a href={anycubicWikiUrl(knownErr.code)} target="_blank" rel="noopener noreferrer">{t("решение ↗")}</a>
-                ) : (
-                  <a href={errorSearchUrl(errMsg, printer.brand)} target="_blank" rel="noopener noreferrer">{t("искать в Google ↗")}</a>
-                )}
+                <span className="printer-error-actions">
+                  {knownErr ? (
+                    <a href={anycubicWikiUrl(knownErr.code)} target="_blank" rel="noopener noreferrer">{t("решение ↗")}</a>
+                  ) : (
+                    <a href={errorSearchUrl(errMsg, printer.brand)} target="_blank" rel="noopener noreferrer">{t("искать в Google ↗")}</a>
+                  )}
+                  <button className="printer-error-reset" onClick={resetError} disabled={busy} title={t("Сбросить ошибку на принтере")}>{t("Сбросить")}</button>
+                  <button className="printer-error-close" onClick={dismissError} title={t("Скрыть")} aria-label={t("Скрыть")}>×</button>
+                </span>
               </div>
               {knownErr && <div className="printer-error-raw">{fmtPrinterError(errMsg)}</div>}
             </div>

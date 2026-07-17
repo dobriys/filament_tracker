@@ -404,6 +404,26 @@ def control_dryer(
     return {"ok": True, "dryer": client.get_hub_data()["dryer"]}
 
 
+@router.post("/{printer_id}/reset-error")
+def reset_printer_error(
+    printer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Сбросить защёлкнутую ошибку прошлой печати на принтере (SDCARD_RESET_FILE).
+
+    print_stats.state=error держится до старта новой печати, из-за чего решённая
+    ошибка продолжает висеть в виджете. Команда возвращает состояние в standby.
+    """
+    printer = _own(db, user, printer_id)
+    client = _moonraker_client(printer)
+    try:
+        client.reset_print_state()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Moonraker недоступен: {e}")
+    return {"ok": True, "status": client.get_status()}
+
+
 @router.get("/{printer_id}/moonraker-jobs")
 def moonraker_jobs(
     printer_id: uuid.UUID,
