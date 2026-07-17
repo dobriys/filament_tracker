@@ -128,8 +128,11 @@ const KNOWN_PRINTER_ERRORS = [
   { re: /abnormal filament/i,                           code: "10107", label: () => t("Проблема с филаментом") },
   { re: /clogging/i,                                    code: "11518", label: () => t("Засор филамента") },
   { re: /feeding timeout|abnormal feeding/i,            code: "11511", label: () => t("Таймаут подачи филамента") },
+  { re: /abnormal material return|material return/i,    code: "11512", label: () => t("Ошибка возврата филамента") },
   { re: /unknown feed location/i,                       code: "11504", label: () => t("Филамент для подачи не выбран") },
+  { re: /filament tangle|tangle detected/i,             code: "11519", label: () => t("Запутывание филамента в ACE") },
   { re: /color engine motor|rotation of the color/i,    code: "11521", label: () => t("Сбой мотора ACE") },
+  { re: /unknown filament in filament tracker/i,        code: "11535", label: () => t("Неизвестный филамент в ACE") },
 ];
 
 function recognizePrinterError(raw) {
