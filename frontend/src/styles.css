@@ -517,11 +517,17 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
   border-radius: var(--radius); padding: 10px 14px; font-weight: 500; font-size: 13.5px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.dryer-box {
-  border: 1px solid var(--border-soft); border-radius: var(--radius);
-  padding: 12px 14px; margin-top: 12px; background: var(--panel); box-shadow: var(--shadow-soft);
-}
 .dryer-control { display: flex; flex-direction: column; gap: 12px; }
+
+/* Сушка отдельной строкой во всю ширину под карточкой принтера */
+.dryer-row { padding: 14px 20px; margin-top: -12px; }
+.dryer-row-control { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 14px 28px; }
+.dryer-row-control .dryer-head { flex: 0 0 auto; justify-content: flex-start; gap: 16px; }
+.dryer-row-control .dryer-live-panel { flex: 1 1 300px; }
+.dryer-row-control .dryer-fields { flex: 0 0 auto; margin-left: auto; width: min(240px, 100%); }
+@media (max-width: 700px) {
+  .dryer-row-control .dryer-fields { margin-left: 0; }
+}
 .dryer-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .dryer-title { font-weight: 700; color: var(--text); }
 .dryer-state {

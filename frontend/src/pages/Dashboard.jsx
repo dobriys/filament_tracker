@@ -185,7 +185,7 @@ function Temp({ label, t, target }) {
   );
 }
 
-function DryerControls({ printer, dryer, onChanged }) {
+function DryerControls({ printer, dryer, onChanged, row = false }) {
   const [temp, setTemp] = useState(45);
   const [hours, setHours] = useState(4);
   const [busy, setBusy] = useState(false);
@@ -238,7 +238,7 @@ function DryerControls({ printer, dryer, onChanged }) {
   const durationLabel = dryer?.duration_min > 0 ? fmtDryerRemaining(dryer.duration_min * 60) : null;
 
   return (
-    <div className="dryer-control">
+    <div className={`dryer-control${row ? " dryer-row-control" : ""}`}>
       <div className="dryer-head">
         <div>
           <div className="dryer-title">{t("Сушка филамента")}</div>
@@ -426,6 +426,7 @@ function MoonrakerCard({ printer, navigate, onTotals }) {
   const accent = brandAccent(printer.brand);
 
   return (
+    <>
     <div className="card moonraker-card" style={{ "--brand": accent }}>
       <div className="printer-head">
         <PrinterArt caps={caps} brand={printer.brand} model={printer.model} size={62} />
@@ -504,26 +505,24 @@ function MoonrakerCard({ printer, navigate, onTotals }) {
               </div>
             </div>
 
-            {/* Блок «Слоты и сушка» — только если у принтера они есть */}
-            {(hasMmu || dryer) && (
+            {/* Блок «Слоты» — только если у принтера мультиподача.
+                Сушка вынесена отдельной строкой под карточку. */}
+            {hasMmu && (
               <div className="printer-zone">
-                {hasMmu && (
-                  <>
-                    <div className="zone-title">{mmuTitle}</div>
-                    <GateChips gates={gates} />
-                  </>
-                )}
-                {dryer && (
-                  <div className="dryer-box">
-                    <DryerControls printer={printer} dryer={dryer} onChanged={loadOverview} />
-                  </div>
-                )}
+                <div className="zone-title">{mmuTitle}</div>
+                <GateChips gates={gates} />
               </div>
             )}
           </div>
         </>
       )}
     </div>
+    {!offline && dryer && (
+      <div className="card dryer-row">
+        <DryerControls printer={printer} dryer={dryer} onChanged={loadOverview} row />
+      </div>
+    )}
+    </>
   );
 }
 
