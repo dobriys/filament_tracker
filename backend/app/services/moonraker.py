@@ -35,6 +35,8 @@ def parse_status(payload: dict) -> dict:
     air_fan = status.get("fan_generic air_filter_fan", {}) or {}
     return {
         "state": ps.get("state"),
+        # Текст ошибки от прошивки (Klipper кладёт сюда сообщение при state="error").
+        "message": ps.get("message") or None,
         "filename": ps.get("filename") or None,
         "print_duration_sec": ps.get("print_duration"),
         "total_duration_sec": ps.get("total_duration"),

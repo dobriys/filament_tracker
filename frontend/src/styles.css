@@ -249,6 +249,30 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
 .login-card h1 { font-size: 24px; margin: 10px 0 14px; }
 
 .error { color: var(--danger); font-size: 13px; margin-top: 8px; }
+.printer-error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.printer-error-main {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.printer-error-main > a { color: var(--danger); white-space: nowrap; text-decoration: underline; }
+.printer-error-code { font-weight: 700; }
+.printer-error-raw {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.75;
+}
 .muted { color: var(--muted); }
 
 /* --- Панель (дашборд) --- */

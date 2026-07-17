@@ -137,6 +137,28 @@ def test_get_status_parsing():
     assert s["bed_target"] == 60.0
 
 
+def test_status_surfaces_error_message():
+    payload = {
+        "result": {
+            "status": {
+                "print_stats": {
+                    "state": "error",
+                    "message": "autoleve_panic_error:error: code = 10011902, "
+                    "message = Probe samples exceed samples_tolerance",
+                },
+            }
+        }
+    }
+    s = parse_status(payload)
+    assert s["state"] == "error"
+    assert "Probe samples exceed samples_tolerance" in s["message"]
+
+
+def test_status_message_none_when_absent():
+    payload = {"result": {"status": {"print_stats": {"state": "printing"}}}}
+    assert parse_status(payload)["message"] is None
+
+
 def test_status_progress_falls_back_to_virtual_sdcard():
     payload = {
         "result": {

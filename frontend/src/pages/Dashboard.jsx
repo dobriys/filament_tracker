@@ -97,6 +97,47 @@ const STATE_RU = {
   cancelled: [t("Отменена"), "used"],
 };
 
+// Из сырого сообщения Klipper вытаскиваем понятную часть и код. Пример:
+// "autoleve_panic_error:error: typ = WebRequestError, code = 10011902,
+// message = Probe samples exceed samples_tolerance" → "Probe samples exceed
+// samples_tolerance (код 10011902)". Формат вендорный — при непонятном виде
+// возвращаем строку как есть.
+function fmtPrinterError(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  const human = s.match(/message\s*=\s*(.+)$/i)?.[1]?.trim();
+  const code = s.match(/code\s*=\s*(\d+)/i)?.[1];
+  // Код дописываем, только когда удалось вычленить отдельный текст, — иначе
+  // на строке вида "code = 10237" вышло бы «code = 10237 (код 10237)».
+  return human ? (code ? `${human} (${t("код")} ${code})` : human) : s;
+}
+
+// Распознанные ошибки прошивки. В API приходит «внутренняя» форма от Klipper
+// (напр. "Probe samples exceed samples_tolerance"), а на экране принтера —
+// пользовательский код Anycubic (10237) со своей страницей решения. Прямой
+// таблицы «внутренний код → экранный» у Anycubic нет, поэтому сопоставляем по
+// смыслу сообщения. code — экранный код Anycubic (для ссылки на вики).
+const KNOWN_PRINTER_ERRORS = [
+  { re: /samples_tolerance|autoleve|auto[_\s-]?level/i, code: "10237", label: () => t("Ошибка автокалибровки стола") },
+];
+
+function recognizePrinterError(raw) {
+  if (!raw) return null;
+  return KNOWN_PRINTER_ERRORS.find((e) => e.re.test(raw)) || null;
+}
+
+// Официальная страница решения Anycubic по коду (модель-независимый вид —
+// wiki.anycubic.com/en/error-codes/{code}-code — существует для всех кодов).
+function anycubicWikiUrl(code) {
+  return `https://wiki.anycubic.com/en/error-codes/${code}-code`;
+}
+
+// Фолбэк для незнакомых ошибок: поиск Google по бренду и тексту ошибки.
+function errorSearchUrl(raw, brand) {
+  const q = [brand, fmtPrinterError(raw)].filter(Boolean).join(" ");
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}
+
 function fmtDur(sec) {
   if (sec == null) return "—";
   sec = Math.round(sec);
@@ -318,6 +359,9 @@ function MoonrakerCard({ printer, navigate, onTotals }) {
   const st = status?.state;
   const [stLabel, stTag] = STATE_RU[st] || [st || "—", ""];
   const isPrinting = st === "printing";
+  // Текст ошибки принтера: распознанный (описание + код + вики) либо сырой + гугл.
+  const errMsg = st === "error" ? status?.message : null;
+  const knownErr = recognizePrinterError(errMsg);
   const file = (status?.filename || job?.filename || "").split("/").pop();
   const pct = status?.progress != null ? Math.round(status.progress * 100) : null;
   const elapsed = status?.print_duration_sec;
@@ -347,6 +391,22 @@ function MoonrakerCard({ printer, navigate, onTotals }) {
         <div className="muted">{t("Не удалось связаться с принтером.")}</div>
       ) : (
         <>
+          {errMsg && fmtPrinterError(errMsg) && (
+            <div className="printer-error" title={errMsg}>
+              <div className="printer-error-main">
+                <span>
+                  ⚠ {knownErr ? knownErr.label() : fmtPrinterError(errMsg)}
+                  {knownErr && <b className="printer-error-code"> · {printer.brand || "Anycubic"} {knownErr.code}</b>}
+                </span>
+                {knownErr ? (
+                  <a href={anycubicWikiUrl(knownErr.code)} target="_blank" rel="noopener noreferrer">{t("решение ↗")}</a>
+                ) : (
+                  <a href={errorSearchUrl(errMsg, printer.brand)} target="_blank" rel="noopener noreferrer">{t("искать в Google ↗")}</a>
+                )}
+              </div>
+              {knownErr && <div className="printer-error-raw">{fmtPrinterError(errMsg)}</div>}
+            </div>
+          )}
           <div className="printer-grid">
             {/* Блок «Печать» */}
             <div className="printer-zone">
