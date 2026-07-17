@@ -1,14 +1,14 @@
 """Экспорт/импорт профилей и полный бэкап/восстановление данных пользователя.
 
-Экспорт — JSON со всеми данными пользователя. Восстановление пересоздаёт
-инвентарь (места, профили, катушки, принтеры, слоты, события) с новыми id и
-ремаппингом ссылок; QR-токены катушек генерируются заново.
+Экспорт — JSON со всеми данными пользователя. Восстановление заменяет инвентарь
+(места, профили, катушки, принтеры, слоты, события): прежние данные удаляются, из
+файла создаются новые с новыми id и ремаппингом ссылок.
 """
 import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -19,6 +19,7 @@ from app.models import (
     PrintJob,
     PrintJobSpoolUsage,
     PrintJobToolUsage,
+    SlotAssignmentHistory,
     Spool,
     SpoolEvent,
     User,
@@ -184,9 +185,59 @@ def full_backup(db: Session, user: User) -> dict:
     }
 
 
+def wipe_user_data(db: Session, user: User) -> None:
+    """Удаляет инвентарь пользователя (без commit — вызывается внутри restore).
+
+    Сносим ровно то, что переносит full_backup, чтобы восстановление давало
+    состояние из файла, а не сумму с прежним. Публичный каталог
+    (owner_user_id IS NULL) не трогаем — он не принадлежит пользователю.
+
+    Порядок важен: ни один FK не объявлен с ON DELETE CASCADE, поэтому сначала
+    дети, потом родители — иначе БД отвергнет удаление.
+    """
+    my_jobs = select(PrintJob.id).where(PrintJob.owner_user_id == user.id)
+    my_printers = select(Printer.id).where(Printer.owner_user_id == user.id)
+    my_slots = select(PrinterSlot.id).where(PrinterSlot.printer_id.in_(my_printers))
+    my_spools = select(Spool.id).where(Spool.owner_user_id == user.id)
+
+    db.execute(
+        delete(PrintJobSpoolUsage).where(
+            PrintJobSpoolUsage.print_job_id.in_(my_jobs)
+            | PrintJobSpoolUsage.spool_id.in_(my_spools)
+        )
+    )
+    db.execute(delete(PrintJobToolUsage).where(PrintJobToolUsage.print_job_id.in_(my_jobs)))
+    db.execute(delete(PrintJob).where(PrintJob.owner_user_id == user.id))
+    # История назначений слотов в бэкап не входит, но ссылается на слоты и
+    # катушки — без её удаления снос упрётся в FK.
+    db.execute(
+        delete(SlotAssignmentHistory).where(
+            SlotAssignmentHistory.printer_slot_id.in_(my_slots)
+            | SlotAssignmentHistory.spool_id.in_(my_spools)
+        )
+    )
+    db.execute(delete(PrinterSlot).where(PrinterSlot.printer_id.in_(my_printers)))
+    db.execute(delete(Printer).where(Printer.owner_user_id == user.id))
+    db.execute(delete(SpoolEvent).where(SpoolEvent.spool_id.in_(my_spools)))
+    db.execute(delete(Spool).where(Spool.owner_user_id == user.id))
+    db.execute(delete(FilamentProfile).where(FilamentProfile.owner_user_id == user.id))
+    # Место хранения ссылается на место же (parent_id) — обнуляем связи заранее,
+    # чтобы удаление не зависело от порядка строк внутри таблицы.
+    db.execute(
+        update(Location).where(Location.owner_user_id == user.id).values(parent_id=None)
+    )
+    db.execute(delete(Location).where(Location.owner_user_id == user.id))
+
+
 def restore_backup(db: Session, user: User, data: dict) -> dict:
-    """Пересоздаёт инвентарь из бэкапа с ремаппингом id. Не трогает существующие
-    данные пользователя — только добавляет."""
+    """Заменяет инвентарь пользователя данными из бэкапа.
+
+    Прежние данные удаляются: состояние после восстановления — ровно то, что в
+    файле. Снос и создание идут одной транзакцией, поэтому сбой на любом шаге
+    откатывает всё и оставляет прежние данные нетронутыми.
+    """
+    wipe_user_data(db, user)
+
     loc_map: dict[str, uuid.UUID] = {}
     prof_map: dict[str, uuid.UUID] = {}
     spool_map: dict[str, uuid.UUID] = {}

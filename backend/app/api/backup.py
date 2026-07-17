@@ -31,7 +31,7 @@ async def import_backup(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Восстановление инвентаря из бэкапа (добавляет данные, не перезаписывает)."""
+    """Восстановление инвентаря из бэкапа (заменяет данные: прежние удаляются)."""
     try:
         payload = json.loads(await file.read())
     except json.JSONDecodeError:

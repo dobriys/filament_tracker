@@ -144,6 +144,10 @@ export default function Settings() {
   async function importBackup(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!window.confirm(t("Восстановить из файла? Ваши катушки, профили, места, принтеры и история печати будут удалены и заменены данными из файла. Необратимо."))) {
+      e.target.value = "";
+      return;
+    }
     setMsg(null);
     try {
       const res = await api.postFile("/api/backup/import", file);
@@ -159,7 +163,7 @@ export default function Settings() {
 
       <div className="card">
         <h3>{t("Бэкап")}</h3>
-        <p className="muted">{t("Экспорт всех ваших данных в JSON и восстановление из файла (данные добавляются, не перезаписываются).")}</p>
+        <p className="muted">{t("Экспорт всех ваших данных в JSON и восстановление из файла (данные заменяются: текущие удаляются).")}</p>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="secondary" onClick={exportBackup}>{t("Скачать бэкап (JSON)")}</button>
           <button className="secondary" onClick={() => fileRef.current.click()}>{t("Восстановить из файла")}</button>

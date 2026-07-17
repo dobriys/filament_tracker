@@ -333,8 +333,10 @@ export const EN = {
   "Часть катушек без цены — итог занижен": "Some spools have no price — the total is understated",
   "Штрихкод": "Barcode",
   "Штрихкод производителя (необязательно).": "Manufacturer barcode (optional).",
-  "Экспорт всех ваших данных в JSON и восстановление из файла (данные добавляются, не перезаписываются).":
-    "Export all your data to JSON and restore from a file (data is added, not overwritten).",
+  "Экспорт всех ваших данных в JSON и восстановление из файла (данные заменяются: текущие удаляются).":
+    "Export all your data to JSON and restore from a file (data is replaced: current data is deleted).",
+  "Восстановить из файла? Ваши катушки, профили, места, принтеры и история печати будут удалены и заменены данными из файла. Необратимо.":
+    "Restore from a file? Your spools, profiles, locations, printers and print history will be deleted and replaced with the data from the file. This cannot be undone.",
   "активен": "active",
   "архив": "archived",
   "в этом месяце": "this month",
