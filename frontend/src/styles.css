@@ -542,6 +542,12 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
 .dryer-state.on > span {
   background: #34c759; box-shadow: 0 0 0 3px color-mix(in srgb, #34c759 18%, transparent);
 }
+/* Команда отправлена, принтер ещё не подтвердил: янтарная пульсирующая точка. */
+.dryer-state.pending { color: var(--text-soft); }
+.dryer-state.pending > span {
+  background: #f59e0b; box-shadow: 0 0 0 3px color-mix(in srgb, #f59e0b 18%, transparent);
+  animation: dryer-pulse 1.1s ease-in-out infinite;
+}
 .dryer-state.error { color: var(--danger); }
 .dryer-state.error > span {
   background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent);
@@ -615,6 +621,17 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
 [data-theme="dark"] .apple-switch:hover { background: #52525b; }
 [data-theme="dark"] .apple-switch.on { background: #30d158; }
 [data-theme="dark"] .apple-switch.on:hover { background: #34c759; }
+
+/* Переключатель уже в целевом положении, но команда ещё не подтверждена —
+   бегунок пульсирует, показывая, что нажатие принято и ждём принтер.
+   Идёт последним и с :hover-вариантами: иначе тематические .on:hover-правила
+   выше по специфичности вернут зелёный при наведении. */
+.apple-switch.pending,
+.apple-switch.pending:hover { background: #f59e0b; cursor: progress; }
+[data-theme="dark"] .apple-switch.pending,
+[data-theme="dark"] .apple-switch.pending:hover { background: #d97706; }
+.apple-switch.pending span { animation: dryer-pulse 1.1s ease-in-out infinite; }
+@keyframes dryer-pulse { 50% { opacity: 0.4; } }
 
 /* Брендинг принтера: акцент бренда, шапка с силуэтом, значки возможностей */
 .moonraker-card { position: relative; }

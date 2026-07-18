@@ -185,13 +185,18 @@ function Temp({ label, t, target }) {
   );
 }
 
+// Сколько ждём, пока принтер подтвердит включение/выключение сушки.
+const DRYER_CONFIRM_MS = 30000;
+
 function DryerControls({ printer, dryer, onChanged, row = false }) {
   const [temp, setTemp] = useState(45);
   const [hours, setHours] = useState(4);
-  const [busy, setBusy] = useState(false);
+  // Команда отправлена, но принтер её ещё не подтвердил: "start" | "stop" | null.
+  const [pending, setPending] = useState(null);
   const [err, setErr] = useState(null);
   const [remainingSec, setRemainingSec] = useState(null);
   const drying = dryer?.status === "drying";
+  const busy = pending !== null;
 
   useEffect(() => {
     if (!drying) return;
@@ -217,7 +222,7 @@ function DryerControls({ printer, dryer, onChanged, row = false }) {
 
   async function send(action) {
     setErr(null);
-    setBusy(true);
+    setPending(action);
     try {
       await api.post(`/api/printers/${printer.id}/dryer`, {
         action,
@@ -225,15 +230,30 @@ function DryerControls({ printer, dryer, onChanged, row = false }) {
         duration_min: Math.round((Number(hours) || 0) * 60) || null,
         unit: dryer?.unit ?? null,
       });
-      await new Promise((r) => setTimeout(r, 2500));
-      await onChanged();
+      // ACE применяет команду не мгновенно (обычно 3–10 с). Ждём не фиксированную
+      // паузу, а подтверждения от принтера: иначе переключатель откатывается в
+      // старое положение, и реальный статус приезжает только со slow-опроса (60 с).
+      const deadline = Date.now() + DRYER_CONFIRM_MS;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const o = await onChanged();
+        if (!o) continue; // принтер не ответил — ждём следующей попытки
+        const now = o.dryer?.status;
+        // Выключение подтверждено любым состоянием, кроме "сушит" (в том числе
+        // если хаб вовсе перестал отдавать сушилку), включение — только "drying".
+        if (action === "start" ? now === "drying" : now !== "drying") return;
+      }
+      setErr(t("Принтер не подтвердил команду — проверьте сушилку на принтере"));
     } catch (e) {
       setErr(e.message);
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }
 
+  // Пока команда в пути, переключатель стоит в запрошенном положении, а не в
+  // фактическом — иначе нажатие выглядит так, будто оно ничего не сделало.
+  const switchOn = pending ? pending === "start" : drying;
   const remainingLabel = remainingSec != null ? fmtDryerRemaining(remainingSec) : null;
   const durationLabel = dryer?.duration_min > 0 ? fmtDryerRemaining(dryer.duration_min * 60) : null;
 
@@ -242,16 +262,21 @@ function DryerControls({ printer, dryer, onChanged, row = false }) {
       <div className="dryer-head">
         <div>
           <div className="dryer-title">{t("Сушка филамента")}</div>
-          <div className={`dryer-state ${drying ? "on" : ""} ${dryer?.status === "heater_err" ? "error" : ""}`}>
+          <div className={`dryer-state ${drying ? "on" : ""} ${pending ? "pending" : ""} ${dryer?.status === "heater_err" ? "error" : ""}`}>
             <span />
-            {drying ? t("Идёт сушка") : dryer?.status === "heater_err" ? t("ошибка нагревателя") : t("выключена")}
+            {pending === "start" ? t("включаем…")
+              : pending === "stop" ? t("выключаем…")
+              : drying ? t("Идёт сушка")
+              : dryer?.status === "heater_err" ? t("ошибка нагревателя")
+              : t("выключена")}
           </div>
         </div>
         <button
           type="button"
-          className={`apple-switch ${drying ? "on" : ""}`}
+          className={`apple-switch ${switchOn ? "on" : ""} ${pending ? "pending" : ""}`}
           role="switch"
-          aria-checked={drying}
+          aria-checked={switchOn}
+          aria-busy={busy}
           aria-label={drying ? t("Выключить") : t("Включить сушку")}
           title={drying ? t("Выключить") : t("Включить сушку")}
           disabled={busy}
@@ -365,10 +390,22 @@ function MoonrakerCard({ printer, navigate, onTotals }) {
         }).catch(() => {});
       }
     }, 7000);
+    // Сушку могут запустить и с экрана принтера. Быстрый тик в этом состоянии
+    // тянет только /status, где сушки нет, поэтому без отдельного наблюдателя
+    // такой запуск всплыл бы лишь на slow-опросе — через минуту. Раз в 20 с
+    // хватает, чтобы это не бросалось в глаза, и заметно дешевле, чем гонять
+    // overview (status + hub) на каждом быстром тике. Пока сушка идёт, overview
+    // и так перечитывается быстрым тиком, так что здесь ничего не делаем.
+    const dryerWatch = dryer && setInterval(() => {
+      if (visible() && dryer.status !== "drying") loadOverview();
+    }, 20000);
     const slow = setInterval(() => {
       if (visible()) { loadOverview(); loadJob(); }
     }, 60000);
-    return () => { clearInterval(fast); clearInterval(slow); };
+    return () => {
+      clearInterval(fast); clearInterval(slow);
+      if (dryerWatch) clearInterval(dryerWatch);
+    };
   }, [printer.id, dryer?.status]);
 
   const canConsume = job && job.status === "completed" && !job.consumed;
