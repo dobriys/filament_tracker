@@ -11,6 +11,11 @@ export default function Settings() {
     moonraker_auto_import: true,
     moonraker_auto_consume: false,
     error_logging: false,
+    telegram_enabled: false,
+    telegram_chat_id: "",
+    telegram_token_set: false,
+    telegram_events: {},
+    spool_low_threshold_g: 100,
   });
   const [log, setLog] = useState(null); // null = не загружен, {entries,total} = загружен
   const [logFilter, setLogFilter] = useState({ level: "", source: "", q: "" });
@@ -20,10 +25,19 @@ export default function Settings() {
   const [spoolmanBusy, setSpoolmanBusy] = useState(false);
   const [catalogInfo, setCatalogInfo] = useState(null);
   const [catalogBusy, setCatalogBusy] = useState(false);
+  // Токен не приходит с сервера — поле пустое, пока пользователь не введёт новый.
+  const [tgToken, setTgToken] = useState("");
+  const [tgChat, setTgChat] = useState("");
+  const [tgLow, setTgLow] = useState("");
+  const [tgBusy, setTgBusy] = useState(false);
   const fileRef = useRef();
 
   useEffect(() => {
-    api.get("/api/settings").then(setS).catch(() => {});
+    api.get("/api/settings").then((v) => {
+      setS(v);
+      setTgChat(v.telegram_chat_id || "");
+      setTgLow(String(v.spool_low_threshold_g ?? 100));
+    }).catch(() => {});
     api.get("/health").then((h) => setServerVersion(h.version)).catch(() => {});
     api.get("/api/filament-catalog/info").then(setCatalogInfo).catch(() => {});
   }, []);
@@ -99,6 +113,54 @@ export default function Settings() {
         {hint && <div className="muted" style={{ marginLeft: 24, fontSize: 13 }}>{hint}</div>}
       </div>
     );
+  }
+
+  // Типы уведомлений: ключ совпадает с notifications.EVENTS на бэкенде.
+  const TG_EVENTS = [
+    ["print_finished", t("Печать завершена")],
+    ["print_error", t("Ошибка печати")],
+    ["print_paused", t("Печать на паузе")],
+    ["print_started", t("Печать началась")],
+    ["print_cancelled", t("Печать отменена")],
+    ["dryer_started", t("Сушка включена")],
+    ["dryer_finished", t("Сушка завершена")],
+    ["printer_offline", t("Принтер недоступен / снова на связи")],
+    ["consume_failed", t("Автосписание не выполнено")],
+    ["spool_low", t("Катушка заканчивается")],
+  ];
+
+  async function saveTelegram(patch) {
+    setMsg(null);
+    try {
+      setS(await api.put("/api/settings", patch));
+      setMsg(t("Настройка сохранена"));
+      return true;
+    } catch (err) { setMsg(err.message); return false; }
+  }
+
+  function toggleEvent(key) {
+    return (e) => saveTelegram({ telegram_events: { [key]: e.target.checked } });
+  }
+
+  async function saveTelegramBot() {
+    const patch = { telegram_chat_id: tgChat.trim() };
+    // Пустое поле токена = «не менять»; стереть можно кнопкой ниже.
+    if (tgToken.trim()) patch.telegram_bot_token = tgToken.trim();
+    const low = Number(tgLow);
+    if (low > 0) patch.spool_low_threshold_g = low;
+    setTgBusy(true);
+    if (await saveTelegram(patch)) setTgToken("");
+    setTgBusy(false);
+  }
+
+  async function testTelegram() {
+    setMsg(null);
+    setTgBusy(true);
+    try {
+      await api.post("/api/settings/telegram/test");
+      setMsg(t("Тестовое сообщение отправлено"));
+    } catch (err) { setMsg(err.message); }
+    setTgBusy(false);
   }
 
   async function loadLog(f = logFilter) {
@@ -234,6 +296,79 @@ export default function Settings() {
           label={t("Разрешить списание катушки в минус при нехватке остатка")}
         />
         {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
+      </div>
+
+      <div className="card">
+        <h3>{t("Уведомления в Telegram")}</h3>
+        <p className="muted">
+          {t("Сообщения об изменениях состояния принтера: печать завершена, ошибка, сушка и т.д. Создайте бота через @BotFather, получите токен, напишите боту и укажите chat id (узнать можно у @userinfobot).")}
+        </p>
+        {!isAdmin && <div className="muted">{t("Доступно только администратору.")}</div>}
+        {isAdmin && (
+          <>
+            <Toggle
+              k="telegram_enabled"
+              label={t("Отправлять уведомления")}
+              hint={t("Общий выключатель: пока выключен, ничего не отправляется и принтеры не опрашиваются ради уведомлений.")}
+            />
+            <div style={{ display: "grid", gap: 8, maxWidth: 420, marginTop: 12 }}>
+              <label>
+                {t("Токен бота")}
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={tgToken}
+                  onChange={(e) => setTgToken(e.target.value)}
+                  placeholder={s.telegram_token_set ? t("Токен сохранён — введите новый, чтобы заменить") : "123456:ABC-DEF..."}
+                />
+              </label>
+              <label>
+                {t("Chat id")}
+                <input
+                  value={tgChat}
+                  onChange={(e) => setTgChat(e.target.value)}
+                  placeholder="123456789"
+                />
+              </label>
+              <label>
+                {t("Порог «катушка заканчивается», г")}
+                <input
+                  type="number"
+                  min="1"
+                  value={tgLow}
+                  onChange={(e) => setTgLow(e.target.value)}
+                />
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="secondary" onClick={saveTelegramBot} disabled={tgBusy}>
+                  {t("Сохранить")}
+                </button>
+                <button
+                  className="secondary"
+                  onClick={testTelegram}
+                  disabled={tgBusy || !s.telegram_token_set || !s.telegram_chat_id}
+                >
+                  {t("Отправить тест")}
+                </button>
+              </div>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <div className="card-sub" style={{ marginBottom: 8 }}>{t("Что отправлять")}</div>
+              {TG_EVENTS.map(([key, label]) => (
+                <label key={key} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                  <input
+                    type="checkbox"
+                    style={{ width: "auto" }}
+                    checked={!!s.telegram_events?.[key]}
+                    onChange={toggleEvent(key)}
+                    disabled={!s.telegram_enabled}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="card">

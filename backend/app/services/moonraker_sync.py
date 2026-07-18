@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import decrypt_secret
 from app.models import AppSetting, Printer, PrinterSlot, PrintJob, User
-from app.services import diagnostics, print_job_service, settings_service
+from app.services import diagnostics, notifications, print_job_service, settings_service
 from app.services.moonraker import MoonrakerClient, job_to_parsed
 
 log = logging.getLogger("moonraker_sync")
@@ -35,13 +35,17 @@ AUTO_CONSUME_KEY = "moonraker_auto_consume"
 WATERMARK_PREFIX = "moonraker_watermark:"
 
 
-def _client(printer: Printer) -> MoonrakerClient:
+def client_for(printer: Printer) -> MoonrakerClient:
+    """Клиент Moonraker с расшифрованным ключом (используется и printer_watch)."""
     key = (
         decrypt_secret(printer.moonraker_api_key_encrypted)
         if printer.moonraker_api_key_encrypted
         else None
     )
     return MoonrakerClient(printer.moonraker_url, api_key=key)
+
+
+_client = client_for
 
 
 def _imported_job_ids(db: Session, printer: Printer) -> set[str]:
@@ -176,6 +180,12 @@ def poll_printer(db: Session, printer: Printer, *, auto_consume: bool) -> dict:
                         category="consume",
                         context={"printer": printer.name, "problems": e.problems},
                     )
+                    notifications.notify(
+                        db, "consume_failed",
+                        f"⚠️ <b>{notifications.esc(printer.name)}</b>\n"
+                        f"Автосписание не выполнено: {notifications.esc(job.file_name)}\n"
+                        "Печать осталась черновиком — спишите вручную.",
+                    )
             else:
                 diagnostics.event(
                     "warning", "poller",
@@ -189,6 +199,12 @@ def poll_printer(db: Session, printer: Printer, *, auto_consume: bool) -> dict:
                             for s in slots
                         ],
                     },
+                )
+                notifications.notify(
+                    db, "consume_failed",
+                    f"⚠️ <b>{notifications.esc(printer.name)}</b>\n"
+                    f"Автосписание пропущено: {notifications.esc(job.file_name)}\n"
+                    "Инструменты не сопоставлены со слотами — печать осталась черновиком.",
                 )
     if newest > watermark:
         settings_service.set_value(db, wm_key, newest)

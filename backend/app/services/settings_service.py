@@ -13,6 +13,17 @@ def get_bool(db: Session, key: str, default: bool = False) -> bool:
     return bool(row.value.get("value", default)) if isinstance(row.value, dict) else bool(row.value)
 
 
+def get_value(db: Session, key: str, default=None):
+    """Произвольное значение настройки (строка, число, словарь)."""
+    row = db.get(AppSetting, key)
+    if row is None:
+        return default
+    if isinstance(row.value, dict) and "value" in row.value:
+        v = row.value["value"]
+        return default if v is None else v
+    return row.value
+
+
 def set_value(db: Session, key: str, value) -> None:
     row = db.get(AppSetting, key)
     if row is None:

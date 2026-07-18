@@ -21,7 +21,7 @@ from app.models import (
     Spool,
     User,
 )
-from app.services import settings_service, spool_service
+from app.services import notifications, settings_service, spool_service
 
 
 class ConsumptionError(Exception):
@@ -208,13 +208,13 @@ def confirm_usage(
                 }
             )
             continue
-        plan.append((row, slot, spool, used))
+        plan.append((row, slot, spool, used, left))
 
     if problems:
         raise ConsumptionError(problems)
 
     now = datetime.now(timezone.utc)
-    for row, slot, spool, used in plan:
+    for row, slot, spool, used, _before in plan:
         row.slot_index = slot.slot_index if slot else None
         spool_service.consume(
             db,
@@ -242,7 +242,27 @@ def confirm_usage(
     job.completed_at = now
     db.commit()
     db.refresh(job)
+    _notify_low_spools(db, [(spool, before) for _, _, spool, _, before in plan])
     return job
+
+
+def _notify_low_spools(db: Session, spools: list[tuple]) -> None:
+    """Уведомление «катушка заканчивается» — только в момент пересечения порога.
+
+    Сравниваем остаток до и после списания: без этого одно и то же уведомление
+    приходило бы после каждой следующей печати с той же катушки.
+    """
+    threshold = Decimal(str(notifications.spool_low_threshold(db)))
+    for spool, before in spools:
+        after = Decimal(spool.current_weight_g)
+        if before > threshold >= after:
+            title = spool.label or f"{spool.material or ''} {spool.color_name or ''}".strip()
+            notifications.notify(
+                db, "spool_low",
+                f"🪫 <b>Катушка заканчивается</b>\n"
+                f"{notifications.esc(title or spool.id)}\n"
+                f"Остаток: {after:.0f} г",
+            )
 
 
 def cancel(db: Session, job: PrintJob) -> PrintJob:
