@@ -47,6 +47,8 @@ your data on your own server. Interface in English and Russian.
 - 🤖 **Auto-deduction** — background printer polling: finished prints are imported
   automatically, and when every tool maps to a slot the material is deducted for you
   (optional).
+- 📨 **Telegram notifications** — print finished, error, paused, drying, spool running
+  low. Every event type is toggled on its own.
 - 📄 **gcode estimation** — upload a file and the app computes usage per extruder and
   deducts from the right spools.
 - 🏷️ **Labels and QR codes** — print stickers with a live preview; scanning the QR
@@ -144,6 +146,28 @@ material was deducted.
   skips ones already added.
 - **Moonraker: automation** — auto-import of finished prints (on by default) and full
   auto-deduction when everything maps to slots (optional).
+- **Telegram notifications** — messages about printer and inventory state changes.
+  Create a bot via [@BotFather](https://t.me/BotFather), enter the token and your chat
+  id ([@userinfobot](https://t.me/userinfobot) will tell you), hit "Send test" — then
+  tick exactly what you want:
+
+  | Event | Default |
+  | --- | --- |
+  | Print finished | ✅ |
+  | Print error (with the firmware's message) | ✅ |
+  | Print paused | ✅ |
+  | Print started | — |
+  | Print cancelled | — |
+  | Drying started | — |
+  | Drying finished | ✅ |
+  | Printer offline / back online | — |
+  | Auto-deduction failed | ✅ |
+  | Spool running low (threshold configurable) | ✅ |
+
+  Printer state is tracked by the background poller, so notifications arrive even when
+  the app isn't open in a browser. The bot token is stored encrypted and never returned
+  by the API. While the master switch is off, printers aren't polled for notifications
+  at all.
 - **Deduction** — allow the remaining amount to go negative.
 - **Diagnostics log** — opt-in recording of actions and errors for debugging: when
   something breaks, turn recording on, reproduce the problem, download the log and
