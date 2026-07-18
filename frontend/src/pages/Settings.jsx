@@ -30,6 +30,9 @@ export default function Settings() {
   const [tgChat, setTgChat] = useState("");
   const [tgLow, setTgLow] = useState("");
   const [tgBusy, setTgBusy] = useState(false);
+  // Свой статус рядом с кнопками: общий msg рисуется вверху страницы, а карточка
+  // Telegram далеко внизу — результат «Отправить тест» туда просто не видно.
+  const [tgMsg, setTgMsg] = useState(null);
   const fileRef = useRef();
 
   useEffect(() => {
@@ -131,11 +134,17 @@ export default function Settings() {
 
   async function saveTelegram(patch) {
     setMsg(null);
+    setTgMsg(null);
     try {
       setS(await api.put("/api/settings", patch));
       setMsg(t("Настройка сохранена"));
+      setTgMsg({ ok: true, text: t("Настройка сохранена") });
       return true;
-    } catch (err) { setMsg(err.message); return false; }
+    } catch (err) {
+      setMsg(err.message);
+      setTgMsg({ ok: false, text: err.message });
+      return false;
+    }
   }
 
   function toggleEvent(key) {
@@ -153,13 +162,37 @@ export default function Settings() {
     setTgBusy(false);
   }
 
+  async function detectChat() {
+    setMsg(null);
+    setTgMsg(null);
+    setTgBusy(true);
+    try {
+      const r = await api.post("/api/settings/telegram/detect-chat");
+      const chats = r.chats || [];
+      // Обычно боту пишет один человек — он и подставляется сразу.
+      setTgChat(chats[0].chat_id);
+      setTgMsg({
+        ok: true,
+        text: chats.length === 1
+          ? `${t("Найден chat id:")} ${chats[0].title}. ${t("Нажмите «Сохранить».")}`
+          : `${t("Найдено несколько чатов, подставлен первый:")} ${chats.map((c) => c.title).join(", ")}`,
+      });
+    } catch (err) {
+      setTgMsg({ ok: false, text: err.message });
+    }
+    setTgBusy(false);
+  }
+
   async function testTelegram() {
     setMsg(null);
+    setTgMsg(null);
     setTgBusy(true);
     try {
       await api.post("/api/settings/telegram/test");
-      setMsg(t("Тестовое сообщение отправлено"));
-    } catch (err) { setMsg(err.message); }
+      setTgMsg({ ok: true, text: t("Тестовое сообщение отправлено") });
+    } catch (err) {
+      setTgMsg({ ok: false, text: err.message });
+    }
     setTgBusy(false);
   }
 
@@ -330,6 +363,9 @@ export default function Settings() {
                   placeholder="123456789"
                 />
               </label>
+              <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+                {t("Напишите боту «/start» и нажмите «Определить chat id» — вводить вручную не нужно.")}
+              </div>
               <label>
                 {t("Порог «катушка заканчивается», г")}
                 <input
@@ -345,12 +381,25 @@ export default function Settings() {
                 </button>
                 <button
                   className="secondary"
+                  onClick={detectChat}
+                  disabled={tgBusy || !s.telegram_token_set}
+                  title={t("Определить по тем, кто написал боту")}
+                >
+                  {t("Определить chat id")}
+                </button>
+                <button
+                  className="secondary"
                   onClick={testTelegram}
                   disabled={tgBusy || !s.telegram_token_set || !s.telegram_chat_id}
                 >
                   {t("Отправить тест")}
                 </button>
               </div>
+              {tgMsg && (
+                <div className={tgMsg.ok ? "muted" : "error"} style={{ fontSize: 13 }}>
+                  {tgMsg.text}
+                </div>
+              )}
             </div>
             <div style={{ marginTop: 16 }}>
               <div className="card-sub" style={{ marginBottom: 8 }}>{t("Что отправлять")}</div>

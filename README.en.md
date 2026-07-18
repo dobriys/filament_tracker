@@ -147,9 +147,9 @@ material was deducted.
 - **Moonraker: automation** — auto-import of finished prints (on by default) and full
   auto-deduction when everything maps to slots (optional).
 - **Telegram notifications** — messages about printer and inventory state changes.
-  Create a bot via [@BotFather](https://t.me/BotFather), enter the token and your chat
-  id ([@userinfobot](https://t.me/userinfobot) will tell you), hit "Send test" — then
-  tick exactly what you want:
+  Create a bot via [@BotFather](https://t.me/BotFather), paste the token, send your bot
+  a "/start" and press "Detect chat id" — the field fills itself. Then hit "Send test"
+  and tick exactly what you want:
 
   | Event | Default |
   | --- | --- |

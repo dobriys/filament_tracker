@@ -606,6 +606,13 @@ export const EN = {
   "Chat id": "Chat id",
   "Порог «катушка заканчивается», г": "“Spool running low” threshold, g",
   "Отправить тест": "Send test",
+  "Определить chat id": "Detect chat id",
+  "Определить по тем, кто написал боту": "Detect from whoever has messaged the bot",
+  "Напишите боту «/start» и нажмите «Определить chat id» — вводить вручную не нужно.":
+    "Send “/start” to your bot and press “Detect chat id” — no need to type it by hand.",
+  "Найден chat id:": "Found chat id:",
+  "Нажмите «Сохранить».": "Press “Save”.",
+  "Найдено несколько чатов, подставлен первый:": "Several chats found, the first one was filled in:",
   "Тестовое сообщение отправлено": "Test message sent",
   "Что отправлять": "What to send",
   "Печать завершена": "Print finished",

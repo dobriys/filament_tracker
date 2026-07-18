@@ -96,6 +96,28 @@ def update_settings(
     return _current(db)
 
 
+@router.post("/telegram/detect-chat")
+def telegram_detect_chat(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Определить chat id по тем, кто уже написал боту."""
+    token = notifications.get_token(db)
+    if not token:
+        raise HTTPException(status_code=422, detail="Сначала сохраните токен бота")
+    try:
+        chats = notifications.detect_chat_id(token)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=notifications.explain_error(str(e)))
+    if not chats:
+        raise HTTPException(
+            status_code=404,
+            detail="Никто не писал боту. Откройте своего бота в Telegram, "
+                   "отправьте ему «/start» и нажмите кнопку ещё раз.",
+        )
+    return {"chats": chats}
+
+
 @router.post("/telegram/test")
 def telegram_test(
     db: Session = Depends(get_db),
@@ -112,5 +134,5 @@ def telegram_test(
             "🧵 <b>Filament Tracker</b>\nУведомления настроены.",
         )
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Telegram: {e}")
+        raise HTTPException(status_code=502, detail=notifications.explain_error(str(e)))
     return {"ok": True}
