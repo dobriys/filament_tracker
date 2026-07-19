@@ -636,9 +636,13 @@ export const EN = {
     "Master switch: while off, Home Assistant is not polled.",
   "Адрес Home Assistant": "Home Assistant address",
   "Токен долгосрочного доступа": "Long-lived access token",
-  "Порог «влажность высокая», %": "“High humidity” threshold, %",
-  "Выше порога показания подсвечиваются, а при включённом уведомлении «Влажность выше порога» приходит сообщение в Telegram.":
-    "Above the threshold readings are highlighted, and if the “Humidity above threshold” notification is on, a Telegram message is sent.",
+  "Общий порог «влажность высокая», %": "Default “high humidity” threshold, %",
+  "Применяется к датчикам, у которых не задан свой порог. Выше порога показания подсвечиваются, а при включённом уведомлении «Влажность выше порога» приходит сообщение в Telegram.":
+    "Applies to sensors without their own threshold. Above the threshold readings are highlighted, and if the “Humidity above threshold” notification is on, a Telegram message is sent.",
+  "Свой порог влажности, % (необязательно)": "Own humidity threshold, % (optional)",
+  "как общий": "same as default",
+  "Пусто — берётся общий порог. Разным местам нужны разные значения: в сушилке нагрев занижает влажность, а нейлону и PVA нужен порог жёстче, чем PLA.":
+    "Leave empty to use the default. Different spots need different values: heating lowers relative humidity inside a dryer, and nylon or PVA needs a stricter threshold than PLA.",
   "Проверить связь": "Test connection",
   "Загрузить список датчиков": "Load sensor list",
   "Home Assistant отвечает. Найдено датчиков:": "Home Assistant responded. Sensors found:",

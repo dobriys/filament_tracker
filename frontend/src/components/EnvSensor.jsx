@@ -39,7 +39,10 @@ function ago(iso) {
 export default function EnvSensor({ sensor, threshold = 45, showName = true }) {
   if (!sensor) return null;
   const { temperature, humidity, battery, error } = sensor;
-  const wet = humidity != null && humidity > threshold;
+  // Порог приходит с сервера уже действующим (свой у датчика либо общий);
+  // проп остаётся запасным значением на случай старого ответа без поля.
+  const limit = sensor.humidity_max ?? threshold;
+  const wet = humidity != null && humidity > limit;
   // Заряд показывается всегда, когда сущность указана: иначе заполненное поле в
   // настройках выглядит как ничего не сделавшее. Ниже 15 % — плашкой, потому что
   // датчик скоро замолчит, а показания будут выглядеть живыми.
@@ -63,7 +66,7 @@ export default function EnvSensor({ sensor, threshold = 45, showName = true }) {
             </div>
           </div>
           <div className="env-sensor-foot">
-            {wet && <span className="badge almost_empty">{t("выше порога")} {threshold}%</span>}
+            {wet && <span className="badge almost_empty">{t("выше порога")} {limit}%</span>}
             {battery != null && (
               lowBattery
                 ? <span className="badge empty" title={t("Пора менять батарейку")}>🔋 {Math.round(battery)}%</span>

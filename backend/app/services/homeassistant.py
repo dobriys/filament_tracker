@@ -32,6 +32,13 @@ BASE_URL_KEY = "ha_base_url"
 TOKEN_KEY = "ha_token_encrypted"
 SENSORS_KEY = "ha_sensors"
 
+# Порог «влажность высокая», проценты. Общий — дефолт для датчиков, у которых
+# свой порог не задан: разным материалам и разным местам нужны разные значения
+# (в горячей сушилке RH занижена нагревом, в шкафу с нейлоном нужен жёсткий
+# порог), поэтому у датчика есть собственное поле humidity_max.
+HUMIDITY_MAX_KEY = "humidity_alert_max_pct"
+HUMIDITY_MAX_DEFAULT = 45.0
+
 TIMEOUT_SEC = 10
 CACHE_TTL_SEC = 30
 
@@ -71,6 +78,26 @@ def is_configured(db: Session) -> bool:
     return bool(get_base_url(db) and get_token(db))
 
 
+def humidity_max(db: Session) -> float:
+    """Общий порог влажности — дефолт для датчиков без собственного."""
+    try:
+        return float(settings_service.get_value(db, HUMIDITY_MAX_KEY, HUMIDITY_MAX_DEFAULT))
+    except (TypeError, ValueError):
+        return HUMIDITY_MAX_DEFAULT
+
+
+def sensor_threshold(sensor: dict, default: float) -> float:
+    """Порог конкретного датчика: свой, иначе общий."""
+    own = sensor.get("humidity_max")
+    if own is None:
+        return default
+    try:
+        value = float(own)
+    except (TypeError, ValueError):
+        return default
+    return value if 0 < value < 100 else default
+
+
 def get_sensors(db: Session) -> list[dict]:
     saved = settings_service.get_value(db, SENSORS_KEY) or []
     return [s for s in saved if isinstance(s, dict)] if isinstance(saved, list) else []
@@ -91,12 +118,21 @@ def set_sensors(db: Session, sensors: list[dict]) -> list[dict]:
         if not temp and not humidity:
             continue  # датчик без единой сущности показывать нечего
         bind_type = raw.get("bind_type") if raw.get("bind_type") in ("printer", "location") else None
+        # Пусто/мусор в пороге — значит «как у всех», а не ошибка сохранения:
+        # поле необязательное, и ронять из-за него весь список датчиков нельзя.
+        try:
+            own_max = float(raw["humidity_max"]) if raw.get("humidity_max") not in (None, "") else None
+        except (TypeError, ValueError):
+            own_max = None
+        if own_max is not None and not (0 < own_max < 100):
+            own_max = None
         clean.append({
             "id": str(raw.get("id") or uuid.uuid4()),
             "name": (raw.get("name") or "").strip() or "Датчик",
             "temp_entity": temp,
             "humidity_entity": humidity,
             "battery_entity": (raw.get("battery_entity") or "").strip(),
+            "humidity_max": own_max,
             "bind_type": bind_type,
             "bind_id": str(raw["bind_id"]) if bind_type and raw.get("bind_id") else None,
         })
@@ -187,6 +223,8 @@ def read_sensors(db: Session, *, use_cache: bool = True) -> list[dict]:
     if not base_url or not token:
         return []
 
+    default_max = humidity_max(db)
+
     try:
         states = _states_by_id(base_url, token, use_cache=use_cache)
         error = None
@@ -206,6 +244,9 @@ def read_sensors(db: Session, *, use_cache: bool = True) -> list[dict]:
             "temperature": _to_float((temp_state or {}).get("state")),
             "humidity": _to_float((hum_state or {}).get("state")),
             "battery": _to_float((bat_state or {}).get("state")),
+            # Действующий порог: своё значение датчика либо общее. Фронт по нему
+            # подсвечивает, поллер — уведомляет; считаем в одном месте.
+            "humidity_max": sensor_threshold(s, default_max),
             "updated_at": updated,
             "bind_type": s.get("bind_type"),
             "bind_id": s.get("bind_id"),

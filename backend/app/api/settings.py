@@ -7,7 +7,6 @@ from app.deps import get_current_user, require_admin
 from app.models import User
 from app.services import (
     diagnostics,
-    environment_watch,
     homeassistant,
     notifications,
     settings_service,
@@ -68,7 +67,7 @@ def _current(db: Session) -> SettingsOut:
         telegram_token_set=bool(settings_service.get_value(db, notifications.TOKEN_KEY)),
         telegram_events=notifications.get_events(db),
         spool_low_threshold_g=notifications.spool_low_threshold(db),
-        humidity_alert_max_pct=environment_watch.humidity_max(db),
+        humidity_alert_max_pct=homeassistant.humidity_max(db),
         ha_enabled=settings_service.get_bool(db, homeassistant.ENABLED_KEY, default=False),
         ha_base_url=homeassistant.get_base_url(db),
         ha_token_set=bool(settings_service.get_value(db, homeassistant.TOKEN_KEY)),
@@ -120,7 +119,7 @@ def update_settings(
         if not (0 < data.humidity_alert_max_pct < 100):
             raise HTTPException(status_code=422, detail="Порог влажности: от 1 до 99 %")
         settings_service.set_value(
-            db, environment_watch.HUMIDITY_MAX_KEY, data.humidity_alert_max_pct
+            db, homeassistant.HUMIDITY_MAX_KEY, data.humidity_alert_max_pct
         )
     if data.ha_enabled is not None:
         settings_service.set_value(db, homeassistant.ENABLED_KEY, data.ha_enabled)

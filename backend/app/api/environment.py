@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.deps import get_current_user
 from app.models import User
-from app.services import environment_watch, homeassistant
+from app.services import homeassistant
 
 router = APIRouter(prefix="/environment", tags=["environment"])
 
@@ -16,6 +16,8 @@ class SensorReading(BaseModel):
     temperature: float | None
     humidity: float | None
     battery: float | None
+    # Действующий порог влажности: свой у датчика либо общий из настроек.
+    humidity_max: float
     updated_at: str | None
     # Где показывать: рядом с местом хранения, с принтером или отдельной карточкой.
     bind_type: str | None
@@ -37,5 +39,5 @@ def read_environment(
     """Текущие показания датчиков. Пустой список = датчики не настроены."""
     return EnvironmentOut(
         sensors=homeassistant.read_sensors(db),
-        humidity_alert_max_pct=environment_watch.humidity_max(db),
+        humidity_alert_max_pct=homeassistant.humidity_max(db),
     )

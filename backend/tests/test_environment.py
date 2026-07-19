@@ -1,6 +1,6 @@
 """Разбор состояний Home Assistant и переходы влажности (без БД и сети)."""
 from app.services.environment_watch import HYSTERESIS_PCT, diff, is_high
-from app.services.homeassistant import _to_float, list_entities
+from app.services.homeassistant import _to_float, list_entities, sensor_threshold
 
 
 def _cur(humidity, high, temperature=None):
@@ -41,6 +41,25 @@ def test_entities_filtered_by_device_class(monkeypatch):
         "sensor.ace_pro_temp_hum_temperature",
         "sensor.ace_pro_temp_hum_humidity",
     }
+
+
+# --- порог у датчика ---------------------------------------------------------
+
+def test_own_threshold_wins_over_default():
+    # Сушилке нужен свой порог: нагрев занижает RH, и общие 45 % там не сработают.
+    assert sensor_threshold({"humidity_max": 25}, 45.0) == 25.0
+    assert sensor_threshold({"humidity_max": "30"}, 45.0) == 30.0
+
+
+def test_default_used_when_own_not_set():
+    assert sensor_threshold({}, 45.0) == 45.0
+    assert sensor_threshold({"humidity_max": None}, 45.0) == 45.0
+
+
+def test_bad_threshold_falls_back_to_default():
+    # Поле необязательное — мусор в нём не должен ломать наблюдение за датчиком.
+    for bad in ("", "很", 0, -5, 100, 150):
+        assert sensor_threshold({"humidity_max": bad}, 45.0) == 45.0
 
 
 # --- гистерезис --------------------------------------------------------------

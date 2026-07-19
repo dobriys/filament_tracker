@@ -568,7 +568,7 @@ export default function Settings() {
                 />
               </label>
               <label>
-                {t("Порог «влажность высокая», %")}
+                {t("Общий порог «влажность высокая», %")}
                 <input
                   type="number"
                   min="1"
@@ -578,7 +578,7 @@ export default function Settings() {
                 />
               </label>
               <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
-                {t("Выше порога показания подсвечиваются, а при включённом уведомлении «Влажность выше порога» приходит сообщение в Telegram.")}
+                {t("Применяется к датчикам, у которых не задан свой порог. Выше порога показания подсвечиваются, а при включённом уведомлении «Влажность выше порога» приходит сообщение в Telegram.")}
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button className="secondary" onClick={saveHaConnection} disabled={haBusy}>
@@ -643,6 +643,22 @@ export default function Settings() {
                         placeholder="sensor.ace_pro_temp_hum_battery"
                       />
                     </label>
+                    <label>
+                      {t("Свой порог влажности, % (необязательно)")}
+                      <input
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={sensor.humidity_max ?? ""}
+                        onChange={(e) => patchSensor(i, {
+                          humidity_max: e.target.value === "" ? null : Number(e.target.value),
+                        })}
+                        placeholder={`${t("как общий")} — ${s.humidity_alert_max_pct}%`}
+                      />
+                    </label>
+                    <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+                      {t("Пусто — берётся общий порог. Разным местам нужны разные значения: в сушилке нагрев занижает влажность, а нейлону и PVA нужен порог жёстче, чем PLA.")}
+                    </div>
                     <label>
                       {t("Где показывать")}
                       <select

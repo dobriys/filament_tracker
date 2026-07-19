@@ -278,8 +278,9 @@ function seed() {
       // на панели и в местах хранения — значения генерируются локально.
       humidity_alert_max_pct: 45, ha_enabled: true, ha_base_url: "http://homeassistant.local:8123", ha_token_set: true,
       ha_sensors: [
-        { id: "env-ace", name: "Сушилка ACE Pro", temp_entity: "sensor.ace_pro_temp_hum_temperature", humidity_entity: "sensor.ace_pro_temp_hum_humidity", battery_entity: "sensor.ace_pro_temp_hum_battery", bind_type: "printer", bind_id: "pr-ace" },
-        { id: "env-drybox", name: "Сухобокс", temp_entity: "sensor.drybox_temperature", humidity_entity: "sensor.drybox_humidity", battery_entity: "", bind_type: "location", bind_id: "loc-drybox" },
+        // У сушилки свой порог: нагрев занижает относительную влажность, общие 45 % там не сработают.
+        { id: "env-ace", name: "Сушилка ACE Pro", temp_entity: "sensor.ace_pro_temp_hum_temperature", humidity_entity: "sensor.ace_pro_temp_hum_humidity", battery_entity: "sensor.ace_pro_temp_hum_battery", humidity_max: 25, bind_type: "printer", bind_id: "pr-ace" },
+        { id: "env-drybox", name: "Сухобокс", temp_entity: "sensor.drybox_temperature", humidity_entity: "sensor.drybox_humidity", battery_entity: "", humidity_max: null, bind_type: "location", bind_id: "loc-drybox" },
       ],
     },
     seq: 4100,
@@ -462,6 +463,8 @@ function buildEnvironment() {
         temperature: drift(base.temperature, 0.6),
         humidity: drift(base.humidity, 1.2),
         battery: base.battery,
+        // Как на сервере: свой порог датчика либо общий.
+        humidity_max: s.humidity_max ?? (db.settings.humidity_alert_max_pct ?? 45),
         updated_at: now,
         bind_type: s.bind_type, bind_id: s.bind_id,
         error: null,

@@ -23,18 +23,9 @@ log = logging.getLogger("environment_watch")
 
 STATE_PREFIX = "env_watch:"
 
-# Порог «влажность высокая», проценты.
-HUMIDITY_MAX_KEY = "humidity_alert_max_pct"
-HUMIDITY_MAX_DEFAULT = 45.0
-# Запас на возврат в норму, проценты.
+# Запас на возврат в норму, проценты. Того же порядка, что и погрешность бытовых
+# датчиков (±3–5 % RH), — точнее различать всё равно нечем.
 HYSTERESIS_PCT = 2.0
-
-
-def humidity_max(db: Session) -> float:
-    try:
-        return float(settings_service.get_value(db, HUMIDITY_MAX_KEY, HUMIDITY_MAX_DEFAULT))
-    except (TypeError, ValueError):
-        return HUMIDITY_MAX_DEFAULT
 
 
 def is_high(humidity: float | None, threshold: float, *, was_high: bool) -> bool | None:
@@ -89,11 +80,13 @@ def watch_all(db: Session) -> None:
     if not notifications.get_events(db).get("humidity_high"):
         return
 
-    threshold = humidity_max(db)
     # Поллер ходит реже кэша, но у него свой процесс и свой кэш — берём свежее.
     for reading in homeassistant.read_sensors(db, use_cache=False):
         if reading.get("error"):
             continue
+        # Порог свой у каждого датчика (read_sensors уже подставил общий там,
+        # где собственный не задан).
+        threshold = reading["humidity_max"]
         key = f"{STATE_PREFIX}{reading['id']}"
         prev = settings_service.get_value(db, key)
         high = is_high(

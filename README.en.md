@@ -184,6 +184,24 @@ material was deducted.
   dashboard. Humidity above the threshold is highlighted and, if the notification is
   enabled, sent to Telegram. The token is stored encrypted; while the master switch is
   off, Home Assistant isn't polled.
+
+  The humidity threshold is set per sensor, and the one in settings acts as the
+  default. One number for everything doesn't work: inside a hot dryer the heat itself
+  lowers relative humidity (28 % at 46 °C holds more water in absolute terms than 50 %
+  at 22 °C), and nylon or PVA needs a far stricter threshold than PLA. Rough guide:
+
+  | Material | Threshold |
+  | --- | --- |
+  | PLA | 45–50 % |
+  | PETG | 40–45 % |
+  | ABS / ASA | 35–40 % |
+  | TPU | 30 % |
+  | PC | 25–30 % |
+  | PA (nylon) | 20 % |
+  | PVA / BVOH | 15 % |
+
+  Keep consumer sensor accuracy in mind (typically ±3–5 % RH) — very tight thresholds
+  aren't meaningful.
 - **Deduction** — allow the remaining amount to go negative.
 - **Diagnostics log** — opt-in recording of actions and errors for debugging: when
   something breaks, turn recording on, reproduce the problem, download the log and
