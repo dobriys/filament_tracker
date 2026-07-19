@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.core.security import decrypt_secret
 from app.models import AppSetting, Printer, PrinterSlot, PrintJob, User
 from app.services import diagnostics, notifications, print_job_service, settings_service
+from app.services import moonraker
 from app.services.moonraker import MoonrakerClient, job_to_parsed
 
 log = logging.getLogger("moonraker_sync")
@@ -64,11 +65,17 @@ def _imported_job_ids(db: Session, printer: Printer) -> set[str]:
 
 
 def _consumed_names(db: Session, printer: Printer) -> set[str]:
-    """Имена файлов уже списанных печатей (защита от двойного списания)."""
+    """Имена файлов списанных вручную печатей (защита от двойного списания).
+
+    Печати из Moonraker сюда не попадают: они отсеиваются точнее — по job_id.
+    Иначе повторная печать того же файла (например, после отмены и рестарта)
+    молча пропускалась бы как «уже списанная».
+    """
     rows = db.scalars(
         select(PrintJob).where(
             PrintJob.owner_user_id == printer.owner_user_id,
             PrintJob.status == "consumed",
+            PrintJob.source != "moonraker",
         )
     )
     return {
@@ -87,7 +94,13 @@ def pick_new_jobs(
     """Новые завершённые задания для импорта (чистая функция — тестируемая)."""
     out = []
     for j in jobs:
-        if j.get("status") != "completed":
+        if j.get("status") == "completed":
+            pass
+        elif moonraker.is_interrupted(j) and float(j.get("filament_used") or 0) > 0:
+            # Печать оборвали (отмена на принтере, ошибка) — филамент всё равно
+            # израсходован, списывать его нужно по факту.
+            pass
+        else:
             continue
         end = j.get("end_time") or 0
         if watermark is not None and end <= watermark:
@@ -122,6 +135,10 @@ def resolve_slot_mappings(tools: list[dict], slots: list) -> list[dict] | None:
             return None
         mappings.append({"tool_index": t["tool_index"], "slot_id": slot.id})
     return mappings if mappings else None
+
+
+def _loaded_slots(slots: list) -> int:
+    return sum(1 for s in slots if s.current_spool_id is not None)
 
 
 def poll_printer(db: Session, printer: Printer, *, auto_consume: bool) -> dict:
@@ -159,6 +176,17 @@ def poll_printer(db: Session, printer: Printer, *, auto_consume: bool) -> dict:
         )
         if auto_consume:
             mappings = resolve_slot_mappings(parsed.get("tools", []), slots)
+            if mappings and moonraker.is_interrupted(raw) and _loaded_slots(slots) > 1:
+                # У оборванной печати есть только суммарная длина: каким гейтом
+                # мультиподачи её выдавили — неизвестно. Не гадаем, оставляем
+                # черновик, чтобы не списать с чужой катушки.
+                mappings = None
+                diagnostics.event(
+                    "warning", "poller",
+                    f"Автосписание пропущено: печать «{job.file_name}» прервана, "
+                    "а катушек в слотах несколько — спишите вручную",
+                    category="consume", context={"printer": printer.name},
+                )
             if mappings:
                 try:
                     print_job_service.confirm_usage(

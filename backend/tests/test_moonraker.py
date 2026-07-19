@@ -36,6 +36,20 @@ def test_job_to_parsed_per_tool_grams():
     assert p["tools"][2]["material"] == "PLA"
     assert p["estimated_print_time_sec"] == 24517
 
+
+def test_job_to_parsed_interrupted_uses_actual_length():
+    """Печать остановили вручную: веса слайсера — от всей печати, брать нельзя."""
+    p = job_to_parsed({**KOBRA_JOB, "status": "cancelled", "filament_used": 8600.0})
+    assert p["total_filament_used_g"] is None
+    assert p["total_filament_used_mm"] == 8600.0
+    assert p["tool_count"] == 1
+    tool = p["tools"][0]
+    assert tool["used_g"] is None and tool["used_mm"] == 8600.0
+    # Материал и цвет подсказываем из метаданных — они от обрыва не зависят.
+    assert tool["material"] == "PLA"
+    assert tool["color_hex"] == "#7F868A"
+
+
 PRINTER_INFO = {
     "result": {
         "state": "ready",

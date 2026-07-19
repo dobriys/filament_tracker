@@ -343,6 +343,10 @@ function MoonrakerPanel({ printer, onClose }) {
                     </span>
                   ) : j.status === "completed" ? (
                     <button className="secondary" onClick={() => consumeJob(j.job_id)}>{t("Списать")}</button>
+                  ) : j.filament_used_mm > 0 ? (
+                    // Печать оборвана, но филамент израсходован — списываем по факту.
+                    <button className="secondary" title={t("Печать прервана — спишется фактически израсходованная длина")}
+                      onClick={() => consumeJob(j.job_id)}>{t("Списать по факту")}</button>
                   ) : null}
                 </td>
               </tr>

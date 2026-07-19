@@ -300,17 +300,32 @@ def parse_history(payload: dict) -> list[dict]:
     return out
 
 
+def is_interrupted(job: dict) -> bool:
+    """Печать оборвана (отмена вручную, ошибка, перезапуск хоста), а не доведена.
+
+    Moonraker кладёт в status «cancelled», «error», «klippy_shutdown» и т.п.
+    В отличие от completed, метаданные слайсера тут врут: они описывают всю
+    печать целиком, а реально израсходована только часть.
+    """
+    status = job.get("status")
+    return bool(status) and status not in ("completed", "in_progress")
+
+
 def job_to_parsed(job: dict) -> dict:
     """Конвертирует задание из истории Moonraker в наш формат print job.
 
     Anycubic/Rinkhals кладут в metadata пофиловый расход в граммах
     (filament_weights), материалы и цвета — этого достаточно для списания.
+
+    Для оборванных печатей веса слайсера игнорируются: единственная честная
+    величина — filament_used, длина, реально выдавленная до остановки.
     """
     meta = job.get("metadata", {}) or {}
-    weights = meta.get("filament_weights") or []
+    interrupted = is_interrupted(job)
+    weights = [] if interrupted else (meta.get("filament_weights") or [])
     types = [t.strip() for t in (meta.get("filament_type") or "").replace('"', "").split(";") if t.strip() != ""]
     colors = meta.get("filament_colors") or meta.get("extruder_colors") or []
-    n = max(len(weights), len(types), len(colors))
+    n = 0 if interrupted else max(len(weights), len(types), len(colors))
     tools = []
     for i in range(n):
         tools.append(
@@ -326,14 +341,15 @@ def job_to_parsed(job: dict) -> dict:
     total_mm = job.get("filament_used")
     if not tools and total_mm and float(total_mm) > 0:
         # Fallback: Moonraker не извлёк пофиловые веса (частый случай для
-        # временных .3mf_temp-файлов) — но суммарная длина есть. Заводим одну
-        # строку расхода по длине; граммы посчитаются из выбранной катушки при
-        # списании (диаметр × плотность).
+        # временных .3mf_temp-файлов) — но суммарная длина есть. Тот же путь для
+        # оборванной печати: пофиловый расклад неизвестен, есть только общая
+        # длина. Заводим одну строку расхода по длине; граммы посчитаются из
+        # выбранной катушки при списании (диаметр × плотность).
         tools.append(
             {
                 "tool_index": 0,
-                "material": _material_from_filename(job.get("filename")),
-                "color_hex": None,
+                "material": (types[0] if types else None) or _material_from_filename(job.get("filename")),
+                "color_hex": colors[0] if colors else None,
                 "used_g": None,
                 "used_mm": total_mm,
                 "density_g_cm3": None,
@@ -353,7 +369,9 @@ def job_to_parsed(job: dict) -> dict:
         "estimated_print_time_sec": int(est) if est else None,
         "filament_change_count": None,
         "tool_count": n,
-        "total_filament_used_g": meta.get("filament_weight_total"),
+        # Итог слайсера — для всей печати целиком; у оборванной он завысил бы
+        # расход, поэтому там остаётся только фактическая длина.
+        "total_filament_used_g": None if interrupted else meta.get("filament_weight_total"),
         "total_filament_used_mm": total_mm,
         "tools": tools,
     }

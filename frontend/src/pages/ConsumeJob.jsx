@@ -101,7 +101,12 @@ export default function ConsumeJob() {
       <Link to="/print-jobs">{t("← История печати")}</Link>
       <h2 style={{ margin: "6px 0 4px" }}>{t("Списание печати")}</h2>
       <div className="muted" style={{ marginBottom: 16 }}>
-        {job.file_name} · {job.slicer_name || "?"}{" "}{t("· всего")}{" "}{job.total_filament_used_g != null ? Number(job.total_filament_used_g).toFixed(2) : "—"} {t("г")}
+        {job.file_name} · {job.slicer_name || "?"}{" "}{t("· всего")}{" "}
+        {job.total_filament_used_g != null
+          ? `${Number(job.total_filament_used_g).toFixed(2)} ${t("г")}`
+          : job.total_filament_used_mm > 0
+            ? `${(Number(job.total_filament_used_mm) / 1000).toFixed(2)} ${t("м")}`
+            : "—"}
       </div>
       {error && <div className="error" style={{ marginBottom: 12 }}>{error}</div>}
 

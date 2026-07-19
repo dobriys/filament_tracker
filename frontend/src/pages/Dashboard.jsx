@@ -409,7 +409,12 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
     };
   }, [printer.id, dryer?.status]);
 
-  const canConsume = job && job.status === "completed" && !job.consumed;
+  // Оборванную печать (отмена на принтере, ошибка) тоже списываем — по факту
+  // выдавленной длины, если она есть.
+  const jobInterrupted = job && job.status !== "completed" && job.status !== "in_progress";
+  const canConsume =
+    job && !job.consumed &&
+    (job.status === "completed" || (jobInterrupted && job.filament_used_mm > 0));
   async function consume() {
     setErr(null); setBusy(true);
     try {
@@ -533,11 +538,12 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
                   disabled={!canConsume || busy}
                   title={
                     job?.consumed ? t("По этой печати материал уже списан")
+                    : canConsume && jobInterrupted ? t("Печать прервана — списать фактически израсходованное")
                     : canConsume ? t("Списать материал по этой печати")
                     : t("Доступно после завершения печати")
                   }
                 >
-                  {job?.consumed ? t("Списано ✓") : t("Списать")}
+                  {job?.consumed ? t("Списано ✓") : canConsume && jobInterrupted ? t("Списать по факту") : t("Списать")}
                 </button>
                 <button className="secondary" onClick={() => navigate(`/printers?moonraker=${printer.id}`)}>{t("Завершённые задания →")}</button>
               </div>

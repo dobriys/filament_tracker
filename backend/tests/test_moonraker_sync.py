@@ -14,11 +14,23 @@ def test_pick_new_jobs_watermark_and_status():
     jobs = [
         _job("1", end=50),                      # старше водяного знака
         _job("2", end=150),                     # новое — берём
-        _job("3", end=160, status="cancelled"), # не completed
+        _job("3", end=160, status="cancelled"), # оборвана и ничего не выдавила
         _job("4", end=170),                     # новое — берём
     ]
     out = pick_new_jobs(jobs, watermark=100, imported_ids=set(), consumed_names=set())
     assert [j["job_id"] for j in out] == ["2", "4"]
+
+
+def test_pick_new_jobs_takes_interrupted_with_real_usage():
+    """Отменённая на принтере печать израсходовала филамент — её надо списать."""
+    jobs = [
+        _job("5", end=150, status="cancelled") | {"filament_used": 4200.0},
+        _job("6", end=160, status="error") | {"filament_used": 90.0},
+        _job("7", end=170, status="cancelled") | {"filament_used": 0},
+        _job("8", end=180, status="in_progress") | {"filament_used": 300.0},
+    ]
+    out = pick_new_jobs(jobs, watermark=100, imported_ids=set(), consumed_names=set())
+    assert [j["job_id"] for j in out] == ["5", "6"]
 
 
 def test_pick_new_jobs_skips_imported_and_consumed_names():
