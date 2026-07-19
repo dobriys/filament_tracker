@@ -9,7 +9,7 @@ import time
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.services import diagnostics, moonraker_sync, printer_watch
+from app.services import diagnostics, environment_watch, moonraker_sync, printer_watch
 from app.services.secret_service import ensure_secrets
 
 logging.basicConfig(
@@ -35,6 +35,8 @@ def main() -> None:
             moonraker_sync.poll_all(db)
             # Живое состояние принтеров → уведомления (история этого не видит).
             printer_watch.watch_all(db)
+            # Влажность в шкафу/сушилке по датчикам Home Assistant.
+            environment_watch.watch_all(db)
         except Exception as e:
             log.exception("poll cycle failed")
             diagnostics.event(

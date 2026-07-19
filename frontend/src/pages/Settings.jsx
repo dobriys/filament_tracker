@@ -16,6 +16,11 @@ export default function Settings() {
     telegram_token_set: false,
     telegram_events: {},
     spool_low_threshold_g: 100,
+    humidity_alert_max_pct: 45,
+    ha_enabled: false,
+    ha_base_url: "",
+    ha_token_set: false,
+    ha_sensors: [],
   });
   const [log, setLog] = useState(null); // null = не загружен, {entries,total} = загружен
   const [logFilter, setLogFilter] = useState({ level: "", source: "", q: "" });
@@ -33,6 +38,18 @@ export default function Settings() {
   // Свой статус рядом с кнопками: общий msg рисуется вверху страницы, а карточка
   // Telegram далеко внизу — результат «Отправить тест» туда просто не видно.
   const [tgMsg, setTgMsg] = useState(null);
+  // Home Assistant. Токен, как и телеграмный, с сервера не приходит.
+  const [haUrl, setHaUrl] = useState("");
+  const [haToken, setHaToken] = useState("");
+  const [haWet, setHaWet] = useState("");
+  const [haSensors, setHaSensors] = useState([]);
+  const [haEntities, setHaEntities] = useState(null); // null = список ещё не загружен
+  const [haBusy, setHaBusy] = useState(false);
+  // Есть ли неотправленные правки списка датчиков.
+  const [haDirty, setHaDirty] = useState(false);
+  const [haMsg, setHaMsg] = useState(null);
+  const [printers, setPrinters] = useState([]);
+  const [locations, setLocations] = useState([]);
   const fileRef = useRef();
 
   useEffect(() => {
@@ -40,9 +57,15 @@ export default function Settings() {
       setS(v);
       setTgChat(v.telegram_chat_id || "");
       setTgLow(String(v.spool_low_threshold_g ?? 100));
+      setHaUrl(v.ha_base_url || "");
+      setHaWet(String(v.humidity_alert_max_pct ?? 45));
+      setHaSensors(v.ha_sensors || []);
     }).catch(() => {});
     api.get("/health").then((h) => setServerVersion(h.version)).catch(() => {});
     api.get("/api/filament-catalog/info").then(setCatalogInfo).catch(() => {});
+    // Для выпадающих списков привязки датчика.
+    api.get("/api/printers").then(setPrinters).catch(() => {});
+    api.get("/api/locations").then(setLocations).catch(() => {});
   }, []);
 
   async function refreshCatalog() {
@@ -130,6 +153,7 @@ export default function Settings() {
     ["printer_offline", t("Принтер недоступен / снова на связи")],
     ["consume_failed", t("Автосписание не выполнено")],
     ["spool_low", t("Катушка заканчивается")],
+    ["humidity_high", t("Влажность выше порога")],
   ];
 
   async function saveTelegram(patch) {
@@ -195,6 +219,97 @@ export default function Settings() {
     }
     setTgBusy(false);
   }
+
+  // --- Home Assistant --------------------------------------------------------
+
+  async function saveHa(patch) {
+    setMsg(null);
+    setHaMsg(null);
+    setHaBusy(true);
+    try {
+      const next = await api.put("/api/settings", patch);
+      setS(next);
+      setHaSensors(next.ha_sensors || []);
+      if (patch.ha_sensors) setHaDirty(false);
+      setHaMsg({ ok: true, text: t("Настройка сохранена") });
+      if (patch.ha_token) setHaToken("");
+      return true;
+    } catch (err) {
+      setHaMsg({ ok: false, text: err.message });
+      return false;
+    } finally {
+      setHaBusy(false);
+    }
+  }
+
+  function saveHaConnection() {
+    const patch = { ha_base_url: haUrl.trim() };
+    // Пустое поле токена = «не менять».
+    if (haToken.trim()) patch.ha_token = haToken.trim();
+    const wet = Number(haWet);
+    if (wet > 0 && wet < 100) patch.humidity_alert_max_pct = wet;
+    return saveHa(patch);
+  }
+
+  async function testHa() {
+    setHaMsg(null);
+    setHaBusy(true);
+    try {
+      const r = await api.post("/api/settings/homeassistant/test");
+      setHaMsg({ ok: true, text: `${t("Home Assistant отвечает. Найдено датчиков:")} ${r.sensors_found}` });
+    } catch (err) {
+      setHaMsg({ ok: false, text: err.message });
+    }
+    setHaBusy(false);
+  }
+
+  async function loadHaEntities() {
+    setHaMsg(null);
+    setHaBusy(true);
+    try {
+      const r = await api.get("/api/settings/homeassistant/entities");
+      setHaEntities(r.entities || []);
+      setHaMsg({ ok: true, text: `${t("Загружено датчиков:")} ${r.entities.length}. ${t("Теперь поля подсказывают варианты.")}` });
+    } catch (err) {
+      setHaMsg({ ok: false, text: err.message });
+    }
+    setHaBusy(false);
+  }
+
+  // Правки списка датчиков живут в состоянии до нажатия «Сохранить датчики»:
+  // сохранять на каждую букву в поле entity_id смысла нет, а недозаполненный
+  // датчик (без единой сущности) сервер отбросит — и строка исчезнет прямо
+  // из-под рук. Поэтому правки копятся, а флаг ниже показывает, что они есть.
+  function patchSensor(i, patch) {
+    setHaSensors((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+    setHaDirty(true);
+  }
+  function addSensor() {
+    setHaSensors((prev) => [...prev, { name: "", temp_entity: "", humidity_entity: "", battery_entity: "", bind_type: null, bind_id: null }]);
+    setHaDirty(true);
+  }
+  function removeSensor(i) {
+    setHaSensors((prev) => prev.filter((_, idx) => idx !== i));
+    setHaDirty(true);
+  }
+
+  // Куда попадут показания при выбранной привязке — иначе эффект селекта виден
+  // только на других страницах и выглядит так, будто ничего не произошло.
+  function bindHint(sensor) {
+    if (sensor.bind_type === "printer") {
+      const p = printers.find((x) => x.id === sensor.bind_id);
+      return p ? `${t("Показания появятся на панели под карточкой принтера")} «${p.name}».` : null;
+    }
+    if (sensor.bind_type === "location") {
+      const l = locations.find((x) => x.id === sensor.bind_id);
+      return l ? `${t("Показания появятся в разделе «Места хранения», в строке")} «${l.name}».` : null;
+    }
+    return t("Показания появятся на панели отдельной карточкой «Условия хранения».");
+  }
+
+  // Подсказки для полей entity_id: HA-сущности нужного класса.
+  const entityOptions = (deviceClass) =>
+    (haEntities || []).filter((e) => e.device_class === deviceClass);
 
   async function loadLog(f = logFilter) {
     setMsg(null);
@@ -415,6 +530,179 @@ export default function Settings() {
                   {label}
                 </label>
               ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="card">
+        <h3>{t("Датчики температуры и влажности (Home Assistant)")}</h3>
+        <p className="muted">
+          {t("Показания zigbee/wifi-датчиков из вашего Home Assistant — на панели, рядом с принтером и в местах хранения. Нужен адрес HA и токен долгосрочного доступа (профиль в HA → «Токены долгосрочного доступа»).")}
+        </p>
+        {!isAdmin && <div className="muted">{t("Доступно только администратору.")}</div>}
+        {isAdmin && (
+          <>
+            <Toggle
+              k="ha_enabled"
+              label={t("Показывать показания датчиков")}
+              hint={t("Общий выключатель: пока выключен, Home Assistant не опрашивается.")}
+            />
+            <div style={{ display: "grid", gap: 8, maxWidth: 420, marginTop: 12 }}>
+              <label>
+                {t("Адрес Home Assistant")}
+                <input
+                  value={haUrl}
+                  onChange={(e) => setHaUrl(e.target.value)}
+                  placeholder="http://homeassistant.local:8123"
+                />
+              </label>
+              <label>
+                {t("Токен долгосрочного доступа")}
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={haToken}
+                  onChange={(e) => setHaToken(e.target.value)}
+                  placeholder={s.ha_token_set ? t("Токен сохранён — введите новый, чтобы заменить") : "eyJhbGciOi..."}
+                />
+              </label>
+              <label>
+                {t("Порог «влажность высокая», %")}
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={haWet}
+                  onChange={(e) => setHaWet(e.target.value)}
+                />
+              </label>
+              <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+                {t("Выше порога показания подсвечиваются, а при включённом уведомлении «Влажность выше порога» приходит сообщение в Telegram.")}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="secondary" onClick={saveHaConnection} disabled={haBusy}>
+                  {t("Сохранить")}
+                </button>
+                <button className="secondary" onClick={testHa} disabled={haBusy || !s.ha_token_set || !s.ha_base_url}>
+                  {t("Проверить связь")}
+                </button>
+                <button className="secondary" onClick={loadHaEntities} disabled={haBusy || !s.ha_token_set || !s.ha_base_url}>
+                  {t("Загрузить список датчиков")}
+                </button>
+              </div>
+              {haMsg && (
+                <div className={haMsg.ok ? "muted" : "error"} style={{ fontSize: 13 }}>
+                  {haMsg.text}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div className="card-sub" style={{ marginBottom: 8 }}>{t("Датчики")}</div>
+              {haSensors.length === 0 && (
+                <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+                  {t("Датчики не добавлены. Нажмите «Добавить датчик» и укажите сущности температуры и влажности.")}
+                </div>
+              )}
+              {haSensors.map((sensor, i) => (
+                <div key={i} className="card" style={{ background: "var(--panel-2)", marginBottom: 10 }}>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <label>
+                      {t("Название")}
+                      <input
+                        value={sensor.name || ""}
+                        onChange={(e) => patchSensor(i, { name: e.target.value })}
+                        placeholder={t("Сушилка ACE Pro")}
+                      />
+                    </label>
+                    <label>
+                      {t("Сущность температуры")}
+                      <input
+                        list="ha-temp-entities"
+                        value={sensor.temp_entity || ""}
+                        onChange={(e) => patchSensor(i, { temp_entity: e.target.value })}
+                        placeholder="sensor.ace_pro_temp_hum_temperature"
+                      />
+                    </label>
+                    <label>
+                      {t("Сущность влажности")}
+                      <input
+                        list="ha-humidity-entities"
+                        value={sensor.humidity_entity || ""}
+                        onChange={(e) => patchSensor(i, { humidity_entity: e.target.value })}
+                        placeholder="sensor.ace_pro_temp_hum_humidity"
+                      />
+                    </label>
+                    <label>
+                      {t("Сущность заряда батареи (необязательно)")}
+                      <input
+                        list="ha-battery-entities"
+                        value={sensor.battery_entity || ""}
+                        onChange={(e) => patchSensor(i, { battery_entity: e.target.value })}
+                        placeholder="sensor.ace_pro_temp_hum_battery"
+                      />
+                    </label>
+                    <label>
+                      {t("Где показывать")}
+                      <select
+                        value={sensor.bind_type && sensor.bind_id ? `${sensor.bind_type}:${sensor.bind_id}` : ""}
+                        onChange={(e) => {
+                          const [bind_type, bind_id] = e.target.value ? e.target.value.split(":") : [null, null];
+                          patchSensor(i, { bind_type, bind_id });
+                        }}
+                      >
+                        <option value="">{t("Отдельным блоком на панели")}</option>
+                        {printers.map((p) => (
+                          <option key={p.id} value={`printer:${p.id}`}>{t("Принтер")}: {p.name}</option>
+                        ))}
+                        {locations.map((l) => (
+                          <option key={l.id} value={`location:${l.id}`}>{t("Место хранения")}: {l.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+                      {bindHint(sensor)}
+                    </div>
+                    <div>
+                      <button className="danger secondary" onClick={() => removeSensor(i)}>
+                        {t("Удалить датчик")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <button className="secondary" onClick={addSensor}>{t("Добавить датчик")}</button>
+                {/* Пока правки не отправлены — кнопка обычная (акцентная), иначе
+                    нечем отличить сохранённое состояние от несохранённого. */}
+                <button
+                  className={haDirty ? "" : "secondary"}
+                  onClick={() => saveHa({ ha_sensors: haSensors })}
+                  disabled={haBusy || !haDirty}
+                >
+                  {t("Сохранить датчики")}
+                </button>
+                {haDirty && (
+                  <span className="badge almost_empty">{t("есть несохранённые изменения")}</span>
+                )}
+              </div>
+              {/* Подсказки к полям entity_id — заполняются кнопкой «Загрузить список датчиков». */}
+              <datalist id="ha-temp-entities">
+                {entityOptions("temperature").map((e) => (
+                  <option key={e.entity_id} value={e.entity_id}>{e.name}</option>
+                ))}
+              </datalist>
+              <datalist id="ha-humidity-entities">
+                {entityOptions("humidity").map((e) => (
+                  <option key={e.entity_id} value={e.entity_id}>{e.name}</option>
+                ))}
+              </datalist>
+              <datalist id="ha-battery-entities">
+                {entityOptions("battery").map((e) => (
+                  <option key={e.entity_id} value={e.entity_id}>{e.name}</option>
+                ))}
+              </datalist>
             </div>
           </>
         )}

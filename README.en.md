@@ -49,6 +49,8 @@ your data on your own server. Interface in English and Russian.
   (optional).
 - 📨 **Telegram notifications** — print finished, error, paused, drying, spool running
   low. Every event type is toggled on its own.
+- 🌡️ **Home Assistant sensors** — temperature and humidity in the dryer and storage
+  locations on the dashboard; above the threshold you get a highlight and a notification.
 - 📄 **gcode estimation** — upload a file and the app computes usage per extruder and
   deducts from the right spools.
 - 🏷️ **Labels and QR codes** — print stickers with a live preview; scanning the QR
@@ -163,11 +165,25 @@ material was deducted.
   | Printer offline / back online | — |
   | Auto-deduction failed | ✅ |
   | Spool running low (threshold configurable) | ✅ |
+  | Humidity above threshold (Home Assistant sensor) | ✅ |
 
   Printer state is tracked by the background poller, so notifications arrive even when
   the app isn't open in a browser. The bot token is stored encrypted and never returned
   by the API. While the master switch is off, printers aren't polled for notifications
   at all.
+- **Temperature and humidity sensors (Home Assistant)** — if you run Home Assistant,
+  the app shows your sensor readings where they matter: on the dashboard, under the
+  printer card and in the storage location list. Enter the HA address (e.g.
+  `http://homeassistant.local:8123`) and a long-lived access token (HA profile → "Long-lived
+  access tokens"), then press "Load sensor list" and the entity fields start suggesting
+  options. The sensor's origin doesn't matter — zigbee2mqtt, ESPHome, Bluetooth — the
+  app reads the ready state from HA.
+
+  Each sensor is bound to a printer (readings sit next to the dryer), to a storage
+  location (visible in the location list), or shown as a separate block on the
+  dashboard. Humidity above the threshold is highlighted and, if the notification is
+  enabled, sent to Telegram. The token is stored encrypted; while the master switch is
+  off, Home Assistant isn't polled.
 - **Deduction** — allow the remaining amount to go negative.
 - **Diagnostics log** — opt-in recording of actions and errors for debugging: when
   something breaks, turn recording on, reproduce the problem, download the log and

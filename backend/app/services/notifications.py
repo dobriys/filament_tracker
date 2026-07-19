@@ -8,7 +8,8 @@
   - printer_watch сравнивает живое состояние принтера с прошлым циклом и
     выдаёт события печати/сушки/доступности;
   - moonraker_sync шлёт «автосписание не удалось»;
-  - print_job_service — «катушка заканчивается» после списания.
+  - print_job_service — «катушка заканчивается» после списания;
+  - environment_watch — «влажность выше порога» по датчикам Home Assistant.
 
 Отправка никогда не должна ронять вызывающий код: любая ошибка сети или
 конфига гасится и уходит в диагностический журнал.
@@ -45,6 +46,7 @@ EVENTS: dict[str, bool] = {
     "dryer_finished": True,
     "consume_failed": True,
     "spool_low": True,
+    "humidity_high": True,
 }
 
 TELEGRAM_API = "https://api.telegram.org"

@@ -1021,3 +1021,36 @@ label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted)
 }
 .demo-banner-reset:hover { background: rgba(255, 255, 255, 0.3); }
 
+
+/* Датчики температуры и влажности (Home Assistant). Плашка живёт в трёх местах
+   — на панели, под карточкой принтера и в таблице мест хранения, — поэтому
+   тянется по ширине контейнера, а не задаёт свою. */
+.env-row { padding: 14px 20px; margin-top: -12px; }
+.env-row .card-sub { margin: 0 0 10px; }
+.env-sensor-list {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;
+}
+.env-sensor {
+  min-width: 0; padding: 12px 14px; border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--panel-2) 88%, var(--panel));
+}
+/* Влажность выше порога — филамент в этот момент набирает влагу. */
+.env-sensor.wet {
+  border-color: var(--badge-warn-text);
+  background: color-mix(in srgb, var(--badge-warn-bg) 55%, var(--panel-2));
+}
+.env-sensor-name { font-weight: 700; margin-bottom: 8px; overflow-wrap: anywhere; }
+.env-sensor-metrics { display: flex; gap: 18px; flex-wrap: wrap; }
+.env-sensor-metric { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.env-sensor-metric span {
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.env-sensor-metric b {
+  font-size: 20px; line-height: 1.05; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.env-sensor-foot {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 8px; font-size: 12px;
+}
+.env-sensor-error { color: var(--muted); font-size: 13px; }

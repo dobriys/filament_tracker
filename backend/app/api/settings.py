@@ -5,7 +5,13 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.deps import get_current_user, require_admin
 from app.models import User
-from app.services import diagnostics, notifications, settings_service
+from app.services import (
+    diagnostics,
+    environment_watch,
+    homeassistant,
+    notifications,
+    settings_service,
+)
 from app.services.moonraker_sync import AUTO_CONSUME_KEY, AUTO_IMPORT_KEY
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -22,6 +28,12 @@ class SettingsOut(BaseModel):
     telegram_token_set: bool
     telegram_events: dict[str, bool]
     spool_low_threshold_g: float
+    humidity_alert_max_pct: float
+    ha_enabled: bool
+    ha_base_url: str | None
+    # Токен наружу не отдаём — только признак, что он сохранён.
+    ha_token_set: bool
+    ha_sensors: list[dict]
 
 
 class SettingsUpdate(BaseModel):
@@ -35,6 +47,12 @@ class SettingsUpdate(BaseModel):
     telegram_bot_token: str | None = None
     telegram_events: dict[str, bool] | None = None
     spool_low_threshold_g: float | None = None
+    humidity_alert_max_pct: float | None = None
+    ha_enabled: bool | None = None
+    ha_base_url: str | None = None
+    # Пустая строка — стереть сохранённый токен.
+    ha_token: str | None = None
+    ha_sensors: list[dict] | None = None
 
 
 def _current(db: Session) -> SettingsOut:
@@ -50,6 +68,11 @@ def _current(db: Session) -> SettingsOut:
         telegram_token_set=bool(settings_service.get_value(db, notifications.TOKEN_KEY)),
         telegram_events=notifications.get_events(db),
         spool_low_threshold_g=notifications.spool_low_threshold(db),
+        humidity_alert_max_pct=environment_watch.humidity_max(db),
+        ha_enabled=settings_service.get_bool(db, homeassistant.ENABLED_KEY, default=False),
+        ha_base_url=homeassistant.get_base_url(db),
+        ha_token_set=bool(settings_service.get_value(db, homeassistant.TOKEN_KEY)),
+        ha_sensors=homeassistant.get_sensors(db),
     )
 
 
@@ -93,7 +116,58 @@ def update_settings(
         settings_service.set_value(
             db, notifications.SPOOL_LOW_KEY, data.spool_low_threshold_g
         )
+    if data.humidity_alert_max_pct is not None:
+        if not (0 < data.humidity_alert_max_pct < 100):
+            raise HTTPException(status_code=422, detail="Порог влажности: от 1 до 99 %")
+        settings_service.set_value(
+            db, environment_watch.HUMIDITY_MAX_KEY, data.humidity_alert_max_pct
+        )
+    if data.ha_enabled is not None:
+        settings_service.set_value(db, homeassistant.ENABLED_KEY, data.ha_enabled)
+    if data.ha_base_url is not None:
+        url = data.ha_base_url.strip().rstrip("/")
+        if url and not url.startswith(("http://", "https://")):
+            url = f"http://{url}"  # адрес обычно вводят как 192.168.0.63:8123
+        settings_service.set_value(db, homeassistant.BASE_URL_KEY, url or None)
+    if data.ha_token is not None:
+        homeassistant.set_token(db, data.ha_token.strip() or None)
+    if data.ha_sensors is not None:
+        homeassistant.set_sensors(db, data.ha_sensors)
+    # Адрес, токен и состав датчиков меняют то, что лежит в кэше опроса.
+    if (data.ha_base_url, data.ha_token, data.ha_sensors) != (None, None, None):
+        homeassistant.invalidate_cache()
     return _current(db)
+
+
+@router.get("/homeassistant/entities")
+def homeassistant_entities(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Датчики температуры/влажности/заряда из HA — для выбора в настройках."""
+    base_url, token = homeassistant.get_base_url(db), homeassistant.get_token(db)
+    if not base_url or not token:
+        raise HTTPException(status_code=422, detail="Сначала укажите адрес и токен Home Assistant")
+    try:
+        return {"entities": homeassistant.list_entities(base_url, token)}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=homeassistant.explain_error(str(e)))
+
+
+@router.post("/homeassistant/test")
+def homeassistant_test(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Проверить связь с Home Assistant текущими настройками."""
+    base_url, token = homeassistant.get_base_url(db), homeassistant.get_token(db)
+    if not base_url or not token:
+        raise HTTPException(status_code=422, detail="Укажите адрес и токен Home Assistant")
+    try:
+        entities = homeassistant.list_entities(base_url, token)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=homeassistant.explain_error(str(e)))
+    return {"ok": True, "sensors_found": len(entities)}
 
 
 @router.post("/telegram/detect-chat")

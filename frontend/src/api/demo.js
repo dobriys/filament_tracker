@@ -272,7 +272,16 @@ function seed() {
   return {
     user: USER, locations, profiles, spools, events, printers, slots, slotHistory,
     mrJobs, printJobs,
-    settings: { allow_negative_consumption: false, moonraker_auto_import: true, moonraker_auto_consume: false, error_logging: false },
+    settings: {
+      allow_negative_consumption: false, moonraker_auto_import: true, moonraker_auto_consume: false, error_logging: false,
+      // Датчики Home Assistant: в демо «подключены», чтобы показания было видно
+      // на панели и в местах хранения — значения генерируются локально.
+      humidity_alert_max_pct: 45, ha_enabled: true, ha_base_url: "http://homeassistant.local:8123", ha_token_set: true,
+      ha_sensors: [
+        { id: "env-ace", name: "Сушилка ACE Pro", temp_entity: "sensor.ace_pro_temp_hum_temperature", humidity_entity: "sensor.ace_pro_temp_hum_humidity", battery_entity: "sensor.ace_pro_temp_hum_battery", bind_type: "printer", bind_id: "pr-ace" },
+        { id: "env-drybox", name: "Сухобокс", temp_entity: "sensor.drybox_temperature", humidity_entity: "sensor.drybox_humidity", battery_entity: "", bind_type: "location", bind_id: "loc-drybox" },
+      ],
+    },
     seq: 4100,
   };
 }
@@ -433,6 +442,33 @@ function jobCost(pj) {
 // ---------------------------------------------------------------------------
 const MONTHS_RU = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
 const ACTIVITY_TYPE = { created: "added", print_usage: "used", manual_adjustment: "updated", weighed: "updated", moved: "moved", archived: "updated", dried: "updated" };
+
+// Показания датчиков для демо. Значения слегка «дышат» вокруг правдоподобных:
+// в сушилке жарко и сухо, в сухобоксе прохладно и чуть выше порога — чтобы на
+// панели было видно и обычное состояние, и подсветку превышения.
+function buildEnvironment() {
+  const drift = (base, spread) => Math.round((base + (Math.random() - 0.5) * spread) * 10) / 10;
+  const BASE = {
+    "env-ace": { temperature: 46.3, humidity: 27.9, battery: 95 },
+    "env-drybox": { temperature: 22.4, humidity: 47.5, battery: null },
+  };
+  const now = new Date().toISOString();
+  return {
+    humidity_alert_max_pct: db.settings.humidity_alert_max_pct ?? 45,
+    sensors: (db.settings.ha_sensors || []).map((s) => {
+      const base = BASE[s.id] || { temperature: 23, humidity: 40, battery: null };
+      return {
+        id: s.id, name: s.name,
+        temperature: drift(base.temperature, 0.6),
+        humidity: drift(base.humidity, 1.2),
+        battery: base.battery,
+        updated_at: now,
+        bind_type: s.bind_type, bind_id: s.bind_id,
+        error: null,
+      };
+    }),
+  };
+}
 
 function buildDashboard() {
   const now = new Date();
@@ -736,6 +772,9 @@ function dispatch(method, rawPath, { body, form, fileName } = {}) {
 
   // --- dashboard ---
   if (path === "/api/dashboard") return buildDashboard();
+
+  // --- environment (в демо Home Assistant нет — показания генерируются) ---
+  if (path === "/api/environment") return buildEnvironment();
 
   // --- catalog ---
   if (r === "filament-catalog") {

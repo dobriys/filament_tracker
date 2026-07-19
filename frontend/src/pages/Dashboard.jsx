@@ -5,6 +5,7 @@ import { fmtMoney } from "../format.js";
 import { t, tReason } from "../i18n.js";
 import { GateChips } from "../components/HubGates.jsx";
 import { PrinterArt, brandAccent } from "../components/PrinterArt.jsx";
+import EnvSensor, { useEnvSensors } from "../components/EnvSensor.jsx";
 
 const MAT_COLORS = ["#2e6be6", "#3d4657", "#17a34a", "#f6a723", "#8a5fbf", "#e0526e", "#17a2a6", "#9aa1ab"];
 
@@ -330,7 +331,7 @@ function DryerControls({ printer, dryer, onChanged, row = false }) {
   );
 }
 
-function MoonrakerCard({ printer, navigate, onTotals }) {
+function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax }) {
   const [status, setStatus] = useState(null);
   const [gates, setGates] = useState([]);
   const [dryer, setDryer] = useState(null);
@@ -559,6 +560,18 @@ function MoonrakerCard({ printer, navigate, onTotals }) {
         <DryerControls printer={printer} dryer={dryer} onChanged={loadOverview} row />
       </div>
     )}
+    {/* Датчики Home Assistant, привязанные к этому принтеру: показания рядом с
+        сушилкой, потому что обычно датчик и лежит внутри неё. */}
+    {sensors.length > 0 && (
+      <div className="card env-row">
+        <div className="card-sub">{t("Условия рядом с принтером")}</div>
+        <div className="env-sensor-list">
+          {sensors.map((s) => (
+            <EnvSensor key={s.id} sensor={s} threshold={humidityMax} />
+          ))}
+        </div>
+      </div>
+    )}
     </>
   );
 }
@@ -617,6 +630,12 @@ export default function Dashboard() {
   const [lifetimes, setLifetimes] = useState({}); // printerId -> totals (поднято из карточек)
   const navigate = useNavigate();
   const onTotals = (id, totals) => setLifetimes((prev) => ({ ...prev, [id]: totals }));
+  const { sensors, humidity_alert_max_pct: humidityMax } = useEnvSensors();
+  // Привязанные к принтеру показываются на его карточке, остальные — общим
+  // блоком: дублировать один и тот же датчик в двух местах смысла нет.
+  const sensorsFor = (printerId) =>
+    sensors.filter((s) => s.bind_type === "printer" && s.bind_id === printerId);
+  const looseSensors = sensors.filter((s) => s.bind_type !== "printer");
 
   useEffect(() => {
     api.get("/api/dashboard").then(setD).catch(() => {});
@@ -644,7 +663,28 @@ export default function Dashboard() {
 
       {mrPrinters.length > 0 && (
         <div className="dash-printers">
-          {mrPrinters.map((p) => <MoonrakerCard key={p.id} printer={p} navigate={navigate} onTotals={onTotals} />)}
+          {mrPrinters.map((p) => (
+            <MoonrakerCard
+              key={p.id}
+              printer={p}
+              navigate={navigate}
+              onTotals={onTotals}
+              sensors={sensorsFor(p.id)}
+              humidityMax={humidityMax}
+            />
+          ))}
+        </div>
+      )}
+
+      {looseSensors.length > 0 && (
+        <div className="card">
+          <h3 className="card-title">{t("Условия хранения")}</h3>
+          <div className="card-sub">{t("Температура и влажность по датчикам Home Assistant.")}</div>
+          <div className="env-sensor-list" style={{ marginTop: 12 }}>
+            {looseSensors.map((s) => (
+              <EnvSensor key={s.id} sensor={s} threshold={humidityMax} />
+            ))}
+          </div>
         </div>
       )}
 
