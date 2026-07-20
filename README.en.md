@@ -117,9 +117,10 @@ label.
 
 ![Spools](docs/screenshots/en/spools.png)
 
-The spool page gathers everything in one place: grams and meters remaining, the
-recommended print profile, usage history, QR code, placement, and the full filament
-spec sheet.
+The spool page opens with the thing you came for: how much is left. The winding on
+the gauge shows the remaining amount in the filament's own color, with a color
+sample and its hex code beside it. Further down the same page: placement and drying,
+the full spec sheet, a QR code for the label, and usage history.
 
 ![Spool detail](docs/screenshots/en/spool-detail.png)
 
