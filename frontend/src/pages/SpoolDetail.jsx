@@ -331,7 +331,9 @@ export default function SpoolDetail() {
                     <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
                       <span className="muted" style={{ width: 60 }}>{t("Поле")}{" "}{i + 1}</span>
                       <select value={val} style={{ flex: 1 }} onChange={(e) => { const n = [...fieldSlots]; n[i] = e.target.value; setFieldSlots(n); }}>
-                        {(labelOpts?.fields || []).map((f) => <option key={f.key} value={f.key}>{f.label || t("— нет —")}</option>)}
+                        {/* Названия полей приходят с сервера, но это подписи интерфейса,
+                            а не данные пользователя — прогоняем через словарь. */}
+                        {(labelOpts?.fields || []).map((f) => <option key={f.key} value={f.key}>{f.label ? t(f.label) : t("— нет —")}</option>)}
                       </select>
                     </div>
                   ))}

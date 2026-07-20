@@ -503,7 +503,7 @@ export default function Settings() {
         <div className="card-sub" style={{ marginBottom: 12 }}>
           {t("Что приложение делает с завершёнными печатями с принтера.")}
         </div>
-        <div className="seg-toggle" role="tablist" aria-label={t("Moonraker: автоматизация")}>
+        <div className="seg-toggle" role="tablist" aria-label={SECTION_TITLES.prints}>
           {AUTO_MODES.map((m) => (
             <button
               key={m.key}
