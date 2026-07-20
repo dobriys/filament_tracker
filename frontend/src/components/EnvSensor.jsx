@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import { t, dateLocale } from "../i18n.js";
+import Icon from "./Icon.jsx";
 
 // Загрузка показаний с автообновлением. Датчики меняются медленно, а вкладку
 // держат открытой часами — опрашиваем нечасто и только пока вкладка видима.
@@ -69,8 +70,8 @@ export default function EnvSensor({ sensor, threshold = 45, showName = true }) {
             {wet && <span className="badge almost_empty">{t("выше порога")} {limit}%</span>}
             {battery != null && (
               lowBattery
-                ? <span className="badge empty" title={t("Пора менять батарейку")}>🔋 {Math.round(battery)}%</span>
-                : <span className="muted">🔋 {Math.round(battery)}%</span>
+                ? <span className="badge empty" title={t("Пора менять батарейку")}><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
+                : <span className="muted inline-ico"><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
             )}
             {ago(sensor.updated_at) && <span className="muted">{ago(sensor.updated_at)}</span>}
           </div>

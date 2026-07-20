@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import { useAuth } from "../api/auth.jsx";
 import { t } from "../i18n.js";
+import Icon from "../components/Icon.jsx";
 
 export default function Profiles() {
   const { user } = useAuth();
@@ -92,7 +93,7 @@ export default function Profiles() {
       </div>
 
       <div className="inv-toolbar" style={{ marginTop: 12 }}>
-        <input className="inv-search" placeholder={tab === "mine" ? t("🔍 Поиск по бренду, материалу, цвету…") : t("🔍 Поиск по бренду…")} value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="inv-search" placeholder={tab === "mine" ? t("Поиск по бренду, материалу, цвету…") : t("Поиск по бренду…")} value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       {tab === "mine" ? (
@@ -112,9 +113,9 @@ export default function Profiles() {
                   <td data-label="">
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <button className="secondary" title={t("Создать катушку из этого профиля")} onClick={() => navigate(`/spools/new?profile=${p.id}`)}>{t("＋ В Мои катушки")}</button>
-                      <button className="icon-btn" title={t("Изменить")} onClick={() => navigate(`/profiles/${p.id}/edit`)}>✎</button>
+                      <button className="icon-btn" title={t("Изменить")} onClick={() => navigate(`/profiles/${p.id}/edit`)}><Icon name="pencil" /></button>
                       <button className="icon-btn" title={t("Дублировать (новый цвет)")} onClick={() => duplicate(p.id, true)}>⧉</button>
-                      <button className="icon-btn danger" title={t("Удалить")} onClick={() => remove(p.id)}>🗑</button>
+                      <button className="icon-btn danger" title={t("Удалить")} onClick={() => remove(p.id)}><Icon name="trash" /></button>
                     </div>
                   </td>
                 </tr>

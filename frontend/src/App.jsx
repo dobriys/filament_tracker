@@ -17,16 +17,12 @@ import Settings from "./pages/Settings.jsx";
 import { t, getLang, setLang } from "./i18n.js";
 import { getTheme, setTheme } from "./theme.js";
 import { api } from "./api/client.js";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Icon from "./components/Icon.jsx";
 
 // Логотип сайта — иконка катушки (бывший SpoolThumb): кольцо с отверстием.
 function Logo({ size = 22 }) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" style={{ flex: "0 0 auto" }}>
-      <circle cx="12" cy="12" r="10" fill="var(--accent)" />
-      <circle cx="12" cy="12" r="3.5" fill="var(--bg)" />
-    </svg>
-  );
+  return <Icon name="spool" size={size} strokeWidth={2} style={{ color: "var(--accent)" }} />;
 }
 
 export function ThemeToggle() {
@@ -45,7 +41,7 @@ export function ThemeToggle() {
       title={next === "dark" ? t("Тёмная тема") : t("Светлая тема")}
       onClick={toggle}
     >
-      {theme === "dark" ? "☀️" : "🌙"}
+      <Icon name={theme === "dark" ? "sun" : "moon"} size={17} />
     </button>
   );
 }
@@ -63,6 +59,65 @@ function LangSwitch() {
           {l.toUpperCase()}
         </button>
       ))}
+    </div>
+  );
+}
+
+// Меню «Ещё» в десктопной шапке.
+//
+// Раньше оно жило на голом CSS :hover, и по дороге от кнопки к панели курсор
+// пересекал зазор в 8px, где нет ни того ни другого, — меню захлопывалось.
+// Зазор теперь перекрыт прозрачным мостиком, а на случай, когда курсор
+// срезает угол мимо панели, закрытие отложено на четверть секунды.
+//
+// Заодно триггер стал настоящей кнопкой: <span> не получал фокус, и с
+// клавиатуры до «Профилей», «Мест хранения» и «Загрузки gcode» было не дойти.
+function NavMore() {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  const timer = useRef(null);
+
+  const cancelClose = () => { clearTimeout(timer.current); timer.current = null; };
+  const openNow = () => { cancelClose(); setOpen(true); };
+  const closeSoon = () => { cancelClose(); timer.current = setTimeout(() => setOpen(false), 250); };
+
+  useEffect(() => cancelClose, []);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    const onDown = (e) => { if (!wrap.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [open]);
+
+  return (
+    <div
+      className="nav-more"
+      ref={wrap}
+      onMouseEnter={openNow}
+      onMouseLeave={closeSoon}
+      onBlur={(e) => { if (!wrap.current?.contains(e.relatedTarget)) setOpen(false); }}
+    >
+      <button
+        type="button"
+        className="nav-more-btn"
+        aria-expanded={open}
+        onClick={() => (open ? setOpen(false) : openNow())}
+        onFocus={cancelClose}
+      >
+        {t("Ещё")} <Icon name="chevron" size={13} />
+      </button>
+      {open && (
+        <div className="nav-more-menu">
+          <NavLink to="/profiles" onClick={() => setOpen(false)}>{t("Профили пластика")}</NavLink>
+          <NavLink to="/locations" onClick={() => setOpen(false)}>{t("Места хранения")}</NavLink>
+          <NavLink to="/gcode" onClick={() => setOpen(false)}>{t("Загрузка gcode")}</NavLink>
+        </div>
+      )}
     </div>
   );
 }
@@ -85,19 +140,12 @@ function Layout({ children }) {
             <NavLink to="/printers">{t("Принтеры")}</NavLink>
             <NavLink to="/print-jobs">{t("История")}</NavLink>
             <NavLink to="/settings">{t("Настройки")}</NavLink>
-            <div className="nav-more">
-              <span className="nav-more-btn">{t("Ещё ▾")}</span>
-              <div className="nav-more-menu">
-                <NavLink to="/profiles">{t("Профили пластика")}</NavLink>
-                <NavLink to="/locations">{t("Места хранения")}</NavLink>
-                <NavLink to="/gcode">{t("Загрузка gcode")}</NavLink>
-              </div>
-            </div>
+            <NavMore />
           </nav>
           <div className="topnav-actions">
             <ThemeToggle />
             <LangSwitch />
-            <span className="muted" style={{ fontSize: 13 }}>{user?.email}</span>
+            <span className="muted" style={{ fontSize: "var(--fs-3)" }}>{user?.email}</span>
             <button className="secondary" onClick={() => { logout(); navigate("/login"); }}>{t("Выйти")}</button>
           </div>
         </div>
@@ -109,7 +157,7 @@ function Layout({ children }) {
         <div className="mobile-topbar-actions">
           <ThemeToggle />
           <button className="icon-btn mobile-more-btn" onClick={() => setMoreOpen(true)} aria-label={t("Ещё")}>
-            <span aria-hidden="true">☰</span>
+            <Icon name="menu" size={19} />
           </button>
         </div>
       </header>
@@ -118,12 +166,12 @@ function Layout({ children }) {
 
       {/* Мобильная нижняя навигация */}
       <nav className="bottom-nav" aria-label={t("Навигация")}>
-        <NavLink to="/" end className="bn-item"><span className="bn-ico" aria-hidden="true">▦</span>{t("Панель")}</NavLink>
-        <NavLink to="/spools" className="bn-item"><span className="bn-ico" aria-hidden="true">🧵</span>{t("Катушки")}</NavLink>
-        <NavLink to="/printers" className="bn-item"><span className="bn-ico" aria-hidden="true">🖨</span>{t("Принтеры")}</NavLink>
-        <NavLink to="/print-jobs" className="bn-item"><span className="bn-ico" aria-hidden="true">🗒</span>{t("История")}</NavLink>
+        <NavLink to="/" end className="bn-item"><span className="bn-ico"><Icon name="dashboard" size={19} /></span>{t("Панель")}</NavLink>
+        <NavLink to="/spools" className="bn-item"><span className="bn-ico"><Icon name="spool" size={19} /></span>{t("Катушки")}</NavLink>
+        <NavLink to="/printers" className="bn-item"><span className="bn-ico"><Icon name="printer" size={19} /></span>{t("Принтеры")}</NavLink>
+        <NavLink to="/print-jobs" className="bn-item"><span className="bn-ico"><Icon name="history" size={19} /></span>{t("История")}</NavLink>
         <button className={`bn-item bn-more ${moreOpen ? "active" : ""}`} onClick={() => setMoreOpen(true)}>
-          <span className="bn-ico" aria-hidden="true">☰</span>{t("Ещё")}
+          <span className="bn-ico"><Icon name="menu" size={19} /></span>{t("Ещё")}
         </button>
       </nav>
 
@@ -133,10 +181,10 @@ function Layout({ children }) {
           <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={t("Ещё")}>
             <div className="sheet-handle" />
             <div className="sheet-links">
-              <NavLink to="/settings" onClick={closeMore}>⚙️ {t("Настройки")}</NavLink>
-              <NavLink to="/profiles" onClick={closeMore}>🧩 {t("Профили пластика")}</NavLink>
-              <NavLink to="/locations" onClick={closeMore}>📦 {t("Места хранения")}</NavLink>
-              <NavLink to="/gcode" onClick={closeMore}>📄 {t("Загрузка gcode")}</NavLink>
+              <NavLink to="/settings" onClick={closeMore}><Icon name="settings" size={18} />{t("Настройки")}</NavLink>
+              <NavLink to="/profiles" onClick={closeMore}><Icon name="layers" size={18} />{t("Профили пластика")}</NavLink>
+              <NavLink to="/locations" onClick={closeMore}><Icon name="box" size={18} />{t("Места хранения")}</NavLink>
+              <NavLink to="/gcode" onClick={closeMore}><Icon name="file" size={18} />{t("Загрузка gcode")}</NavLink>
             </div>
             <div className="sheet-footer">
               <div className="sheet-footer-row">

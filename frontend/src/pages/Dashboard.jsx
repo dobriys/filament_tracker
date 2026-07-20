@@ -6,6 +6,7 @@ import { t, tReason } from "../i18n.js";
 import { GateChips } from "../components/HubGates.jsx";
 import { PrinterArt, brandAccent } from "../components/PrinterArt.jsx";
 import EnvSensor, { useEnvSensors } from "../components/EnvSensor.jsx";
+import Icon from "../components/Icon.jsx";
 
 const MAT_COLORS = ["#2e6be6", "#3d4657", "#17a34a", "#f6a723", "#8a5fbf", "#e0526e", "#17a2a6", "#9aa1ab"];
 
@@ -504,7 +505,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
             <div className="printer-error" title={errMsg}>
               <div className="printer-error-main">
                 <span>
-                  ⚠ {knownErr ? knownErr.label() : fmtPrinterError(errMsg)}
+                  <Icon name="alert" size={14} /> {knownErr ? knownErr.label() : fmtPrinterError(errMsg)}
                   {knownErr && <b className="printer-error-code"> · {printer.brand || "Anycubic"} {knownErr.code}</b>}
                 </span>
                 <span className="printer-error-actions">
@@ -644,12 +645,11 @@ function PrinterLifetime({ totals, name }) {
   );
 }
 
-function Kpi({ label, value, sub, icon, bg }) {
+function Kpi({ label, value, sub }) {
   return (
     <div className="card kpi">
       <div className="kpi-top">
         <div className="kpi-label">{label}</div>
-        <div className="kpi-icon" style={{ background: bg }}>{icon}</div>
       </div>
       <div className="kpi-value">{value}</div>
       <div className="kpi-sub">{sub}</div>
@@ -682,14 +682,13 @@ export default function Dashboard() {
       <div className="muted" style={{ marginBottom: 16 }}>{t("Обзор запасов филамента и недавней активности.")}</div>
 
       <div className="dash-kpis">
-        <Kpi label={t("Всего катушек")} value={d.total_spools} sub={`+${d.added_this_month} ${t("в этом месяце")}`} icon="📦" bg="var(--kpi1-bg)" />
-        <Kpi label={t("Заканчиваются")} value={d.low_stock_count} sub={t("Требуют внимания")} icon="⚠️" bg="var(--kpi2-bg)" />
-        <Kpi label={t("Остаток филамента")} value={`${(d.est_filament_left_g / 1000).toFixed(1)} ${t("кг")}`} sub={`~${d.est_print_hours} ${t("ч печати")}`} icon="💧" bg="var(--kpi3-bg)" />
+        <Kpi label={t("Всего катушек")} value={d.total_spools} sub={`+${d.added_this_month} ${t("в этом месяце")}`} />
+        <Kpi label={t("Заканчиваются")} value={d.low_stock_count} sub={t("Требуют внимания")} />
+        <Kpi label={t("Остаток филамента")} value={`${(d.est_filament_left_g / 1000).toFixed(1)} ${t("кг")}`} sub={`~${d.est_print_hours} ${t("ч печати")}`} />
         <Kpi
           label={t("Печатей (30 дн)")}
           value={d.recent_prints_30d}
           sub={`${(d.consumed_30d_g / 1000).toFixed(1)} ${t("кг израсходовано")}${d.consumed_30d_cost != null ? ` · ${fmtMoney(d.consumed_30d_cost, d.cost_currency)}` : ""}${d.failed_30d ? ` · ${t("брак")} ${d.failed_30d}` : ""}`}
-          icon="🖨️"
           bg="var(--kpi4-bg)"
         />
       </div>
@@ -748,7 +747,7 @@ export default function Dashboard() {
             </button>
             {d.low_stock.length === 0 ? (
               <div className="ok-panel">
-                <div className="ok-panel-title">✓ {t("Всё в порядке")}</div>
+                <div className="ok-panel-title"><Icon name="check" size={15} /> {t("Всё в порядке")}</div>
                 <div className="muted">{t("Нет катушек с низким остатком.")}</div>
                 <Link to="/spools" style={{ display: "inline-block", marginTop: 6 }}>{t("Все катушки →")}</Link>
               </div>
@@ -773,7 +772,7 @@ export default function Dashboard() {
 
           {d.drying_alerts?.length > 0 && (
             <div className="card">
-              <h3 className="card-title">{t("💧 Пора просушить")}</h3>
+              <h3 className="card-title"><Icon name="droplet" size={15} /> {t("Пора просушить")}</h3>
               <div className="card-sub">{t("Гигроскопичный филамент давно не сушился.")}</div>
               {d.drying_alerts.map((a) => (
                 <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>

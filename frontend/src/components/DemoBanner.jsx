@@ -6,8 +6,10 @@ export default function DemoBanner() {
   if (!DEMO) return null;
   return (
     <div className="demo-banner">
-      <span className="demo-banner-dot" aria-hidden="true">●</span>
+      {/* Точка внутри текстового блока: иначе на узком экране она переносится
+          на отдельную строку и висит сама по себе. */}
       <span className="demo-banner-text">
+        <span className="demo-banner-dot" aria-hidden="true">●</span>
         <b>{t("Демо")}</b> — {t("данные живут только в этом браузере и не сохраняются на сервере.")}
       </span>
       <a

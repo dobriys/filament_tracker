@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams, useLocation, Link } from "reac
 import { api } from "../api/client.js";
 import { SPEC_GROUPS, SPEC_FIELDS, MATERIALS } from "../specFields.js";
 import { t } from "../i18n.js";
+import Icon from "../components/Icon.jsx";
 
 const DIAMETERS = ["1.75", "2.85", "3.0"];
 
@@ -213,7 +214,7 @@ export default function SpoolForm() {
             </div>
           )}
         </div>
-        {form.filament_profile_id && <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>{t("✓ Данные подставлены из каталога. Цвет и вес укажите сами.")}</div>}
+        {form.filament_profile_id && <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>{t("Данные подставлены из каталога. Цвет и вес укажите сами.")}</div>}
       </div>
 
       <div className="form-grid">
@@ -225,7 +226,7 @@ export default function SpoolForm() {
               <div>
                 <label>{t("Фото катушки")}</label>
                 <div className="photo-drop" onClick={() => photoRef.current.click()}>
-                  {form.photo ? <img src={form.photo} alt="" /> : <><div style={{ fontSize: 22 }}>📷</div><div>{t("Загрузить")}</div></>}
+                  {form.photo ? <img src={form.photo} alt="" /> : <><Icon name="camera" size={22} /><div>{t("Загрузить")}</div></>}
                 </div>
                 <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onPhoto} />
               </div>
@@ -334,15 +335,15 @@ export default function SpoolForm() {
             <h3 className="card-title">{t("Переопределения печати")}</h3>
             <div className="card-sub">{t("Необязательно: настройки именно для этой катушки.")}</div>
             <div className="field-2">
-              <div><label>{t("🌡 Сопло")}</label><div className="unit-input"><input type="number" value={form.hotend_temp} onChange={set("hotend_temp")} placeholder="210" /><span className="unit">°C</span></div></div>
-              <div><label>{t("🌡 Стол")}</label><div className="unit-input"><input type="number" value={form.bed_temp} onChange={set("bed_temp")} placeholder="60" /><span className="unit">°C</span></div></div>
+              <div><label>{t("Сопло")}</label><div className="unit-input"><input type="number" value={form.hotend_temp} onChange={set("hotend_temp")} placeholder="210" /><span className="unit">°C</span></div></div>
+              <div><label>{t("Стол")}</label><div className="unit-input"><input type="number" value={form.bed_temp} onChange={set("bed_temp")} placeholder="60" /><span className="unit">°C</span></div></div>
             </div>
             <div className="field-2" style={{ marginTop: 10 }}>
-              <div><label>{t("💨 Обдув")}</label><div className="unit-input"><input type="number" value={form.fan_speed} onChange={set("fan_speed")} placeholder="100" /><span className="unit">%</span></div></div>
-              <div><label>💧 Flow Rate</label><div className="unit-input"><input type="number" value={form.flow_rate} onChange={set("flow_rate")} placeholder="95" /><span className="unit">%</span></div></div>
+              <div><label>{t("Обдув")}</label><div className="unit-input"><input type="number" value={form.fan_speed} onChange={set("fan_speed")} placeholder="100" /><span className="unit">%</span></div></div>
+              <div><label>Flow Rate</label><div className="unit-input"><input type="number" value={form.flow_rate} onChange={set("flow_rate")} placeholder="95" /><span className="unit">%</span></div></div>
             </div>
             <div className="field-2" style={{ marginTop: 10 }}>
-              <div><label>📐 Pressure Advance (K)</label><input type="number" step="0.001" value={form.specs?.pressure_advance ?? ""} onChange={setSpec("pressure_advance")} placeholder="0.02" /></div>
+              <div><label>Pressure Advance (K)</label><input type="number" step="0.001" value={form.specs?.pressure_advance ?? ""} onChange={setSpec("pressure_advance")} placeholder="0.02" /></div>
             </div>
           </div>
 

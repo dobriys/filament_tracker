@@ -4,6 +4,7 @@ import { api } from "../api/client.js";
 import { SPEC_GROUPS, fmtSpec } from "../specFields.js";
 import { spoolTitle } from "./Spools.jsx";
 import { t, dateLocale, tReason } from "../i18n.js";
+import Icon from "../components/Icon.jsx";
 
 const STATUS_RU = {
   new: t("Новая"), in_use: t("Используется"), almost_empty: t("Заканчивается"),
@@ -59,9 +60,11 @@ function SpoolGraphic({ color }) {
 }
 
 function Metric({ icon, label, value, sub }) {
+  // Температура окрашена токеном --hot: это то, что принтер нагрел.
+  const hot = icon === "thermometer" || icon === "flame";
   return (
     <div>
-      <div className="spec-label">{icon} {label}</div>
+      <div className="spec-label inline-ico">{icon && <Icon name={icon} size={13} className={hot ? "hot" : undefined} />}{label}</div>
       <div className="spec-value">{value}</div>
       {sub && <div className="spec-sub">{sub}</div>}
     </div>
@@ -188,15 +191,15 @@ export default function SpoolDetail() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div className="muted"><Link to="/spools">{t("Катушки")}</Link> / {title}</div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="secondary" onClick={() => navigate(`/spools/${id}/edit`)}>{t("✎ Редактировать")}</button>
+          <button className="secondary" onClick={() => navigate(`/spools/${id}/edit`)}><Icon name="pencil" /> {t("Редактировать")}</button>
           <button onClick={() => navigate("/gcode")}>{t("＋ Учесть печать")}</button>
         </div>
       </div>
 
       {/* Заголовок */}
       <div style={{ margin: "10px 0 4px", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }} className="muted">
-        <span>🏷 {spool.sku || spool.label || "—"}</span>
-        {locName && <span>• 📍 {locName}</span>}
+        <span className="inline-ico"><Icon name="tag" size={14} /> {spool.sku || spool.label || "—"}</span>
+        {locName && <span className="inline-ico">• <Icon name="pin" size={14} /> {locName}</span>}
         <span className="badge in_use">{STATUS_RU[spool.status] || spool.status}</span>
       </div>
       <h2 style={{ margin: "0 0 8px" }}>{title}</h2>
@@ -220,10 +223,10 @@ export default function SpoolDetail() {
           <div className="card">
             <h3 className="card-title" style={{ marginBottom: 14 }}>{t("Характеристики")}</h3>
             <div className="spec-grid">
-              <Metric icon="⚖️" label={t("Вес нетто")} value={`${capacity.toFixed(0)}${t("г")}`} />
-              <Metric icon="📏" label={t("Диаметр")} value={`${Number(dia)}${t("мм")}`} />
+              <Metric icon="weight" label={t("Вес нетто")} value={`${capacity.toFixed(0)}${t("г")}`} />
+              <Metric icon="diameter" label={t("Диаметр")} value={`${Number(dia)}${t("мм")}`} />
               <Metric icon="◎" label={t("Пустая катушка")} value={spool.empty_spool_weight_g != null ? `${Number(spool.empty_spool_weight_g).toFixed(0)}${t("г")}` : "—"} sub={t("тара")} />
-              <Metric icon="📅" label={t("Куплена")} value={fmtDate(spool.purchase_date)} sub={spool.price != null ? `${Number(spool.price)} ${spool.currency}` : null} />
+              <Metric icon="calendar" label={t("Куплена")} value={fmtDate(spool.purchase_date)} sub={spool.price != null ? `${Number(spool.price)} ${spool.currency}` : null} />
             </div>
           </div>
 
@@ -233,7 +236,7 @@ export default function SpoolDetail() {
               {card?.qr_png_base64 && <img src={card.qr_png_base64} alt="QR" width={96} height={96} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: 4 }} />}
               <div>
                 <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{t("Отсканируйте, чтобы открыть карточку с телефона.")}</div>
-                <button className="secondary" onClick={() => setShowLabel(!showLabel)}>{t("⬇ Печать этикетки")}</button>
+                <button className="secondary" onClick={() => setShowLabel(!showLabel)}><Icon name="download" /> {t("Печать этикетки")}</button>
               </div>
             </div>
             {showLabel && (
@@ -296,7 +299,7 @@ export default function SpoolDetail() {
         {/* Правая колонка */}
         <div>
           <div className="card">
-            <h3 className="card-title">{t("⛃ Текущий статус")}</h3>
+            <h3 className="card-title">{t("Текущий статус")}</h3>
             <div style={{ display: "flex", gap: 24, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
               <Gauge pct={pct} />
               <div style={{ flex: 1, minWidth: 220 }}>
@@ -310,7 +313,7 @@ export default function SpoolDetail() {
                     <div style={{ fontSize: 30, fontWeight: 700 }}>{lenLeft.toFixed(0)} <span className="muted" style={{ fontSize: 16 }}>/ {lenTotal.toFixed(0)}{t("м")}</span></div>
                   </div>
                 </div>
-                <div className="muted" style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 10 }}>{t("🖨️ Хватит примерно на ~")}{prints}{" "}{t("печатей (по 50 г).")}</div>
+                <div className="muted" style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 10 }}>{t("Хватит примерно на ~")}{prints}{" "}{t("печатей (по 50 г).")}</div>
               </div>
             </div>
             {/* Обновление остатка */}
@@ -334,20 +337,20 @@ export default function SpoolDetail() {
 
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 className="card-title">{t("🌡 Рекомендуемый профиль печати")}</h3>
-              <button className="secondary" onClick={copyProfile}>{copied ? t("Скопировано ✓") : t("Копировать")}</button>
+              <h3 className="card-title">{t("Рекомендуемый профиль печати")}</h3>
+              <button className="secondary" onClick={copyProfile}><Icon name={copied ? "check" : "copy"} /> {copied ? t("Скопировано") : t("Копировать")}</button>
             </div>
             <div className="profile-grid" style={{ marginTop: 14 }}>
-              <Metric icon="🌡" label={t("Сопло")} value={nozzle} />
-              <Metric icon="🌡" label={t("Стол")} value={bed} />
-              <Metric icon="💨" label={t("Обдув")} value={fan} />
-              <Metric icon="💧" label="Flow Rate" value={flow} />
-              <Metric icon="📐" label="Pressure Adv (K)" value={pa} />
+              <Metric icon="thermometer" label={t("Сопло")} value={nozzle} />
+              <Metric icon="thermometer" label={t("Стол")} value={bed} />
+              <Metric icon="fan" label={t("Обдув")} value={fan} />
+              <Metric icon="droplet" label="Flow Rate" value={flow} />
+              <Metric icon="gauge" label="Pressure Adv (K)" value={pa} />
             </div>
           </div>
 
           <div className="card">
-            <h3 className="card-title">{t("🕑 История использования")}</h3>
+            <h3 className="card-title">{t("История использования")}</h3>
             <table className="cards-mobile" style={{ marginTop: 10 }}>
               <thead><tr><th>{t("Дата")}</th><th>{t("Событие")}</th><th>{t("Объём")}</th><th>{t("Статус")}</th></tr></thead>
               <tbody>
@@ -367,7 +370,7 @@ export default function SpoolDetail() {
           </div>
 
           <div className="card">
-            <h3 className="card-title">{t("📝 Заметки")}</h3>
+            <h3 className="card-title">{t("Заметки")}</h3>
             <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{spool.notes || <span className="muted">{t("Заметок нет.")}</span>}</div>
           </div>
         </div>
@@ -422,7 +425,7 @@ function DryingCard({ spool, events, onDone }) {
 
   return (
     <div className="card">
-      <h3 className="card-title">{t("💧 Сушка")}</h3>
+      <h3 className="card-title inline-ico"><Icon name="droplet" size={15} /> {t("Сушка филамента")}</h3>
       <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
         {t("Последняя сушка:")} {lastDried ? fmtDate(lastDried.created_at) : t("не сушилась")}
       </div>
@@ -437,7 +440,7 @@ function DryingCard({ spool, events, onDone }) {
         </div>
       </div>
       <button className="secondary" style={{ marginTop: 10, width: "100%" }} disabled={busy} onClick={markDried}>
-        {t("✓ Просушена")}
+        <Icon name="check" /> {t("Просушена")}
       </button>
     </div>
   );

@@ -4,8 +4,8 @@ import { t } from "../i18n.js";
 const VERDICT = {
   match: { icon: "✓", cls: "ok", label: () => t("Совпадает") },
   color_diff: { icon: "≈", cls: "hint", label: () => t("Материал совпадает, оттенок отличается") },
-  mismatch: { icon: "⚠", cls: "warn", label: () => t("Не совпадает с катушкой") },
-  unassigned: { icon: "＋", cls: "hint", label: () => t("Катушка не привязана") },
+  mismatch: { icon: "!", cls: "warn", label: () => t("Не совпадает с катушкой") },
+  unassigned: { icon: "+", cls: "hint", label: () => t("Катушка не привязана") },
   empty: { icon: "—", cls: "dim", label: () => t("Слот пуст") },
 };
 

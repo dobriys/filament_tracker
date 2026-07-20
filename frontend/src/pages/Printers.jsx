@@ -5,6 +5,7 @@ import { fmtMoney } from "../format.js";
 import { t, dateLocale, tServer } from "../i18n.js";
 import { GateCard } from "../components/HubGates.jsx";
 import { PrinterArt, CapabilityChips, brandAccent } from "../components/PrinterArt.jsx";
+import Icon from "../components/Icon.jsx";
 
 // Лейбл системы мультиподачи по возможностям: «Слоты ACE Pro» / «Слоты мультиподачи».
 function mmuLabel(caps) {
@@ -269,13 +270,13 @@ function MoonrakerPanel({ printer, onClose }) {
 
       {conn && (
         <div style={{ marginTop: 12 }} className={conn.ok ? "" : "error"}>
-          {conn.ok ? "✓ " : "✗ "}{tServer(conn.detail)}
+          <Icon name={conn.ok ? "check" : "alert"} size={14} /> {tServer(conn.detail)}
         </div>
       )}
 
       {ov?.gates?.length > 0 && (
         <div className="card" style={{ marginTop: 12 }}>
-          <h4 style={{ margin: "0 0 10px" }}>🎛 {mmuLabel(ov?.capabilities)} <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>{t("— что принтер видит в слотах и совпадает ли это с привязанными катушками")}</span></h4>
+          <h4 style={{ margin: "0 0 10px" }} className="inline-ico"><Icon name="slots" /> {mmuLabel(ov?.capabilities)} <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>{t("— что принтер видит в слотах и совпадает ли это с привязанными катушками")}</span></h4>
           <div className="hub-gates">
             {ov.gates.map((g) => <GateCard key={g.gate} g={g} />)}
           </div>
@@ -288,7 +289,7 @@ function MoonrakerPanel({ printer, onClose }) {
 
       {st && (
         <div className="card" style={{ marginTop: 12 }}>
-          <h4 style={{ margin: "0 0 10px" }}>📡 {t("Телеметрия")}</h4>
+          <h4 style={{ margin: "0 0 10px" }} className="inline-ico"><Icon name="signal" /> {t("Телеметрия")}</h4>
           <div className="row" style={{ fontSize: 14 }}>
             <div><span className="muted">{t("Состояние:")}</span> {st.state || "—"}</div>
             <div><span className="muted">{t("Сопло:")}</span> {st.nozzle_temp != null ? Math.round(st.nozzle_temp) + "°" : "—"}{st.nozzle_target > 0 ? ` / ${Math.round(st.nozzle_target)}°` : ""}</div>
@@ -305,7 +306,7 @@ function MoonrakerPanel({ printer, onClose }) {
 
       {totals && (
         <div className="card" style={{ marginTop: 12 }}>
-          <h4 style={{ margin: "0 0 10px" }}>📈 {t("Статистика за всю жизнь принтера")}</h4>
+          <h4 style={{ margin: "0 0 10px" }} className="inline-ico"><Icon name="chart" /> {t("Статистика за всю жизнь принтера")}</h4>
           <div className="hub-stats">
             <div><b>{totals.total_jobs}</b><span className="muted">{t("печатей")}</span></div>
             <div><b>{Math.round((totals.total_print_time_sec || 0) / 3600)} {t("ч")}</b><span className="muted">{t("чистой печати")}</span></div>
@@ -317,7 +318,7 @@ function MoonrakerPanel({ printer, onClose }) {
 
       {sysinfo && (sysinfo.cpu || sysinfo.os || sysinfo.moonraker_version) && (
         <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          🛠 {[
+          <Icon name="wrench" size={14} /> {[
             sysinfo.os,
             sysinfo.cpu,
             sysinfo.klipper_version ? `Klipper ${sysinfo.klipper_version}` : null,
@@ -339,7 +340,7 @@ function MoonrakerPanel({ printer, onClose }) {
                 <td data-label="">
                   {j.consumed ? (
                     <span className="badge added" title={j.consumed_via === "manual" ? t("Файл уже списан вручную") : t("Уже списано из Moonraker")}>
-                      {t("✓ Списано")}{j.cost != null ? ` · ${fmtMoney(j.cost, j.cost_currency)}` : ""}
+                      <Icon name="check" size={13} /> {t("Списано")}{j.cost != null ? ` · ${fmtMoney(j.cost, j.cost_currency)}` : ""}
                     </span>
                   ) : j.status === "completed" ? (
                     <button className="secondary" onClick={() => consumeJob(j.job_id)}>{t("Списать")}</button>
@@ -525,14 +526,14 @@ function DryerCard({ printer, dryer, onChanged }) {
     <div className="card" style={{ marginTop: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <h4 style={{ margin: 0 }}>
-          🔥 {t("Сушка филамента")}{" "}
+          <Icon name="flame" size={15} className="hot" /> {t("Сушка филамента")}{" "}
           {drying
             ? <span className="act-tag in_use">{t("сушит")} {dryer.target_temp}°C{remainingLabel ? ` · ${t("осталось")} ${remainingLabel}` : durationLabel ? ` · ${t("Длительность")} ${durationLabel}` : ""}</span>
             : dryer.status === "heater_err"
             ? <span className="act-tag used">{t("ошибка нагревателя")}</span>
             : <span className="act-tag">{t("выключена")}</span>}
         </h4>
-        {dryer.humidity > 0 && <span className="muted" style={{ fontSize: 13 }}>💧 {dryer.humidity}%</span>}
+        {dryer.humidity > 0 && <span className="muted inline-ico" style={{ fontSize: "var(--fs-3)" }}><Icon name="droplet" size={13} /> {dryer.humidity}%</span>}
       </div>
       <div className="dryer-presets">
         <div className="dryer-presets-label">{t("Профили сушки")}</div>

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import { MATERIALS } from "../specFields.js";
 import { t } from "../i18n.js";
+import Icon from "../components/Icon.jsx";
 
 const STATUS_LABELS = {
   new: t("новая"),
@@ -138,7 +139,14 @@ export default function Spools() {
     setSelected({}); load();
   }
 
-  const barColor = (e) => (e.low ? "var(--danger)" : "var(--accent)");
+  // Шкала остатка окрашена самим филаментом: полоса показывает, сколько
+  // осталось именно этого цвета. На критическом и низком остатке цвет
+  // перебивается статусным — тревога должна читаться раньше материала.
+  const barColor = (e) => {
+    if (e.pct <= 0.1 || e.low) return "var(--danger)";
+    if (e.pct <= 0.25) return "var(--warn)";
+    return e.colorHex || "var(--muted-2)";
+  };
 
   return (
     <div onClick={() => setMenu(null)}>
@@ -147,12 +155,12 @@ export default function Spools() {
           <h2 style={{ marginBottom: 2 }}>{t("Катушки")}</h2>
           <div className="muted">{t("Управление катушками и отслеживание остатка.")}</div>
         </div>
-        <button onClick={() => navigate("/spools/new")}>{t("+ Добавить катушку")}</button>
+        <button onClick={() => navigate("/spools/new")}><Icon name="plus" /> {t("Добавить катушку")}</button>
       </div>
 
       {/* Тулбар */}
       <div className="inv-toolbar" style={{ marginTop: 16 }}>
-        <input className="inv-search" placeholder={t("🔍 Поиск по названию или метке…")} value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input className="inv-search" placeholder={t("Поиск по названию или метке…")} value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className="filter-chip" value={matFilter} onChange={(e) => setMatFilter(e.target.value)}>
           <option value="">{t("Материал: все")}</option>
           {MATERIALS.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -168,15 +176,15 @@ export default function Spools() {
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
           {selectedIds.length > 0 && (
             <>
-              <span className="muted" style={{ fontSize: 13 }}>{t("Выбрано:")}{" "}{selectedIds.length}</span>
+              <span className="muted" style={{ fontSize: "var(--fs-3)" }}>{t("Выбрано:")}{" "}{selectedIds.length}</span>
               <button className="secondary" onClick={printA4}>{t("Печать A4")}</button>
               <button className="secondary" onClick={bulkArchive}>{t("В архив")}</button>
               <button className="danger" onClick={bulkDelete}>{t("Удалить")}</button>
             </>
           )}
           <div className="seg">
-            <button className={view === "list" ? "active" : ""} onClick={() => setView("list")}>{t("☰ Список")}</button>
-            <button className={view === "grid" ? "active" : ""} onClick={() => setView("grid")}>{t("▦ Сетка")}</button>
+            <button className={view === "list" ? "active" : ""} onClick={() => setView("list")}><Icon name="list" size={15} /> {t("Список")}</button>
+            <button className={view === "grid" ? "active" : ""} onClick={() => setView("grid")}><Icon name="grid" size={15} /> {t("Сетка")}</button>
           </div>
         </div>
       </div>
@@ -198,38 +206,40 @@ export default function Spools() {
             </thead>
             <tbody>
               {rows.map(({ s, e }) => (
-                <tr key={s.id} className="inv-row">
-                  <td style={{ paddingLeft: 16 }}><input type="checkbox" style={{ width: "auto" }} checked={!!selected[s.id]} onChange={(ev) => setSelected({ ...selected, [s.id]: ev.target.checked })} /></td>
+                <tr key={s.id} className="inv-row" style={{ "--fil": e.colorHex || "var(--border)" }}>
+                  {/* Полоса реального цвета филамента по левому краю строки —
+                      по ней полку с катушками читают так же, как в жизни. */}
+                  <td className="fil-edge" style={{ paddingLeft: 16 }}><input type="checkbox" style={{ width: "auto" }} checked={!!selected[s.id]} onChange={(ev) => setSelected({ ...selected, [s.id]: ev.target.checked })} /></td>
                   <td>
                     <Link to={`/spools/${s.id}`}>{e.title}</Link>
                   </td>
                   <td><span className="mat-pill">{e.material}</span></td>
                   <td>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <span className="swatch" style={{ background: e.colorHex || "var(--muted)" }} />
-                      <span style={{ fontSize: 13 }}>{e.colorName || "—"}</span>
+                      <span style={{ fontSize: "var(--fs-3)" }}>{e.colorName || "—"}</span>
                     </div>
                   </td>
-                  <td className="muted" style={{ fontSize: 13, fontFamily: "monospace" }}>{e.colorHex || "—"}</td>
-                  <td style={{ fontSize: 13 }}>
+                  <td className="muted mono" style={{ fontSize: "var(--fs-3)" }}>{e.colorHex || "—"}</td>
+                  <td style={{ fontSize: "var(--fs-3)" }}>
                     {e.slotLabel
-                      ? <span className="badge in_use">🖨 {e.slotLabel}</span>
+                      ? <span className="badge in_use"><Icon name="printer" size={13} /> {e.slotLabel}</span>
                       : e.locName
-                      ? <span>📍 {e.locName}</span>
+                      ? <span className="inline-ico"><Icon name="pin" size={14} /> {e.locName}</span>
                       : <span className="muted">—</span>}
                   </td>
                   <td>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                      <span>{e.remaining.toFixed(0)}{" "}{t("г")}</span>
-                      <span className="muted">{Math.round(e.pct * 100)}%</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-3)" }}>
+                      <span className="mono">{e.remaining.toFixed(0)}{" "}{t("г")}</span>
+                      <span className="muted mono">{Math.round(e.pct * 100)}%</span>
                     </div>
                     <div className="progress" style={{ marginTop: 6 }}><div style={{ width: `${Math.round(e.pct * 100)}%`, background: barColor(e) }} /></div>
                   </td>
                   <td>
                     <div style={{ display: "flex", gap: 6 }} onClick={(ev) => ev.stopPropagation()}>
-                      <button className="icon-btn" title={t("Редактировать")} onClick={() => navigate(`/spools/${s.id}/edit`)}>✎</button>
+                      <button className="icon-btn" title={t("Редактировать")} onClick={() => navigate(`/spools/${s.id}/edit`)}><Icon name="pencil" /></button>
                       <div className="kebab-wrap">
-                        <button className="icon-btn" onClick={(ev) => { ev.stopPropagation(); setMenu(menu === s.id ? null : s.id); }}>⋮</button>
+                        <button className="icon-btn" title={t("Ещё")} onClick={(ev) => { ev.stopPropagation(); setMenu(menu === s.id ? null : s.id); }}>⋮</button>
                         {menu === s.id && (
                           <div className="kebab-menu" onClick={(ev) => ev.stopPropagation()}>
                             <button onClick={() => duplicate(s.id)}>{t("Дублировать (новый цвет)")}</button>
@@ -251,25 +261,25 @@ export default function Spools() {
       ) : (
         <div className="inv-grid">
           {rows.map(({ s, e }) => (
-            <div key={s.id} className="card" style={{ cursor: "pointer", display: "flex", flexDirection: "column" }} onClick={() => navigate(`/spools/${s.id}`)}>
+            <div key={s.id} className="card spool-card" style={{ "--fil": e.colorHex || "var(--border)" }} onClick={() => navigate(`/spools/${s.id}`)}>
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <input type="checkbox" style={{ width: "auto" }} checked={!!selected[s.id]} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setSelected({ ...selected, [s.id]: ev.target.checked })} />
               </div>
               <div style={{ fontWeight: 600 }}>{e.title}</div>
-              <div style={{ marginTop: 8, display: "flex", gap: 6, alignItems: "center" }}>
+              <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
                 <span className="mat-pill">{e.material}</span>
                 <span className="swatch" style={{ background: e.colorHex || "var(--muted)" }} />
-                <span style={{ fontSize: 13 }}>{e.colorName}</span>
+                <span style={{ fontSize: "var(--fs-3)" }}>{e.colorName}</span>
               </div>
-              <div style={{ marginTop: 8, fontSize: 12 }}>
+              <div style={{ marginTop: 8, fontSize: "var(--fs-2)" }}>
                 {e.slotLabel
-                  ? <span className="badge in_use">🖨 {e.slotLabel}</span>
+                  ? <span className="badge in_use"><Icon name="printer" size={13} /> {e.slotLabel}</span>
                   : e.locName
-                  ? <span className="muted">📍 {e.locName}</span>
-                  : <span className="muted">{t("📍 не указано")}</span>}
+                  ? <span className="muted inline-ico"><Icon name="pin" size={14} /> {e.locName}</span>
+                  : <span className="muted inline-ico"><Icon name="pin" size={14} /> {t("не указано")}</span>}
               </div>
-              <div style={{ marginTop: "auto", paddingTop: 10, display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                <span>{e.remaining.toFixed(0)}{" "}{t("г")}</span><span className="muted">{Math.round(e.pct * 100)}%</span>
+              <div style={{ marginTop: "auto", paddingTop: 10, display: "flex", justifyContent: "space-between", fontSize: "var(--fs-3)" }}>
+                <span className="mono">{e.remaining.toFixed(0)}{" "}{t("г")}</span><span className="muted mono">{Math.round(e.pct * 100)}%</span>
               </div>
               <div className="progress" style={{ marginTop: 6 }}><div style={{ width: `${Math.round(e.pct * 100)}%`, background: barColor(e) }} /></div>
             </div>

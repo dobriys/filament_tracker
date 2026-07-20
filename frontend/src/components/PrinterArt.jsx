@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { t } from "../i18n.js";
+import Icon from "./Icon.jsx";
 
 // Slug принтера для файла иллюстрации: тот же формат, что и key пресета на
 // бэке (printer_presets._preset). Свой SVG для модели кладётся в
@@ -110,14 +111,14 @@ export function PrinterArt({ caps = {}, brand, model, size = 92 }) {
 // Значки возможностей принтера — компактная сводка «что умеет».
 export function CapabilityChips({ caps = {} }) {
   const chips = [];
-  if (caps.has_mmu) chips.push(["🎛", `${caps.mmu_name || t("Мультиподача")}${caps.mmu_slots ? ` ×${caps.mmu_slots}` : ""}`]);
-  if (caps.has_dryer) chips.push(["🔥", t("Сушилка")]);
-  if (caps.has_chamber) chips.push(["📦", t("Камера")]);
+  if (caps.has_mmu) chips.push(["slots", `${caps.mmu_name || t("Мультиподача")}${caps.mmu_slots ? ` ×${caps.mmu_slots}` : ""}`]);
+  if (caps.has_dryer) chips.push(["flame", t("Сушилка")]);
+  if (caps.has_chamber) chips.push(["box", t("Камера")]);
   if (chips.length === 0) return null;
   return (
     <div className="cap-chips">
       {chips.map(([icon, label]) => (
-        <span key={label} className="cap-chip"><span aria-hidden="true">{icon}</span> {label}</span>
+        <span key={label} className="cap-chip"><Icon name={icon} size={13} /> {label}</span>
       ))}
     </div>
   );

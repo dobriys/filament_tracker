@@ -2,6 +2,32 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { useAuth } from "../api/auth.jsx";
 import { t } from "../i18n.js";
+import Icon from "../components/Icon.jsx";
+
+// ------------------------------------------------------------------
+// Разделы настроек
+//
+// Порядок и группировка живут в одном месте: и боковое оглавление, и колонка
+// с содержимым рисуются из GROUPS, поэтому разъехаться они не могут.
+// Группы отвечают на разные вопросы: что приложение делает само, с чем оно
+// связано снаружи и откуда берутся данные.
+// ------------------------------------------------------------------
+const SECTION_TITLES = {
+  prints: t("Завершённые печати"),
+  consumption: t("Списание"),
+  telegram: t("Уведомления в Telegram"),
+  sensors: t("Датчики температуры и влажности"),
+  catalog: t("Каталог филамента"),
+  spoolman: t("Импорт из Spoolman"),
+  backup: t("Бэкап"),
+  journal: t("Диагностический журнал"),
+};
+const GROUPS = [
+  { title: t("Автоматика"), ids: ["prints", "consumption"] },
+  { title: t("Подключения"), ids: ["telegram", "sensors"] },
+  { title: t("Данные"), ids: ["catalog", "spoolman", "backup", "journal"] },
+];
+const SECTION_IDS = GROUPS.flatMap((g) => g.ids);
 
 export default function Settings() {
   const { user } = useAuth();
@@ -51,6 +77,12 @@ export default function Settings() {
   const [printers, setPrinters] = useState([]);
   const [locations, setLocations] = useState([]);
   const fileRef = useRef();
+  // Раздел, на котором сейчас стоит прокрутка, — подсвечивается в оглавлении.
+  const [activeSection, setActiveSection] = useState(SECTION_IDS[0]);
+  // Какой датчик раскрыт для правки. Одновременно — только один.
+  const [openSensor, setOpenSensor] = useState(null);
+  // Пока не истечёт — расчёт подсветки молчит и не перебивает выбор кликом.
+  const suppressSpy = useRef(0);
 
   useEffect(() => {
     api.get("/api/settings").then((v) => {
@@ -66,6 +98,57 @@ export default function Settings() {
     // Для выпадающих списков привязки датчика.
     api.get("/api/printers").then(setPrinters).catch(() => {});
     api.get("/api/locations").then(setLocations).catch(() => {});
+  }, []);
+
+  function goToSection(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    suppressSpy.current = Date.now() + 400;
+    setActiveSection(id);
+    el.scrollIntoView({ block: "start" });
+  }
+
+  // Подсветка раздела в оглавлении. Считаем по положению секций, а не через
+  // IntersectionObserver: высота разделов меняется после подгрузки данных
+  // (список датчиков вырастает в разы), и наблюдатель успевает запомнить
+  // устаревшие пересечения.
+  //
+  // Порог раздела — прокрутка, на которой его верх дойдёт до линии внимания
+  // под шапкой. У последних разделов такого положения не существует: страница
+  // кончается раньше, чем они успевают подняться. Поэтому их пороги делят
+  // остаток прокрутки поровну — иначе подсветка навсегда застревает на
+  // середине списка, а нижние пункты не загораются никогда.
+  useEffect(() => {
+    const LINE = 140;
+    const pick = () => {
+      if (Date.now() < suppressSpy.current) return;   // только что прыгнули по клику
+      const y = window.scrollY;
+      const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      if (max === 0) { setActiveSection(SECTION_IDS[0]); return; }
+
+      const marks = SECTION_IDS.map((id) => {
+        const el = document.getElementById(id);
+        return el ? el.getBoundingClientRect().top + y - LINE : Infinity;
+      });
+      const tail = marks.filter((m) => m > max).length;
+      if (tail) {
+        const first = marks.length - tail;
+        const start = first > 0 ? Math.min(marks[first - 1], max) : 0;
+        const step = (max - start) / tail;
+        for (let i = 0; i < tail; i++) marks[first + i] = start + step * (i + 1);
+      }
+
+      let current = SECTION_IDS[0];
+      marks.forEach((m, i) => { if (y >= m) current = SECTION_IDS[i]; });
+      setActiveSection(current);   // тот же id — React перерисовку пропустит
+    };
+    pick();
+    window.addEventListener("scroll", pick, { passive: true });
+    window.addEventListener("resize", pick);
+    return () => {
+      window.removeEventListener("scroll", pick);
+      window.removeEventListener("resize", pick);
+    };
   }, []);
 
   async function refreshCatalog() {
@@ -285,12 +368,30 @@ export default function Settings() {
     setHaDirty(true);
   }
   function addSensor() {
-    setHaSensors((prev) => [...prev, { name: "", temp_entity: "", humidity_entity: "", battery_entity: "", bind_type: null, bind_id: null }]);
+    setHaSensors((prev) => {
+      setOpenSensor(prev.length);   // новый датчик сразу раскрыт — заполнять нечего вслепую
+      return [...prev, { name: "", temp_entity: "", humidity_entity: "", battery_entity: "", bind_type: null, bind_id: null }];
+    });
     setHaDirty(true);
   }
   function removeSensor(i) {
     setHaSensors((prev) => prev.filter((_, idx) => idx !== i));
+    setOpenSensor(null);
     setHaDirty(true);
+  }
+
+  // Короткая подпись привязки для свёрнутой строки. Формулировки те же, что в
+  // списке «Где показывать», — иначе одно и то же место называлось бы по-разному.
+  function bindLabel(sensor) {
+    if (sensor.bind_type === "printer") {
+      const p = printers.find((x) => x.id === sensor.bind_id);
+      if (p) return `${t("Принтер")}: ${p.name}`;
+    }
+    if (sensor.bind_type === "location") {
+      const l = locations.find((x) => x.id === sensor.bind_id);
+      if (l) return `${t("Место хранения")}: ${l.name}`;
+    }
+    return t("Отдельным блоком на панели");
   }
 
   // Куда попадут показания при выбранной привязке — иначе эффект селекта виден
@@ -366,52 +467,39 @@ export default function Settings() {
     e.target.value = "";
   }
 
-  return (
-    <div>
-      <h2>{t("Настройки")}</h2>
-      {msg && <div className="muted" style={{ marginBottom: 8 }}>{msg}</div>}
+  // Состояние раздела для оглавления. Считается только из того, что реально
+  // известно: «Включён» значит «настроен и не выключен», а не «проверено».
+  // Разделы без состояния (бэкап, разовый импорт) его и не показывают.
+  function linkState(configured, enabled, activeText) {
+    if (!configured) return { on: false, text: t("Не настроен") };
+    if (!enabled) return { on: false, text: t("Выключен") };
+    return { on: true, text: activeText || t("Включён") };
+  }
+  const SECTION_STATE = {
+    prints: {
+      on: autoMode !== "off",
+      text: AUTO_MODES.find((m) => m.key === autoMode)?.label,
+    },
+    consumption: {
+      on: s.allow_negative_consumption,
+      text: s.allow_negative_consumption ? t("В минус разрешено") : t("В минус запрещено"),
+    },
+    telegram: linkState(s.telegram_token_set && !!s.telegram_chat_id, s.telegram_enabled),
+    sensors: linkState(
+      s.ha_token_set && !!s.ha_base_url,
+      s.ha_enabled,
+      `${t("Датчиков:")} ${(s.ha_sensors || []).length}`
+    ),
+    catalog: catalogInfo?.count ? { on: true, text: `${t("Записей:")} ${catalogInfo.count}` } : null,
+    spoolman: null,
+    backup: null,
+    journal: { on: s.error_logging, text: s.error_logging ? t("Пишется") : t("Выключен") },
+  };
 
-      <div className="card">
-        <h3>{t("Бэкап")}</h3>
-        <p className="muted">{t("Экспорт всех ваших данных в JSON и восстановление из файла (данные заменяются: текущие удаляются).")}</p>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="secondary" onClick={exportBackup}>{t("Скачать бэкап (JSON)")}</button>
-          <button className="secondary" onClick={() => fileRef.current.click()}>{t("Восстановить из файла")}</button>
-          <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={importBackup} />
-        </div>
-      </div>
-
-      <div className="card">
-        <h3>{t("Импорт из Spoolman")}</h3>
-        <p className="muted">{t("Перенос катушек из вашего Spoolman по сети. Повторный импорт пропускает уже добавленные катушки.")}</p>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <input
-            style={{ flex: "1 1 260px" }}
-            value={spoolmanUrl}
-            onChange={(e) => setSpoolmanUrl(e.target.value)}
-            placeholder="http://spoolman.local:7912"
-          />
-          <button className="secondary" onClick={importSpoolman} disabled={spoolmanBusy || !spoolmanUrl.trim()}>
-            {spoolmanBusy ? t("Импорт…") : t("Импортировать")}
-          </button>
-        </div>
-      </div>
-
-      <div className="card">
-        <h3>{t("Каталог филамента (SpoolmanDB)")}</h3>
-        <p className="muted">
-          {t("Автозаполнение катушки по базе филаментов")}{" "}
-          <a href="https://github.com/Donkie/SpoolmanDB" target="_blank" rel="noreferrer">SpoolmanDB</a>
-          {catalogInfo?.count ? ` · ${catalogInfo.count} ${t("записей")}` : ""}.{" "}
-          {t("Снапшот встроен и работает офлайн; кнопка ниже подтягивает свежую версию.")}
-        </p>
-        <button className="secondary" onClick={refreshCatalog} disabled={catalogBusy}>
-          {catalogBusy ? t("Обновление…") : t("Обновить из SpoolmanDB")}
-        </button>
-      </div>
-
-      <div className="card">
-        <h3>{t("Moonraker: автоматизация")}</h3>
+  const SECTION_NODES = {
+    prints: (
+      <section key="prints" id="prints" className="card settings-section">
+        <h3 className="card-title-lg">{t("Завершённые печати")}</h3>
         <div className="card-sub" style={{ marginBottom: 12 }}>
           {t("Что приложение делает с завершёнными печатями с принтера.")}
         </div>
@@ -435,19 +523,21 @@ export default function Settings() {
           {AUTO_MODES.find((m) => m.key === autoMode)?.hint}
         </div>
         {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
-      </div>
-
-      <div className="card">
-        <h3>{t("Списание")}</h3>
+      </section>
+    ),
+    consumption: (
+      <section key="consumption" id="consumption" className="card settings-section">
+        <h3 className="card-title-lg">{t("Списание")}</h3>
         <Toggle
           k="allow_negative_consumption"
           label={t("Разрешить списание катушки в минус при нехватке остатка")}
         />
         {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
-      </div>
-
-      <div className="card">
-        <h3>{t("Уведомления в Telegram")}</h3>
+      </section>
+    ),
+    telegram: (
+      <section key="telegram" id="telegram" className="card settings-section">
+        <h3 className="card-title-lg">{t("Уведомления в Telegram")}</h3>
         <p className="muted">
           {t("Сообщения об изменениях состояния принтера: печать завершена, ошибка, сушка и т.д. Создайте бота через @BotFather, получите токен, напишите боту и укажите chat id (узнать можно у @userinfobot).")}
         </p>
@@ -459,7 +549,7 @@ export default function Settings() {
               label={t("Отправлять уведомления")}
               hint={t("Общий выключатель: пока выключен, ничего не отправляется и принтеры не опрашиваются ради уведомлений.")}
             />
-            <div style={{ display: "grid", gap: 8, maxWidth: 420, marginTop: 12 }}>
+            <div className="settings-fields">
               <label>
                 {t("Токен бота")}
                 <input
@@ -518,27 +608,30 @@ export default function Settings() {
             </div>
             <div style={{ marginTop: 16 }}>
               <div className="card-sub" style={{ marginBottom: 8 }}>{t("Что отправлять")}</div>
-              {TG_EVENTS.map(([key, label]) => (
-                <label key={key} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-                  <input
-                    type="checkbox"
-                    style={{ width: "auto" }}
-                    checked={!!s.telegram_events?.[key]}
-                    onChange={toggleEvent(key)}
-                    disabled={!s.telegram_enabled}
-                  />
-                  {label}
-                </label>
-              ))}
+              <div className="settings-checks">
+                {TG_EVENTS.map(([key, label]) => (
+                  <label key={key}>
+                    <input
+                      type="checkbox"
+                      style={{ width: "auto" }}
+                      checked={!!s.telegram_events?.[key]}
+                      onChange={toggleEvent(key)}
+                      disabled={!s.telegram_enabled}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </div>
           </>
         )}
-      </div>
-
-      <div className="card">
-        <h3>{t("Датчики температуры и влажности (Home Assistant)")}</h3>
+      </section>
+    ),
+    sensors: (
+      <section key="sensors" id="sensors" className="card settings-section">
+        <h3 className="card-title-lg">{t("Датчики температуры и влажности")}</h3>
         <p className="muted">
-          {t("Показания zigbee/wifi-датчиков из вашего Home Assistant — на панели, рядом с принтером и в местах хранения. Нужен адрес HA и токен долгосрочного доступа (профиль в HA → «Токены долгосрочного доступа»).")}
+          {t("Показания zigbee/wifi-датчиков из Home Assistant — на панели, рядом с принтером и в местах хранения. Нужен адрес HA и токен долгосрочного доступа (профиль в HA → «Токены долгосрочного доступа»).")}
         </p>
         {!isAdmin && <div className="muted">{t("Доступно только администратору.")}</div>}
         {isAdmin && (
@@ -548,7 +641,7 @@ export default function Settings() {
               label={t("Показывать показания датчиков")}
               hint={t("Общий выключатель: пока выключен, Home Assistant не опрашивается.")}
             />
-            <div style={{ display: "grid", gap: 8, maxWidth: 420, marginTop: 12 }}>
+            <div className="settings-fields">
               <label>
                 {t("Адрес Home Assistant")}
                 <input
@@ -606,8 +699,21 @@ export default function Settings() {
                 </div>
               )}
               {haSensors.map((sensor, i) => (
-                <div key={i} className="card" style={{ background: "var(--panel-2)", marginBottom: 10 }}>
-                  <div style={{ display: "grid", gap: 8 }}>
+                <div key={i} className="sensor-card">
+                  {/* Свёрнутая строка отвечает на два вопроса: что за прибор и
+                      где появятся его показания. Форма нужна только при правке. */}
+                  <button
+                    type="button"
+                    className="sensor-head"
+                    aria-expanded={openSensor === i}
+                    onClick={() => setOpenSensor(openSensor === i ? null : i)}
+                  >
+                    <Icon name="chevron" size={14} />
+                    <span>{sensor.name || t("Новый датчик")}</span>
+                    <span className="muted sensor-where">{bindLabel(sensor)}</span>
+                  </button>
+                  {openSensor === i && (
+                  <div className="sensor-body settings-fields">
                     <label>
                       {t("Название")}
                       <input
@@ -686,6 +792,7 @@ export default function Settings() {
                       </button>
                     </div>
                   </div>
+                  )}
                 </div>
               ))}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -722,10 +829,53 @@ export default function Settings() {
             </div>
           </>
         )}
-      </div>
-
-      <div className="card">
-        <h3>{t("Диагностический журнал")}</h3>
+      </section>
+    ),
+    catalog: (
+      <section key="catalog" id="catalog" className="card settings-section">
+        <h3 className="card-title-lg">{t("Каталог филамента")}</h3>
+        <p className="muted">
+          {t("Автозаполнение катушки по базе филаментов")}{" "}
+          <a href="https://github.com/Donkie/SpoolmanDB" target="_blank" rel="noreferrer">SpoolmanDB</a>
+          {catalogInfo?.count ? ` · ${catalogInfo.count} ${t("записей")}` : ""}.{" "}
+          {t("Снапшот встроен и работает офлайн; кнопка ниже подтягивает свежую версию.")}
+        </p>
+        <button className="secondary" onClick={refreshCatalog} disabled={catalogBusy}>
+          {catalogBusy ? t("Обновление…") : t("Обновить из SpoolmanDB")}
+        </button>
+      </section>
+    ),
+    spoolman: (
+      <section key="spoolman" id="spoolman" className="card settings-section">
+        <h3 className="card-title-lg">{t("Импорт из Spoolman")}</h3>
+        <p className="muted">{t("Перенос катушек из вашего Spoolman по сети. Повторный импорт пропускает уже добавленные катушки.")}</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            style={{ flex: "1 1 260px" }}
+            value={spoolmanUrl}
+            onChange={(e) => setSpoolmanUrl(e.target.value)}
+            placeholder="http://spoolman.local:7912"
+          />
+          <button className="secondary" onClick={importSpoolman} disabled={spoolmanBusy || !spoolmanUrl.trim()}>
+            {spoolmanBusy ? t("Импорт…") : t("Импортировать")}
+          </button>
+        </div>
+      </section>
+    ),
+    backup: (
+      <section key="backup" id="backup" className="card settings-section">
+        <h3 className="card-title-lg">{t("Бэкап")}</h3>
+        <p className="muted">{t("Экспорт всех ваших данных в JSON и восстановление из файла (данные заменяются: текущие удаляются).")}</p>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="secondary" onClick={exportBackup}>{t("Скачать бэкап (JSON)")}</button>
+          <button className="secondary" onClick={() => fileRef.current.click()}>{t("Восстановить из файла")}</button>
+          <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={importBackup} />
+        </div>
+      </section>
+    ),
+    journal: (
+      <section key="journal" id="journal" className="card settings-section">
+        <h3 className="card-title-lg">{t("Диагностический журнал")}</h3>
         <p className="muted">
           {t("Для отладки: включите запись, повторите проблемные действия, затем скачайте журнал и приложите его к issue на GitHub. Пишутся действия (запросы к серверу с результатом), автоматизация принтера (импорт, автосписание, сушка) и ошибки — бэкенда и браузера. Хранится в базе (последние 5000 записей).")}
         </p>
@@ -814,11 +964,55 @@ export default function Settings() {
             )}
           </>
         )}
-      </div>
+      </section>
+    ),
+  };
 
-      <div className="muted" style={{ fontSize: 12 }}>
-        Filament Tracker · {t("интерфейс")} <span className="mono">{window.__FT_CONFIG__?.version || "dev"}</span>
-        {serverVersion && <> · {t("сервер")} <span className="mono">{serverVersion}</span></>}
+  return (
+    <div>
+      <h2>{t("Настройки")}</h2>
+      {msg && <div className="muted" style={{ marginBottom: 8 }}>{msg}</div>}
+
+      <div className="settings-layout">
+        <nav className="settings-rail" aria-label={t("Разделы настроек")}>
+          {GROUPS.map((g) => (
+            <div className="rail-group" key={g.title}>
+              <div className="eyebrow rail-group-title">{g.title}</div>
+              {g.ids.map((id) => {
+                const st = SECTION_STATE[id];
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`rail-item${activeSection === id ? " active" : ""}`}
+                    aria-current={activeSection === id ? "true" : undefined}
+                    onClick={() => goToSection(id)}
+                  >
+                    {st && <span className={`rail-dot${st.on ? " on" : ""}`} aria-hidden="true" />}
+                    <span className="rail-text">
+                      <span className="rail-name">{SECTION_TITLES[id]}</span>
+                      {st && <span className="rail-state">{st.text}</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+
+        <div className="settings-sections">
+          {GROUPS.map((g) => (
+            <div className="settings-group" key={g.title}>
+              <h3 className="settings-group-title">{g.title}</h3>
+              {g.ids.map((id) => SECTION_NODES[id])}
+            </div>
+          ))}
+
+          <div className="muted settings-version">
+            Filament Tracker · {t("интерфейс")} <span className="mono">{window.__FT_CONFIG__?.version || "dev"}</span>
+            {serverVersion && <> · {t("сервер")} <span className="mono">{serverVersion}</span></>}
+          </div>
+        </div>
       </div>
     </div>
   );
