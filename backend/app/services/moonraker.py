@@ -21,6 +21,33 @@ def parse_printer_info(payload: dict) -> dict:
     }
 
 
+def _num(v) -> float | None:
+    """Число из значения Moonraker; Anycubic шлёт часть полей с единицами ('14.40g')."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    m = re.search(r"-?\d+(?:\.\d+)?", str(v))
+    return float(m.group()) if m else None
+
+
+def is_preparing(print_stats: dict) -> bool:
+    """Принтер взял задание, но ещё не печатает: калибровка стола, хоминг, прогрев.
+
+    Anycubic/Rinkhals не отдаёт отдельного флага — во время автокалибровки
+    print_stats.state и idle_timeout уже равны "printing" (а virtual_sdcard.
+    is_homing равен 2 и в калибровке, и в печати, то есть фазу не отличает).
+    Честный признак — нулевые счётчики самой печати: пока идёт подготовка,
+    прошивка держит print_duration и filament_used в нуле, а на первой же
+    выдавленной пруж-линии оба уходят в плюс.
+    """
+    if print_stats.get("state") != "printing":
+        return False
+    return not (print_stats.get("print_duration") or 0) and not (
+        print_stats.get("filament_used") or 0
+    )
+
+
 def parse_status(payload: dict) -> dict:
     r = payload.get("result", payload) or {}
     status = r.get("status", {}) or {}
@@ -33,6 +60,7 @@ def parse_status(payload: dict) -> dict:
     gm = status.get("gcode_move", {}) or {}
     box_fan = status.get("fan_generic box_fan", {}) or {}
     air_fan = status.get("fan_generic air_filter_fan", {}) or {}
+    info = ps.get("info", {}) or {}
     return {
         "state": ps.get("state"),
         # Текст ошибки от прошивки (Klipper кладёт сюда сообщение при state="error").
@@ -42,6 +70,18 @@ def parse_status(payload: dict) -> dict:
         "total_duration_sec": ps.get("total_duration"),
         "filament_used_mm": ps.get("filament_used"),
         "progress": ds.get("progress") if ds.get("progress") is not None else vsd.get("progress"),
+        # Подготовка перед печатью (калибровка стола, хоминг, прогрев): состояние
+        # у прошивки уже "printing", но фактическая печать ещё не началась.
+        "preparing": is_preparing(ps),
+        # Данные от самой прошивки — точнее наших оценок по прогрессу.
+        "remaining_sec": _num(vsd.get("remain_time")),
+        "estimated_total_sec": _num(vsd.get("total_time")),
+        "current_layer": info.get("current_layer") or vsd.get("current_layer"),
+        "total_layer": info.get("total_layer") or vsd.get("total_layer"),
+        # filament_used_g/filament_total_g из virtual_sdcard намеренно не берём:
+        # Anycubic заполняет их только на экране старта задания, а с началом
+        # печати обнуляет — расход считаем по истории при списании.
+        "filament_type": vsd.get("filament_type") or None,
         "nozzle_temp": ext.get("temperature"),
         "nozzle_target": ext.get("target"),
         "bed_temp": bed.get("temperature"),

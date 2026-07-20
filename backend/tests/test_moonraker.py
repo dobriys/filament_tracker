@@ -203,6 +203,67 @@ def test_status_progress_falls_back_to_virtual_sdcard():
     assert parse_status(payload)["progress"] == 0.37
 
 
+# Снято с живого Kobra S1 (Rinkhals) во время автокалибровки стола: прошивка уже
+# отдаёт state="printing", но счётчики печати ещё нулевые.
+PREPARING = {
+    "result": {
+        "status": {
+            "print_stats": {
+                "state": "printing",
+                "filename": ".3mf_temp/cube_ABS.gcode",
+                "print_duration": 0,
+                "filament_used": 0,
+                "info": {"current_layer": 0, "total_layer": 150},
+            },
+            "virtual_sdcard": {
+                "progress": 0,
+                "remain_time": 3521,
+                "total_time": 3521,
+                "current_layer": 0,
+                "total_layer": 150,
+                "filament_type": "ABS",
+                "is_homing": 2,
+            },
+        }
+    }
+}
+
+
+def test_status_detects_preparing_phase():
+    s = parse_status(PREPARING)
+    assert s["state"] == "printing"
+    assert s["preparing"] is True
+    assert s["total_layer"] == 150
+    assert s["remaining_sec"] == 3521.0
+    assert s["filament_type"] == "ABS"
+
+
+def test_status_not_preparing_once_extrusion_starts():
+    """Первая же пруж-линия выводит счётчики из нуля — подготовка закончилась."""
+    payload = {"result": {"status": {"print_stats": {
+        "state": "printing", "print_duration": 1, "filament_used": 50,
+    }}}}
+    assert parse_status(payload)["preparing"] is False
+
+
+def test_status_preparing_only_while_printing():
+    """В простое нули естественны — подготовкой это считать нельзя."""
+    payload = {"result": {"status": {"print_stats": {
+        "state": "standby", "print_duration": 0, "filament_used": 0,
+    }}}}
+    assert parse_status(payload)["preparing"] is False
+
+
+def test_status_layers_prefer_print_stats_info():
+    payload = {"result": {"status": {
+        "print_stats": {"state": "printing", "info": {"current_layer": 8, "total_layer": 150}},
+        "virtual_sdcard": {"current_layer": 0, "total_layer": 150, "remain_time": 3540},
+    }}}
+    s = parse_status(payload)
+    assert (s["current_layer"], s["total_layer"]) == (8, 150)
+    assert s["remaining_sec"] == 3540.0
+
+
 def test_job_to_parsed_fallback_to_total_length():
     # Moonraker не извлёк пофиловые веса (только size/modified), но есть длина.
     job = {

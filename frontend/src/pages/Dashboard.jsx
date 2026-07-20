@@ -424,8 +424,13 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
   }
 
   const st = status?.state;
-  const [stLabel, stTag] = STATE_RU[st] || [st || "—", ""];
-  const isPrinting = st === "printing";
+  // Подготовка (калибровка стола, хоминг, прогрев) идёт под state="printing",
+  // но печатью ещё не является — показываем её отдельным состоянием.
+  const isPreparing = !!status?.preparing;
+  const [stLabel, stTag] = isPreparing
+    ? [t("Подготовка"), "in_use"]
+    : STATE_RU[st] || [st || "—", ""];
+  const isPrinting = st === "printing" && !isPreparing;
   // Текст ошибки принтера: распознанный (описание + код + вики) либо сырой + гугл.
   const errMsg = st === "error" ? status?.message : null;
   const knownErr = recognizePrinterError(errMsg);
@@ -459,9 +464,18 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
   const file = (status?.filename || job?.filename || "").split("/").pop();
   const pct = status?.progress != null ? Math.round(status.progress * 100) : null;
   const elapsed = status?.print_duration_sec;
-  const remaining = isPrinting && status?.progress > 0.02 && elapsed != null
-    ? elapsed * (1 / status.progress - 1)
-    : null;
+  // Остаток берём у прошивки — она знает план печати, а не экстраполирует.
+  // Оценка по прогрессу остаётся запасным вариантом: на других принтерах
+  // remain_time может не приходить, а в начале печати она ещё и врёт.
+  const remaining = !isPrinting
+    ? null
+    : status?.remaining_sec > 0
+      ? status.remaining_sec
+      : status?.progress > 0.02 && elapsed != null
+        ? elapsed * (1 / status.progress - 1)
+        : null;
+  const layer = status?.current_layer;
+  const totalLayer = status?.total_layer;
 
   // Секции карточки — по возможностям принтера (авто из overview + пресет).
   const hasMmu = caps.has_mmu ?? gates.length > 0;
@@ -509,9 +523,21 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
           <div className="printer-grid">
             {/* Блок «Печать» */}
             <div className="printer-zone">
-              <div className="zone-title">{isPrinting ? t("Печатается") : t("Последняя печать")}</div>
+              <div className="zone-title">{isPreparing ? t("Подготовка к печати") : isPrinting ? t("Печатается") : t("Последняя печать")}</div>
               <div className="zone-file-box" title={file}>{file || t("нет данных")}</div>
-              {isPrinting ? (
+              {isPreparing ? (
+                <>
+                  <div style={{ margin: "10px 0 6px", fontSize: 15 }}>
+                    {t("Калибровка стола и прогрев — печать ещё не началась")}
+                  </div>
+                  <div className="progress"><div className="progress-indeterminate" style={{ background: "var(--accent)" }} /></div>
+                  <div className="zone-metrics">
+                    <div><span className="muted">{t("Слоёв в задании")}</span><b className="mono">{totalLayer || "—"}</b></div>
+                    <div><span className="muted">{t("Сопло")}</span><b className="mono">{status?.nozzle_temp != null ? Math.round(status.nozzle_temp) + "°" : "—"}{status?.nozzle_target > 0 ? ` / ${Math.round(status.nozzle_target)}°` : ""}</b></div>
+                    <div><span className="muted">{t("Стол")}</span><b className="mono">{status?.bed_temp != null ? Math.round(status.bed_temp) + "°" : "—"}{status?.bed_target > 0 ? ` / ${Math.round(status.bed_target)}°` : ""}</b></div>
+                  </div>
+                </>
+              ) : isPrinting ? (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "10px 0 6px" }}>
                     <span className="mono" style={{ fontSize: 26, fontWeight: 600 }}>{pct != null ? pct + "%" : "—"}</span>
@@ -520,6 +546,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
                   <div className="progress"><div style={{ width: `${pct || 0}%`, background: "var(--accent)" }} /></div>
                   <div className="zone-metrics">
                     <div><span className="muted">{t("Прошло")}</span><b className="mono">{fmtDur(elapsed)}</b></div>
+                    <div><span className="muted">{t("Слой")}</span><b className="mono">{layer > 0 && totalLayer > 0 ? `${layer} / ${totalLayer}` : "—"}</b></div>
                     <div><span className="muted">{t("Сопло")}</span><b className="mono">{status?.nozzle_temp != null ? Math.round(status.nozzle_temp) + "°" : "—"}{status?.nozzle_target > 0 ? ` / ${Math.round(status.nozzle_target)}°` : ""}</b></div>
                     <div><span className="muted">{t("Стол")}</span><b className="mono">{status?.bed_temp != null ? Math.round(status.bed_temp) + "°" : "—"}{status?.bed_target > 0 ? ` / ${Math.round(status.bed_target)}°` : ""}</b></div>
                   </div>
