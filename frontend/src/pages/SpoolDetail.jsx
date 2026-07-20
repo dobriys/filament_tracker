@@ -27,49 +27,50 @@ function lengthM(grams, density, dmm) {
   return Number(grams) / (Number(density) || 1.24) / area / 100; // m
 }
 
-function Gauge({ pct }) {
-  const r = 70, c = 2 * Math.PI * r, dash = pct * c;
-  const col = pct < 0.15 ? "var(--danger)" : "var(--accent)";
+// Катушка и есть шкала остатка.
+//
+// Раньше страница показывала два круга про одно и то же: нарисованную полную
+// катушку и рядом пончик с процентом. Настоящая катушка на глазах пустеет —
+// поэтому длина намотки здесь равна остатку, а цвет намотки берётся у самого
+// филамента. Один объект отвечает сразу на «что это» и «сколько осталось».
+// На низком остатке цвет перебивается статусным: тревога важнее материала.
+function SpoolGauge({ pct, color, size = 136 }) {
+  const R = 54, BAND = 15, C = 2 * Math.PI * R;
+  const p = Math.max(0, Math.min(1, pct));
+  const wound = p * C;
+  // Цвет намотки — всегда цвет филамента. Раньше на низком остатке он
+  // подменялся статусным, и оранжевая катушка на 4% выглядела красным
+  // огрызком: длина дуги и её цвет несут разные факты и не должны драться
+  // за один канал. Тревога живёт в бейдже статуса рядом с названием.
+  const fill = color || "var(--muted-2)";
+  // Конец намотки: у белого и натурального филамента дуга почти сливается с
+  // пустой дорожкой, и без этой засечки не видно, где намотка кончается.
+  const endAngle = ((-90 + p * 360) * Math.PI) / 180;
+  const tick = (k) => [70 + k * Math.cos(endAngle), 70 + k * Math.sin(endAngle)];
+  const [tx1, ty1] = tick(R - BAND / 2);
+  const [tx2, ty2] = tick(R + BAND / 2);
   return (
-    <svg viewBox="0 0 180 180" width="160" height="160">
-      <circle cx="90" cy="90" r={r} fill="none" stroke="var(--border)" strokeWidth="15" />
-      <circle cx="90" cy="90" r={r} fill="none" stroke={col} strokeWidth="15" strokeLinecap="round"
-        strokeDasharray={`${dash} ${c - dash}`} transform="rotate(-90 90 90)" />
-      <text x="90" y="86" textAnchor="middle" fontSize="34" fontWeight="700" fill="var(--text)">{Math.round(pct * 100)}%</text>
-      <text x="90" y="108" textAnchor="middle" fontSize="13" fill="var(--muted)">{t("остаток")}</text>
-    </svg>
-  );
-}
-
-function SpoolGraphic({ color }) {
-  const c = color || "#6b7280";
-  // viewBox 120×120, svg тянется на весь контейнер (адаптивно).
-  return (
-    <svg viewBox="0 0 120 120" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" aria-label={t("катушка")} style={{ display: "block" }}>
-      <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" strokeWidth="2" />
-      <circle cx="60" cy="60" r="50" fill={c} />
-      {/* витки филамента */}
-      <circle cx="60" cy="60" r="44" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" />
-      <circle cx="60" cy="60" r="36" fill="none" stroke="rgba(0,0,0,0.12)" strokeWidth="1.5" />
-      <circle cx="60" cy="60" r="29" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1.5" />
+    <svg viewBox="0 0 140 140" width={size} height={size} className="spool-gauge"
+      role="img" aria-label={`${t("Остаток")} ${Math.round(p * 100)}%`}>
+      {/* пустая часть катушки */}
+      <circle cx="70" cy="70" r={R} fill="none" stroke="var(--border)" strokeWidth={BAND} />
+      {/* намотка: дуга = остаток, цвет = филамент */}
+      <circle cx="70" cy="70" r={R} fill="none" stroke={fill} strokeWidth={BAND}
+        strokeDasharray={`${wound} ${C - wound}`} transform="rotate(-90 70 70)" />
+      {/* волоски по краям намотки — иначе белый и натуральный сливаются с фоном */}
+      <circle cx="70" cy="70" r={R + BAND / 2} fill="none" stroke="var(--border)" strokeWidth="1" />
+      <circle cx="70" cy="70" r={R - BAND / 2} fill="none" stroke="var(--border)" strokeWidth="1" />
+      {p > 0.002 && p < 0.998 && (
+        <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} stroke="var(--muted)" strokeWidth="1.5" />
+      )}
       {/* ступица */}
-      <circle cx="60" cy="60" r="24" fill="var(--panel)" stroke="var(--border)" strokeWidth="2" />
-      <circle cx="60" cy="60" r="9" fill="var(--bg)" stroke="var(--border)" strokeWidth="2" />
+      <circle cx="70" cy="70" r={R - BAND / 2 - 1} fill="var(--panel)" />
+      <text x="70" y="70" textAnchor="middle" dominantBaseline="central"
+        className="spool-gauge-pct">{Math.round(p * 100)}%</text>
     </svg>
   );
 }
 
-function Metric({ icon, label, value, sub }) {
-  // Температура окрашена токеном --hot: это то, что принтер нагрел.
-  const hot = icon === "thermometer" || icon === "flame";
-  return (
-    <div>
-      <div className="spec-label inline-ico">{icon && <Icon name={icon} size={13} className={hot ? "hot" : undefined} />}{label}</div>
-      <div className="spec-value">{value}</div>
-      {sub && <div className="spec-sub">{sub}</div>}
-    </div>
-  );
-}
 
 export default function SpoolDetail() {
   const { id } = useParams();
@@ -188,49 +189,126 @@ export default function SpoolDetail() {
   return (
     <div>
       {/* Хлебные крошки + действия */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div className="muted"><Link to="/spools">{t("Катушки")}</Link> / {title}</div>
-        <div style={{ display: "flex", gap: 8 }}>
+      <div className="sd-head">
+        <div className="muted sd-crumbs"><Link to="/spools">{t("Катушки")}</Link> / {title}</div>
+        <div className="sd-head-actions">
           <button className="secondary" onClick={() => navigate(`/spools/${id}/edit`)}><Icon name="pencil" /> {t("Редактировать")}</button>
           <button onClick={() => navigate("/gcode")}>{t("＋ Учесть печать")}</button>
         </div>
       </div>
 
-      {/* Заголовок */}
-      <div style={{ margin: "10px 0 4px", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }} className="muted">
-        <span className="inline-ico"><Icon name="tag" size={14} /> {spool.sku || spool.label || "—"}</span>
-        {locName && <span className="inline-ico">• <Icon name="pin" size={14} /> {locName}</span>}
-        <span className="badge in_use">{STATUS_RU[spool.status] || spool.status}</span>
-      </div>
-      <h2 style={{ margin: "0 0 8px" }}>{title}</h2>
-      <div className="sd-tags" style={{ marginBottom: 16 }}>
-        {spool.manufacturer && <span className="sd-tag">{spool.manufacturer}</span>}
-        {material && <span className="sd-tag">{material}</span>}
-        {(colorName || colorHex) && <span className="sd-tag"><span className="swatch" style={{ background: colorHex || "var(--muted)", width: 12, height: 12 }} />{colorName || colorHex}</span>}
+      {/* Заголовок. Бренд, материал и цвет уже стоят в названии — вторым рядом
+          чипов их не повторяем; в мета-строке только то, чего в названии нет. */}
+      {/* Шкала показывает остаток и потому съёживается вместе с ним. Цвет —
+          постоянное свойство катушки, поэтому у него своё место: образец в
+          полную силу рядом с названием, как этикетка на реальной катушке. */}
+      <div className="sd-ident">
+        {spool.photo
+          ? <img className="sd-ident-chip" src={spool.photo} alt="" />
+          : <span className="sd-ident-chip" style={{ background: colorHex || "var(--panel-3)" }}
+              title={colorName || colorHex || undefined} />}
+        <div className="sd-ident-body">
+          <h2>{title}</h2>
+          <div className="sd-meta">
+            {(colorName || colorHex) && (
+              <span className="sd-color">
+                {colorName || t("Цвет")}
+                {colorHex && <b className="mono">{colorHex}</b>}
+              </span>
+            )}
+            {material && <span>{material}</span>}
+            {(spool.sku || spool.label) && (
+              <span className="inline-ico"><Icon name="tag" size={14} /> {spool.sku || spool.label}</span>
+            )}
+            {locName && <span className="inline-ico"><Icon name="pin" size={14} /> {locName}</span>}
+            <span className={`badge ${spool.status}`}>{STATUS_RU[spool.status] || spool.status}</span>
+          </div>
+        </div>
       </div>
       {error && <div className="error" style={{ marginBottom: 12 }}>{error}</div>}
 
-      <div className="sd-grid">
-        {/* Левая колонка */}
-        <div>
-          {spool.photo
-            ? <img className="sd-photo" src={spool.photo} alt="" style={{ marginBottom: 16 }} />
-            : <div className="sd-photo" style={{ marginBottom: 16, position: "relative", padding: "6%" }}>
-                <SpoolGraphic color={colorHex} />
-                <span className="muted" style={{ position: "absolute", bottom: 10, left: 0, right: 0, textAlign: "center", fontSize: 13 }}>{t("Нет фото")}</span>
-              </div>}
-
-          <div className="card">
-            <h3 className="card-title" style={{ marginBottom: 14 }}>{t("Характеристики")}</h3>
-            <div className="spec-grid">
-              <Metric icon="weight" label={t("Вес нетто")} value={`${capacity.toFixed(0)}${t("г")}`} />
-              <Metric icon="diameter" label={t("Диаметр")} value={`${Number(dia)}${t("мм")}`} />
-              <Metric icon="◎" label={t("Пустая катушка")} value={spool.empty_spool_weight_g != null ? `${Number(spool.empty_spool_weight_g).toFixed(0)}${t("г")}` : "—"} sub={t("тара")} />
-              <Metric icon="calendar" label={t("Куплена")} value={fmtDate(spool.purchase_date)} sub={spool.price != null ? `${Number(spool.price)} ${spool.currency}` : null} />
+      {/* Остаток — то, ради чего страницу и открывают */}
+      <div className="card sd-hero">
+        <SpoolGauge pct={pct} color={colorHex} />
+        <div className="sd-hero-body">
+          <div className="sd-stats">
+            <div>
+              <span className="eyebrow">{t("Осталось")}</span>
+              <b className="mono">{remaining.toFixed(0)}</b>
+              <em>{t("из")} {capacity.toFixed(0)} {t("г")}</em>
+            </div>
+            <div>
+              <span className="eyebrow">{t("Длина")}</span>
+              <b className="mono">{lenLeft.toFixed(0)}</b>
+              <em>{t("из")} {lenTotal.toFixed(0)} {t("м")}</em>
+            </div>
+            <div>
+              <span className="eyebrow">{t("Хватит на")}</span>
+              <b className="mono">{prints}</b>
+              <em>{t("печатей по 50 г")}</em>
             </div>
           </div>
+          <div className="sd-update">
+            <label>
+              {t("Взвесить (общий вес с катушкой), г")}
+              <span className="unit-input">
+                <input type="number" value={weighInput} onChange={(e) => setWeighInput(e.target.value)} />
+                <button className="secondary" onClick={weigh} disabled={!weighInput}>OK</button>
+              </span>
+            </label>
+            <label>
+              {t("Указать остаток вручную, г")}
+              <span className="unit-input">
+                <input type="number" value={adjustInput} onChange={(e) => setAdjustInput(e.target.value)} />
+                <button className="secondary" onClick={adjust} disabled={!adjustInput}>OK</button>
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
 
-          <div className="card">
+      {/* Профиль печати: пять значений в строку вместо сетки из карточек */}
+      <div className="card sd-profile">
+        <span className="eyebrow">{t("Профиль печати")}</span>
+        <div className="sd-profile-items">
+          <span><Icon name="thermometer" size={13} className="hot" /> {t("Сопло")} <b className="mono">{nozzle}</b></span>
+          <span><Icon name="thermometer" size={13} className="hot" /> {t("Стол")} <b className="mono">{bed}</b></span>
+          <span><Icon name="fan" size={13} /> {t("Обдув")} <b className="mono">{fan}</b></span>
+          <span><Icon name="droplet" size={13} /> Flow <b className="mono">{flow}</b></span>
+          <span><Icon name="gauge" size={13} /> Pressure Adv <b className="mono">{pa}</b></span>
+        </div>
+        <button className="secondary" onClick={copyProfile}>
+          <Icon name={copied ? "check" : "copy"} /> {copied ? t("Скопировано") : t("Копировать")}
+        </button>
+      </div>
+
+      {/* Три служебных блока в ряд — раньше они стояли столбиком и тянули
+          левую колонку на 300px ниже правой. */}
+      <div className="sd-utility">
+        <div className="card">
+          <h3 className="card-title">{t("Размещение")}</h3>
+          <div className="field-2" style={{ marginTop: 10 }}>
+            <div>
+              <label>{t("Место хранения")}</label>
+              <select value={spool.location_id || ""} onChange={(e) => setLocation(e.target.value)}>
+                <option value="">{t("— не указано —")}</option>
+                {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label>{t("В принтере (слот)")}</label>
+              <select value={placement?.slot?.slot_id || ""} onChange={(e) => assignSlot(e.target.value)}>
+                <option value="">{t("— не в принтере —")}</option>
+                {slots.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+              {placement?.slot && <button className="secondary" style={{ marginTop: 6 }} onClick={unassignSlot}>{t("Снять со слота")}</button>}
+            </div>
+          </div>
+        </div>
+
+        <DryingCard spool={spool} events={events} onDone={load} />
+
+        <div className="card">
             <h3 className="card-title">{t("QR и этикетка")}</h3>
             <div style={{ display: "flex", gap: 16, alignItems: "center", marginTop: 10 }}>
               {card?.qr_png_base64 && <img src={card.qr_png_base64} alt="QR" width={96} height={96} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: 4 }} />}
@@ -271,138 +349,67 @@ export default function SpoolDetail() {
               </div>
             )}
           </div>
+      </div>
 
-          <div className="card">
-            <h3 className="card-title">{t("Размещение")}</h3>
-            <div className="field-2" style={{ marginTop: 10 }}>
-              <div>
-                <label>{t("Место хранения")}</label>
-                <select value={spool.location_id || ""} onChange={(e) => setLocation(e.target.value)}>
-                  <option value="">{t("— не указано —")}</option>
-                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label>{t("В принтере (слот)")}</label>
-                <select value={placement?.slot?.slot_id || ""} onChange={(e) => assignSlot(e.target.value)}>
-                  <option value="">{t("— не в принтере —")}</option>
-                  {slots.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
-                {placement?.slot && <button className="secondary" style={{ marginTop: 6 }} onClick={unassignSlot}>{t("Снять со слота")}</button>}
-              </div>
-            </div>
+      {/* Характеристики: раньше четыре пункта висели слева вверху, а остальные
+          двадцать — плитой внизу страницы. Теперь это одно место. */}
+      <div className="card">
+        <h3 className="card-title">{t("Характеристики")}</h3>
+        <div className="sd-specs">
+          <div>
+            <div className="sd-specs-group">{t("Катушка")}</div>
+            <div className="row-item"><span className="k">{t("Вес нетто")}</span><span className="mono">{capacity.toFixed(0)} {t("г")}</span></div>
+            <div className="row-item"><span className="k">{t("Диаметр")}</span><span className="mono">{Number(dia)} {t("мм")}</span></div>
+            <div className="row-item"><span className="k">{t("Пустая катушка")}</span><span className="mono">{spool.empty_spool_weight_g != null ? `${Number(spool.empty_spool_weight_g).toFixed(0)} ${t("г")}` : "—"}</span></div>
+            <div className="row-item"><span className="k">{t("Куплена")}</span><span>{fmtDate(spool.purchase_date)}{spool.price != null ? ` · ${Number(spool.price)} ${spool.currency}` : ""}</span></div>
           </div>
-
-          <DryingCard spool={spool} events={events} onDone={load} />
-        </div>
-
-        {/* Правая колонка */}
-        <div>
-          <div className="card">
-            <h3 className="card-title">{t("Текущий статус")}</h3>
-            <div style={{ display: "flex", gap: 24, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
-              <Gauge pct={pct} />
-              <div style={{ flex: 1, minWidth: 220 }}>
-                <div className="row">
-                  <div>
-                    <div className="spec-label">{t("Остаток (вес)")}</div>
-                    <div style={{ fontSize: 30, fontWeight: 700 }}>{remaining.toFixed(0)} <span className="muted" style={{ fontSize: 16 }}>/ {capacity.toFixed(0)}{t("г")}</span></div>
+          {SPEC_GROUPS.map((g) => {
+            const items = g.fields
+              .map((f) => ({ f, v: fmtSpec(f, spool.specs?.[f.key]) }))
+              .filter((x) => x.v != null);
+            if (!items.length) return null;
+            return (
+              <div key={g.title}>
+                <div className="sd-specs-group">{g.title}</div>
+                {items.map(({ f, v }) => (
+                  <div key={f.key} className="row-item">
+                    <span className="k">{f.label}</span>
+                    <span>{f.key.endsWith("_url") ? <a href={v} target="_blank" rel="noreferrer">{t("ссылка ↗")}</a> : v}</span>
                   </div>
-                  <div>
-                    <div className="spec-label">{t("Остаток (длина)")}</div>
-                    <div style={{ fontSize: 30, fontWeight: 700 }}>{lenLeft.toFixed(0)} <span className="muted" style={{ fontSize: 16 }}>/ {lenTotal.toFixed(0)}{t("м")}</span></div>
-                  </div>
-                </div>
-                <div className="muted" style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 10 }}>{t("Хватит примерно на ~")}{prints}{" "}{t("печатей (по 50 г).")}</div>
-              </div>
-            </div>
-            {/* Обновление остатка */}
-            <div className="field-2" style={{ marginTop: 14, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
-              <div>
-                <label>{t("Взвесить (общий вес с катушкой), г")}</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input type="number" value={weighInput} onChange={(e) => setWeighInput(e.target.value)} />
-                  <button className="secondary" onClick={weigh} disabled={!weighInput}>OK</button>
-                </div>
-              </div>
-              <div>
-                <label>{t("Указать остаток вручную, г")}</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input type="number" value={adjustInput} onChange={(e) => setAdjustInput(e.target.value)} />
-                  <button className="secondary" onClick={adjust} disabled={!adjustInput}>OK</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 className="card-title">{t("Рекомендуемый профиль печати")}</h3>
-              <button className="secondary" onClick={copyProfile}><Icon name={copied ? "check" : "copy"} /> {copied ? t("Скопировано") : t("Копировать")}</button>
-            </div>
-            <div className="profile-grid" style={{ marginTop: 14 }}>
-              <Metric icon="thermometer" label={t("Сопло")} value={nozzle} />
-              <Metric icon="thermometer" label={t("Стол")} value={bed} />
-              <Metric icon="fan" label={t("Обдув")} value={fan} />
-              <Metric icon="droplet" label="Flow Rate" value={flow} />
-              <Metric icon="gauge" label="Pressure Adv (K)" value={pa} />
-            </div>
-          </div>
-
-          <div className="card">
-            <h3 className="card-title">{t("История использования")}</h3>
-            <table className="cards-mobile" style={{ marginTop: 10 }}>
-              <thead><tr><th>{t("Дата")}</th><th>{t("Событие")}</th><th>{t("Объём")}</th><th>{t("Статус")}</th></tr></thead>
-              <tbody>
-                {events.map((ev) => (
-                  <tr key={ev.id}>
-                    <td data-label={t("Дата")}>{fmtDate(ev.created_at)}</td>
-                    <td data-label={t("Событие")}>{tReason(ev.reason) || EVENT_RU[ev.event_type] || ev.event_type}</td>
-                    <td data-label={t("Объём")} style={{ color: ev.delta_g < 0 ? "var(--danger)" : ev.delta_g > 0 ? "var(--ok)" : "var(--text)" }}>
-                      {ev.delta_g != null ? `${ev.delta_g > 0 ? "+" : ""}${Number(ev.delta_g).toFixed(0)}${t("г")}` : "—"}
-                    </td>
-                    <td data-label={t("Статус")}><span className="act-tag updated">{EVENT_RU[ev.event_type] || ev.event_type}</span></td>
-                  </tr>
                 ))}
-                {events.length === 0 && <tr><td colSpan={4} className="muted">{t("Пока нет событий")}</td></tr>}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="card">
-            <h3 className="card-title">{t("Заметки")}</h3>
-            <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{spool.notes || <span className="muted">{t("Заметок нет.")}</span>}</div>
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Характеристики филамента */}
-      {spool.specs && Object.keys(spool.specs).length > 0 && (
-        <div className="card" style={{ marginTop: 16 }}>
-          <h3 className="card-title">{t("Характеристики филамента")}</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20, marginTop: 12 }}>
-            {SPEC_GROUPS.map((g) => {
-              const items = g.fields
-                .map((f) => ({ f, v: fmtSpec(f, spool.specs[f.key]) }))
-                .filter((x) => x.v != null);
-              if (!items.length) return null;
-              return (
-                <div key={g.title}>
-                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>{g.title}</div>
-                  <div>
-                    {items.map(({ f, v }) => (
-                      <div key={f.key} className="row-item">
-                        <span className="k">{f.label}</span>
-                        <span>{f.key.endsWith("_url") ? <a href={v} target="_blank" rel="noreferrer">{t("ссылка ↗")}</a> : v}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+      <div className="sd-bottom">
+        <div className="card">
+          <h3 className="card-title">{t("История использования")}</h3>
+          <table className="cards-mobile" style={{ marginTop: 10 }}>
+            <thead><tr><th>{t("Дата")}</th><th>{t("Событие")}</th><th>{t("Объём")}</th></tr></thead>
+            <tbody>
+              {events.map((ev) => (
+                <tr key={ev.id}>
+                  <td data-label={t("Дата")}>{fmtDate(ev.created_at)}</td>
+                  <td data-label={t("Событие")}>{tReason(ev.reason) || EVENT_RU[ev.event_type] || ev.event_type}</td>
+                  <td data-label={t("Объём")} className="mono" style={{ color: ev.delta_g < 0 ? "var(--danger)" : ev.delta_g > 0 ? "var(--ok)" : "var(--text)" }}>
+                    {ev.delta_g != null ? `${ev.delta_g > 0 ? "+" : ""}${Number(ev.delta_g).toFixed(0)}${t("г")}` : "—"}
+                  </td>
+                </tr>
+              ))}
+              {events.length === 0 && <tr><td colSpan={3} className="muted">{t("Пока нет событий")}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="card">
+          <h3 className="card-title">{t("Заметки")}</h3>
+          <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
+            {spool.notes || <span className="muted">{t("Заметок нет.")}</span>}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

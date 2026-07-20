@@ -696,5 +696,10 @@ export const EN = {
   "Пишется": "Recording",
   "Датчиков:": "Sensors:",
   "Новый датчик": "New sensor",
+  // Карточка катушки
+  "Длина": "Length",
+  "Хватит на": "Enough for",
+  "печатей по 50 г": "prints of 50 g",
+  "Профиль печати": "Print profile",
   "Записей:": "Entries:",
 };
