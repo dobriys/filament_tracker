@@ -1,31 +1,48 @@
-# 🧵 Filament Tracker
+<h1 align="center">Filament Tracker</h1>
 
-[Русский](README.md) · **English**
+<p align="center">
+  <b>Filament tracking for 3D printing that lives on your own server.</b>
+</p>
 
-**Self-hosted filament tracking for 3D printing.**
+<p align="center">
+  <a href="https://github.com/dobriys/filament_tracker/releases"><img alt="Release" src="https://img.shields.io/github/v/release/dobriys/filament_tracker?style=flat-square&color=00615c&labelColor=1b1a17"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/dobriys/filament_tracker?style=flat-square&color=00615c&labelColor=1b1a17"></a>
+  <a href="https://demo.fmtracker.ru"><img alt="Demo" src="https://img.shields.io/badge/demo-fmtracker.ru-00615c?style=flat-square&labelColor=1b1a17"></a>
+</p>
 
-How many spools are left, what's stored where, how much plastic you still have and
-where it went — all in one place. The app tallies usage from your printer
-(Moonraker) or from an uploaded gcode file, prints QR-coded labels, and keeps all
-your data on your own server. Interface in English and Russian.
+<p align="center">
+  <a href="README.md">Русский</a> · <b>English</b>
+</p>
 
-> 🕹️ **[Live demo →](https://demo.fmtracker.ru)** — try the interface on
-> sample data with no install. It runs entirely in the browser (no backend), edits
-> are stored locally, and the "Reset demo" button restores the original data.
+---
 
-![Dashboard](docs/screenshots/en/dashboard.png)
+How much is left on that spool? Will it last through the night? Where did all the
+blue PETG go?
+
+Filament Tracker answers those questions for you. It keeps your spool inventory,
+tallies usage from your printer, and warns you when something is running low — before
+you find out halfway through an overnight print.
+
+Everything runs on your own hardware: home server, NAS, mini PC. Your data stays put.
+
+**[Open the live demo →](https://demo.fmtracker.ru)** — the real interface on sample
+data, no install needed. It runs entirely in the browser, edits are stored locally,
+and "Reset demo" puts everything back.
+
+![Filament Tracker dashboard](docs/screenshots/en/hero.png)
 
 ---
 
 ## Contents
 
 - [What it does](#what-it-does)
-- [Feature tour](#feature-tour)
-- [Install on your own server (Docker)](#install-on-your-own-server-docker)
-- [Install via Portainer](#install-via-portainer)
-- [First steps after install](#first-steps-after-install)
+- [A look around](#a-look-around)
+- [Install](#install)
+- [First steps](#first-steps)
+- [Telegram notifications](#telegram-notifications)
+- [Home Assistant sensors](#home-assistant-sensors)
 - [Backups](#backups)
-- [How to report a bug](#how-to-report-a-bug)
+- [When something breaks](#when-something-breaks)
 - [FAQ](#faq)
 - [Support the project](#support-the-project)
 
@@ -33,190 +50,133 @@ your data on your own server. Interface in English and Russian.
 
 ## What it does
 
-- 📦 **Spool inventory** — material, color, remaining grams, storage location, photo.
-- ⚖️ **Accurate remaining amount** — deduction by weight, manual adjustments, full
+### Inventory
+
+- **Spool inventory** — material, color, remaining grams, storage location, photo.
+  In the list, each row carries a stripe of the filament's real color, so you spot
+  the spool you want without reading a single name.
+- **Accurate remaining amount** — deduction by weight, manual corrections, full
   movement history.
-- 🖨️ **Printer integration (Moonraker / Rinkhals)** — live print status right on the
-  dashboard and one-click deduction of used plastic when a job finishes.
-- 🗂️ **Printer catalog** — pick your model from 50+ compatible Klipper/Moonraker
-  printers (Anycubic, Creality, Sovol, QIDI, FLSUN, ELEGOO, Prusa and more). The card
-  shows only what your printer actually has — multi-material slots, dryer, chamber —
-  and draws a silhouette in the brand's accent color.
-- 🧵 **Spoolman import** — bring spools over from your self-hosted
-  [Spoolman](https://github.com/Donkie/Spoolman) across the network in one click.
-- 🤖 **Auto-deduction** — background printer polling: finished prints are imported
-  automatically, and when every tool maps to a slot the material is deducted for you
-  (optional).
-- 📨 **Telegram notifications** — print finished, error, paused, drying, spool running
-  low. Every event type is toggled on its own.
-- 🌡️ **Home Assistant sensors** — temperature and humidity in the dryer and storage
-  locations on the dashboard; above the threshold you get a highlight and a notification.
-- 📄 **gcode estimation** — upload a file and the app computes usage per extruder and
-  deducts from the right spools.
-- 🏷️ **Labels and QR codes** — print stickers with a live preview; scanning the QR
-  opens the spool's card.
-- 📊 **Dashboard** — stock by material, monthly usage, what's running low, recent
-  activity.
-- 🗂️ **Filament profiles, storage locations, printer slots** — flexible organization.
-- 💾 **JSON backup** — export and restore all your data.
-- 🔐 **Your server, your data** — login-based auth; printer keys are stored encrypted.
+- **Filament profiles** — brand and material templates with every temperature, so you
+  don't fill in the same card twice.
+- **Storage locations and printer slots** — see what's on the shelf and what's loaded.
+- **Labels and QR codes** — stickers with a live preview, printed one at a time or as
+  an A4 sheet. Scanning the QR opens the spool on your phone.
+
+### Printer
+
+- **Moonraker and Rinkhals** — live print status on the dashboard: progress, layer,
+  temperatures, time remaining.
+- **Printer catalog** — 50+ Klipper/Moonraker models (Anycubic, Creality, Sovol, QIDI,
+  FLSUN, ELEGOO, Prusa and more). Connection type, slot count and capabilities fill
+  themselves in.
+- **One-click deduction** — per-extruder usage already comes from the printer; you
+  just confirm which spools it came off.
+- **Automatic deduction** — background polling brings finished prints in on their own,
+  and when every tool matches a slot, the material is deducted without you.
+- **Deduct from gcode** — no printer connected? Upload the file and the app works out
+  usage per tool.
+
+### Around the printer
+
+- **Telegram notifications** — print finished, error, paused, drying, spool running
+  low. Every event is toggled separately.
+- **Home Assistant sensors** — temperature and humidity from your dryer and shelves,
+  shown where they matter. Above the threshold, they light up and message you.
+- **Drying control** — on compatible hubs such as the Anycubic ACE, drying starts
+  right from the app, with per-material presets.
+
+### Your data
+
+- **Spoolman import** — pull your inventory over the network from
+  [Spoolman](https://github.com/Donkie/Spoolman) in one click.
+- **Backups** — export and restore everything as a single JSON file.
+- **Your own server** — login-based access, printer keys stored encrypted, nothing
+  leaves the machine.
+- **Two languages** — English and Russian, switched on the fly.
 
 ---
 
-## Feature tour
+## A look around
 
-### 📊 Dashboard
+### Dashboard
 
-Inventory summary: total spools, how many are running low, total remaining amount
-and an estimate of print hours, usage over the last 30 days. Below is a widget for
-each connected printer with live print status (progress, temperatures, time left)
-and a **“Deduct”** button that lights up when a print finishes. Also: a monthly
-usage chart, a breakdown by material, and a feed of recent events.
+Inventory at a glance: how many spools, what's running low, total remaining and how
+many print hours that buys. Below it, a card per printer with live status and a
+**Deduct** button that wakes up when the print is done. Then sensor readings, usage by
+month, the split by material, and a feed of recent events.
 
 ![Dashboard](docs/screenshots/en/dashboard.png)
 
-### 📦 Spools
+### Spools
 
-The main inventory list. For each spool you see the material and color, remaining
-amount, where it currently is (storage location or printer slot) and quick actions.
-From here you can add a spool, edit it, duplicate it (including “in another color”),
-weigh it, adjust the remaining amount, and print a label.
+The main inventory list. Each row opens with a stripe of the filament's real color,
+and the remaining bar uses that same color; as the spool runs down it turns ochre,
+then red. From here you can add, edit, duplicate in another color, weigh, or print a
+label.
 
 ![Spools](docs/screenshots/en/spools.png)
 
-Spool card: remaining amount, recommended print profile, usage history, a QR code
-with a print-label button, placement, and full filament specs.
+The spool page gathers everything in one place: grams and meters remaining, the
+recommended print profile, usage history, QR code, placement, and the full filament
+spec sheet.
 
-![Spool card](docs/screenshots/en/spool-detail.png)
+![Spool detail](docs/screenshots/en/spool-detail.png)
 
-### 🏷️ Labels and QR codes
+### Printers
 
-Each spool gets a sticker with manufacturer, material, color code and selected specs
-(temperatures, flow, pressure advance, etc.). A **live preview** shows the result as
-you pick the size and fields. Several sizes are available (including vertical ones).
-Printing goes to PDF (one at a time or as an A4 sheet). The QR code on the label
-opens the private spool card.
+Pick a model from the catalog when adding a printer and the rest fills itself in. Any
+Klipper/Moonraker printer works, Anycubic on Rinkhals included: you only see what the
+printer actually has.
 
-### 🖨️ Printers and Moonraker
-
-When adding a printer, pick the model from the catalog — connection type, slot count
-and capabilities (multi-material, dryer, chamber) are filled in for you, and a
-silhouette in the brand's accent color appears on the card. Works with any
-Klipper/Moonraker printer (including Anycubic on Rinkhals): only what the printer
-actually has is shown, no clutter. For compatible hubs (e.g. Anycubic ACE) you can
-control drying right from the app.
-
-The app shows printer status and job history. For a finished job just press
-**“Deduct”** — usage per extruder is already known from the printer, so you only
-confirm which spools to deduct from. Already-deducted jobs are marked and won't be
-deducted twice.
-
-Add as many printers as you like.
+The printer panel reconciles what sits in the slots against what's assigned in the
+app, shows telemetry and lifetime stats, and deducts finished jobs with the button
+next to them. Deducted jobs are marked and won't be counted twice. There's no limit on
+how many printers you add.
 
 ![Printers and Moonraker](docs/screenshots/en/printers.png)
 
-### 📄 gcode upload
+### History
 
-If the printer isn't connected, upload a gcode file manually. The app parses usage
-per tool (T0, T1, …), and you map each tool to a spool from inventory and deduct the
-material.
-
-![gcode upload](docs/screenshots/en/gcode.png)
-
-### 🗂️ Profiles, locations, slots
-
-- **Filament profiles** — templates (brand, material, temperatures, specs) so you
-  don't fill everything in by hand for each spool.
-- **Storage locations** — shelves, boxes, dryers; see what's where.
-- **Printer slots** — which spool sits in which slot, with an assignment history
-  (managed on the “Printers” page).
-
-![Filament profiles](docs/screenshots/en/profiles.png)
-
-### 📜 History
-
-Every deduction and adjustment: when, for which print, and from which spool the
-material was deducted.
+Every deduction and correction: when, for which print, and off which spool.
 
 ![History](docs/screenshots/en/print-jobs.png)
 
-### ⚙️ Settings
+### Filament profiles
 
-- **Backup** — download all data as JSON and restore from a file.
-- **Spoolman import** — point it at your Spoolman address and spools are copied into
-  inventory (manufacturer, material, color, weight, remaining, location). Re-importing
-  skips ones already added.
-- **Moonraker: automation** — auto-import of finished prints (on by default) and full
-  auto-deduction when everything maps to slots (optional).
-- **Telegram notifications** — messages about printer and inventory state changes.
-  Create a bot via [@BotFather](https://t.me/BotFather), paste the token, send your bot
-  a "/start" and press "Detect chat id" — the field fills itself. Then hit "Send test"
-  and tick exactly what you want:
+Brand and material templates: temperatures, speeds, flow, drying parameters. The
+[SpoolmanDB](https://github.com/Donkie/SpoolmanDB) catalog is bundled and works
+offline, so a new spool takes a couple of clicks.
 
-  | Event | Default |
-  | --- | --- |
-  | Print finished | ✅ |
-  | Print error (with the firmware's message) | ✅ |
-  | Print paused | ✅ |
-  | Print started | — |
-  | Print cancelled | — |
-  | Drying started | — |
-  | Drying finished | ✅ |
-  | Printer offline / back online | — |
-  | Auto-deduction failed | ✅ |
-  | Spool running low (threshold configurable) | ✅ |
-  | Humidity above threshold (Home Assistant sensor) | ✅ |
+![Filament profiles](docs/screenshots/en/profiles.png)
 
-  Printer state is tracked by the background poller, so notifications arrive even when
-  the app isn't open in a browser. The bot token is stored encrypted and never returned
-  by the API. While the master switch is off, printers aren't polled for notifications
-  at all.
-- **Temperature and humidity sensors (Home Assistant)** — if you run Home Assistant,
-  the app shows your sensor readings where they matter: on the dashboard, under the
-  printer card and in the storage location list. Enter the HA address (e.g.
-  `http://homeassistant.local:8123`) and a long-lived access token (HA profile → "Long-lived
-  access tokens"), then press "Load sensor list" and the entity fields start suggesting
-  options. The sensor's origin doesn't matter — zigbee2mqtt, ESPHome, Bluetooth — the
-  app reads the ready state from HA.
+### Storage locations
 
-  Each sensor is bound to a printer (readings sit next to the dryer), to a storage
-  location (visible in the location list), or shown as a separate block on the
-  dashboard. Humidity above the threshold is highlighted and, if the notification is
-  enabled, sent to Telegram. The token is stored encrypted; while the master switch is
-  off, Home Assistant isn't polled.
+Shelves, boxes, dryers. If a Home Assistant sensor is bound to a location, its
+temperature and humidity show right in the row.
 
-  The humidity threshold is set per sensor, and the one in settings acts as the
-  default. One number for everything doesn't work: inside a hot dryer the heat itself
-  lowers relative humidity (28 % at 46 °C holds more water in absolute terms than 50 %
-  at 22 °C), and nylon or PVA needs a far stricter threshold than PLA. Rough guide:
+![Storage locations](docs/screenshots/en/locations.png)
 
-  | Material | Threshold |
-  | --- | --- |
-  | PLA | 45–50 % |
-  | PETG | 40–45 % |
-  | ABS / ASA | 35–40 % |
-  | TPU | 30 % |
-  | PC | 25–30 % |
-  | PA (nylon) | 20 % |
-  | PVA / BVOH | 15 % |
+### Gcode upload
 
-  Keep consumer sensor accuracy in mind (typically ±3–5 % RH) — very tight thresholds
-  aren't meaningful.
-- **Deduction** — allow the remaining amount to go negative.
-- **Diagnostics log** — opt-in recording of actions and errors for debugging: when
-  something breaks, turn recording on, reproduce the problem, download the log and
-  attach it to an issue. See [How to report a bug](#how-to-report-a-bug).
+No printer connected — no problem. Upload a gcode file, the app breaks usage down per
+tool, and you match each one to a spool.
+
+![Gcode upload](docs/screenshots/en/gcode.png)
+
+### Settings
+
+Sections are grouped by what they actually do, and the contents rail doubles as a
+status board: whether auto-import is on, whether Telegram is set up, how many sensors
+you have.
 
 ![Settings](docs/screenshots/en/settings.png)
 
 ---
 
+## Install
 
-## Install on your own server (Docker)
-
-**Requirements:** Docker and Docker Compose (a Linux server, NAS, mini-PC — anything).
-
-Three commands and you're done:
+All you need is Docker with Docker Compose — a Linux server, NAS, mini PC, anything.
 
 ```bash
 git clone https://github.com/dobriys/filament_tracker.git
@@ -224,149 +184,203 @@ cd filament_tracker
 ./setup.sh
 ```
 
-The `setup.sh` script creates `.env`, **generates the secret keys**, and brings up
-the containers from prebuilt images. When it finishes it prints the interface URL.
+The script writes `.env`, generates secret keys, brings the containers up and prints
+the address. Open **http://‹server-address›:5173** and create the administrator
+account — the app offers this on first login.
 
-After startup:
-
-- Interface — **http://<server-address>:5173**
-- On first login the service offers to **create an administrator account**
-  (email + password).
-
-Handy commands:
+Handy afterwards:
 
 ```bash
-docker compose logs -f          # watch logs
+docker compose logs -f          # follow the logs
 docker compose restart backend  # restart the service
 docker compose down             # stop
 git pull && ./setup.sh          # update to a new version
 ```
 
+<details>
+<summary><b>Install via Portainer</b></summary>
+
+<br>
+
+Paste the compose file and hit Deploy.
+
+1. **Stacks → Add stack → Web editor**, give it a name such as `filament-tracker`.
+2. Paste the contents of [`docker-compose.yml`](docker-compose.yml).
+3. Expand **Environment variables** and set `POSTGRES_PASSWORD` to your own database
+   password. `SECRET_KEY` and `ENCRYPTION_KEY` are optional: leave them out and the
+   app generates them on first start and stores them in the database. Set them by
+   hand only if you want the keys kept outside the database.
+4. **Deploy the stack**, then open `http://‹server-address›:5173`.
+
+To update: **Stacks → your stack → Pull and redeploy**.
+
+</details>
 
 <details>
-<summary>Manual install (without the script)</summary>
+<summary><b>Install by hand, without the script</b></summary>
+
+<br>
 
 ```bash
 git clone https://github.com/dobriys/filament_tracker.git
 cd filament_tracker
 cp .env.example .env
 
-# generate the keys and put them into .env
+# generate the keys and put them in .env
 echo "SECRET_KEY=$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=')"
 echo "ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')"
 
-# edit .env , then:
-docker compose up -d          
+# edit .env, then:
+docker compose up -d
 ```
+
 </details>
 
 ---
 
-## Install via Portainer
+## First steps
 
-Just paste the compose and hit Deploy.
-
-1. **Stacks → Add stack → Web editor**, give it a name (e.g. `filament-tracker`).
-2. Paste the contents of [`docker-compose.yml`](docker-compose.yml)
-3. Expand **Environment variables** and set `POSTGRES_PASSWORD` — your own database
-   password. `SECRET_KEY` and `ENCRYPTION_KEY` are **optional** — if omitted, the app
-   generates them on first start and stores them in the database. Set them manually
-   (see below) only if you'd rather keep the keys outside the database.
-4. **Deploy the stack** and open `http://<server-address>:5173`.
-
-Generate the keys manually (optional, on any machine):
-
-```bash
-echo "SECRET_KEY=$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=')"
-echo "ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_')"
-```
-
-Updating: **Stacks → your stack → Pull and redeploy** — Portainer pulls the fresh
-images.
+1. Create the administrator account on first login.
+2. Add your **storage locations** — shelves, boxes, dryers.
+3. Add **spools**, either by hand or from a catalog profile so the specs fill
+   themselves in.
+4. Connect a **printer** by its Moonraker address under "Printers".
+5. Print **labels** with QR codes and stick them on your spools.
+6. Print away — then deduct from the dashboard in one click, or turn on automatic
+   deduction.
 
 ---
 
+## Telegram notifications
 
-## First steps after install
+Create a bot with [@BotFather](https://t.me/BotFather), paste the token into settings,
+send your bot a `/start` and press **Detect chat id** — the field fills itself. Then
+send a test message and pick what you want:
 
-1. On first login, create an administrator account.
-2. (Optional) create **filament profiles** for the brands you print with.
-3. Add **storage locations** (shelves, dryers).
-4. Add your first **spools** — by hand or from a profile.
-5. Connect a **printer** via its Moonraker address (the “Printers” section).
-6. Print **labels** with QR codes and stick them on your spools.
-7. Print — and deduct usage from the dashboard in one click.
+| Event | Default |
+| --- | --- |
+| Print finished | On |
+| Print error, with the firmware's own message | On |
+| Print paused | On |
+| Print started | Off |
+| Print cancelled | Off |
+| Drying started | Off |
+| Drying finished | On |
+| Printer offline or back online | Off |
+| Automatic deduction failed | On |
+| Spool running low, threshold configurable | On |
+| Humidity above the threshold | On |
+
+A background poller watches the printer, so messages arrive even with the app closed.
+The token is stored encrypted and never handed back out. While the master switch is
+off, printers aren't polled for notifications at all.
+
+---
+
+## Home Assistant sensors
+
+If you run Home Assistant, the app shows your sensors where they're useful: on the
+dashboard, under the printer card, and in the storage list. Enter your HA address
+(for example `http://homeassistant.local:8123`) and a long-lived access token
+(HA profile → "Long-lived access tokens"), then press **Load sensor list** — the
+entity fields start suggesting matches. The sensor's origin doesn't matter:
+zigbee2mqtt, ESPHome, Bluetooth — the app reads the ready state from HA.
+
+Each sensor binds to a printer, to a storage location, or shows as its own card on
+the dashboard. Humidity above the threshold is highlighted and, if the notification is
+on, sent to Telegram.
+
+**The threshold is set per sensor**, with the global one from settings acting as the
+default. A single number for everything doesn't work: inside a hot dryer, the heat
+itself pushes relative humidity down — 28 % at 46 °C holds more moisture in absolute
+terms than 50 % at 22 °C. And nylon or PVA needs a far tighter limit than PLA. Rough
+guide:
+
+| Material | Threshold |
+| --- | --- |
+| PLA | 45–50 % |
+| PETG | 40–45 % |
+| ABS, ASA | 35–40 % |
+| TPU | 30 % |
+| PC | 25–30 % |
+| PA, nylon | 20 % |
+| PVA, BVOH | 15 % |
+
+Keep consumer sensor accuracy in mind — usually ±3–5 % RH, so very tight thresholds
+don't mean much.
 
 ---
 
 ## Backups
 
-Under **Settings → Backup** you can download a full JSON export and restore from it
-(data is added, not overwritten). It's recommended to export before major changes.
+**Settings → Backup**: a full JSON export and restore from file. Worth doing before
+big changes and upgrades.
 
 ---
 
-## How to report a bug
+## When something breaks
 
-If something misbehaves, attach a diagnostics log to your
-[GitHub issue](https://github.com/dobriys/filament_tracker/issues) — it makes the
-problem visible and much easier to fix:
+Attach the diagnostic log to your
+[GitHub issue](https://github.com/dobriys/filament_tracker/issues) — with it the
+problem is visible and far easier to fix:
 
-1. **Settings → Diagnostics log** → turn on **"Record actions and errors"**.
-2. Reproduce the steps that trigger the problem.
-3. Click **"Download (.txt)"** and attach the file to the issue (or filter entries in
-   place and expand "details"). Describe what you did and what you expected.
-4. Afterwards you can turn recording off and **"Clear"** the log.
+1. **Settings → Diagnostic log** → turn on "Record actions and errors".
+2. Reproduce whatever goes wrong.
+3. Press **Download (.txt)** and attach the file to the issue. Describe what you did
+   and what you expected.
+4. Afterwards you can switch recording off and clear the log.
+
+Secrets — passwords and keys — are stripped from the log automatically, but it's still
+worth a look before you post it.
 
 ---
 
 ## FAQ
 
 **Do I need a printer with Moonraker?**
-No. Without a printer, keep inventory by hand and deduct usage by uploading gcode
-files. With Moonraker (including Rinkhals on Anycubic) deduction becomes
-semi-automatic.
-
-**Why don't I see the remaining time at the start of a print?**
-The remaining-time estimate appears once the print is past ~2% progress. It's
-computed from elapsed time and progress, and near-zero progress makes it unreliable
-(it could read "hundreds of hours"), so it's hidden at the very beginning. As soon
-as progress crosses the threshold, the estimate shows up on its own.
+No. Without one, keep inventory by hand and deduct usage by uploading gcode. With
+Moonraker (including Rinkhals on Anycubic) deduction becomes near-automatic.
 
 **Which printers are supported?**
-Any printer with Moonraker: the catalog already has 50+ models (Anycubic, Creality,
-Sovol, QIDI, FLSUN, ELEGOO, Kingroon, Artillery, BIQU, Prusa and more), but any other
-Klipper/Moonraker printer works too — pick “Klipper / Moonraker” and capabilities are
-detected automatically. Bambu Lab is not supported yet.
+Any printer with Moonraker. The catalog has 50+ models — Anycubic, Creality, Sovol,
+QIDI, FLSUN, ELEGOO, Kingroon, Artillery, BIQU, Prusa and others. If yours isn't
+listed, pick "Klipper / Moonraker" and capabilities are detected automatically.
+Bambu Lab is not supported yet.
 
-**I already track things in Spoolman — do I re-enter everything?**
-No. Under **Settings → Spoolman import** enter your Spoolman address and the spools
-are transferred automatically.
+**Why don't I see the remaining time at the start of a print?**
+The estimate appears once the print is past ~2 % progress. It's computed from elapsed
+time and progress, and near-zero progress makes it unreliable — you'd get "hundreds of
+hours". As soon as progress crosses the threshold, the estimate shows up on its own.
+
+**I already track things in Spoolman. Do I re-enter everything?**
+No. Under **Settings → Spoolman import** enter the address and your spools come across
+on their own. Re-importing skips the ones already added.
 
 **Does my data go to the cloud?**
-No. Everything runs on your server; data is stored locally in your database.
+No. Everything runs on your server and lives in your database.
 
 **I forgot the admin password.**
-Reset the password hash directly in the database or (if you don't mind losing data)
-clear the `users` table — on the next login the service will offer to create an
+Reset the password hash directly in the database, or clear the `users` table if you
+don't mind losing data — on the next login the app will offer to create an
 administrator again.
-
 
 ---
 
 ## Support the project
 
-If you find this project useful, you can support further development:
-https://boosty.to/fmtracker/donate
+The project is free and open source. If it's been useful, you can support development
+on [Boosty](https://boosty.to/fmtracker/donate).
 
 ---
 
 ## Credits
 
 The filament catalog used for spool autofill is a snapshot of
-[SpoolmanDB](https://github.com/Donkie/SpoolmanDB) (MIT License). Full license text
+[SpoolmanDB](https://github.com/Donkie/SpoolmanDB), MIT licensed. Full license text
 and attribution are in [NOTICE.md](NOTICE.md).
 
 ---
 
-<p align="center"><sub>Self-hosted · your data stays with you · interface in English and Russian</sub></p>
+<p align="center">
+  <sub>Self-hosted · your data stays with you · interface in English and Russian</sub>
+</p>
