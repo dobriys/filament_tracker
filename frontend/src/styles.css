@@ -895,7 +895,7 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
 
 .zone-title { margin-bottom: 12px; }
 .zone-file { font-weight: 600; font-size: var(--fs-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.zone-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, auto)); gap: 8px 26px; margin-top: 12px; justify-content: start; min-width: 0; }
+.zone-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, auto)); gap: 8px 46px; margin-top: 12px; justify-content: start; min-width: 0; }
 .zone-metrics > div { display: flex; flex-direction: column; gap: 2px; }
 .zone-metrics .muted { font-size: var(--fs-1); }
 .zone-metrics b { font-size: var(--fs-5); font-weight: 600; }
