@@ -720,44 +720,39 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Четыре плитки в ряд. Раньше band был двумя строками половинной ширины,
+          и графики растягивались до ~640px, раздуваясь по высоте. Подписи-
+          пояснения убраны: оси и легенда говорят то же короче. */}
       <div className="dash-main">
-        <div>
-          <div className="dash-charts">
-            <div className="card">
-              <h3 className="card-title">{t("Расход по месяцам")}</h3>
-              <div className="card-sub">{t("Израсходовано за последние 6 месяцев (граммы).")}</div>
-              <BarChart data={d.monthly_usage} />
-            </div>
-            <div className="card">
-              <h3 className="card-title">{t("Распределение по материалам")}</h3>
-              <div className="card-sub">{t("Текущие запасы по типу материала.")}</div>
-              {d.material_distribution.length ? <Donut data={d.material_distribution} /> : <div className="muted">{t("Нет данных")}</div>}
-            </div>
-          </div>
+        <div className="card">
+          <h3 className="card-title">{t("Расход по месяцам")}</h3>
+          <BarChart data={d.monthly_usage} />
         </div>
 
-        <div>
-          <div className="card">
-            <h3 className="card-title">{t("Быстрые действия и уведомления")}</h3>
-            <button
-              style={{ width: "100%", padding: "13px", fontSize: 15, fontWeight: 600, marginTop: 12 }}
-              onClick={() => navigate("/spools/new")}
-            >
-              {t("＋ Добавить катушку")}
-            </button>
+        <div className="card">
+          <h3 className="card-title">{t("Распределение по материалам")}</h3>
+          {d.material_distribution.length ? <Donut data={d.material_distribution} /> : <div className="muted">{t("Нет данных")}</div>}
+        </div>
+
+        {/* Низкий остаток + быстрое добавление. На мобиле поднимается над графиками. */}
+        <div className="card dash-quick">
+          <h3 className="card-title">{t("Быстрые действия и уведомления")}</h3>
+          {/* Тело растёт и прижимает кнопку к низу — плитка одной высоты с
+              графиками и без пустого низа. */}
+          <div className="dash-quick-body">
             {d.low_stock.length === 0 ? (
-              <div className="ok-panel">
+              <div className="ok-panel" style={{ marginTop: 12 }}>
                 <div className="ok-panel-title"><Icon name="check" size={15} /> {t("Всё в порядке")}</div>
                 <div className="muted">{t("Нет катушек с низким остатком.")}</div>
                 <Link to="/spools" style={{ display: "inline-block", marginTop: 6 }}>{t("Все катушки →")}</Link>
               </div>
             ) : (
-              <div style={{ marginTop: 14 }}>
-                {d.low_stock.map((s) => (
-                  <div key={s.id} style={{ marginBottom: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div>{s.name}</div>
+              <div style={{ marginTop: 12 }}>
+                {d.low_stock.slice(0, 3).map((s) => (
+                  <div key={s.id} style={{ marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
                         <div className="muted" style={{ fontSize: 12 }}>{s.sub}</div>
                       </div>
                       <span className="badge empty">{s.remaining_g}{" "}{t("г")}</span>
@@ -765,27 +760,29 @@ export default function Dashboard() {
                     <div className="lowstock-bar"><div style={{ width: `${Math.round(s.pct * 100)}%` }} /></div>
                   </div>
                 ))}
-                <Link to="/spools">{t("Весь инвентарь →")}</Link>
+                {d.low_stock.length > 3 && <Link to="/spools">{t("Весь инвентарь →")}</Link>}
               </div>
             )}
           </div>
-
-          {d.drying_alerts?.length > 0 && (
-            <div className="card">
-              <h3 className="card-title"><Icon name="droplet" size={15} /> {t("Пора просушить")}</h3>
-              <div className="card-sub">{t("Гигроскопичный филамент давно не сушился.")}</div>
-              {d.drying_alerts.map((a) => (
-                <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div>
-                    <Link to={`/spools/${a.id}`}>{a.name}</Link>
-                    <div className="muted" style={{ fontSize: 12 }}>{a.material}</div>
-                  </div>
-                  <span className="badge almost_empty">{a.days} {t("дн")}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <button className="secondary" style={{ width: "100%", marginTop: 12 }} onClick={() => navigate("/spools/new")}>
+            {t("＋ Добавить катушку")}
+          </button>
         </div>
+
+        {d.drying_alerts?.length > 0 && (
+          <div className="card">
+            <h3 className="card-title"><Icon name="droplet" size={15} /> {t("Пора просушить")}</h3>
+            {d.drying_alerts.slice(0, 3).map((a) => (
+              <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <Link to={`/spools/${a.id}`} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</Link>
+                  <div className="muted" style={{ fontSize: 12 }}>{a.material}</div>
+                </div>
+                <span className="badge almost_empty">{a.days} {t("дн")}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {mrPrinters.map((p) => lifetimes[p.id] && (
