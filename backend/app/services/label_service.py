@@ -241,13 +241,13 @@ def _draw_slim(c, x, y, w, h, data, qr_reader, fields):
         c.drawString(mx, ty, mat)
         c.setFillGray(0)
 
-    # 2) код цвета
-    hexv = data.get("color_hex")
-    if hexv:
+    # 2) цвет: название, иначе hex-код
+    color = data.get("color_name") or data.get("color_hex")
+    if color:
         h_size = 5.5
         ty -= h_size + 1.6
         c.setFont(FONT, h_size)
-        c.drawString(text_x, ty, _clip(hexv, FONT, h_size, text_w))
+        c.drawString(text_x, ty, _clip(color, FONT, h_size, text_w))
 
     # 3) поля одной компактной строкой: «Nozzle 210°C · Bed 60°C»
     lines = _field_lines(data, fields)
@@ -299,13 +299,13 @@ def _draw_vertical(c, x, y, w, h, data, qr_reader, fields):
         c.drawString(mx, ty, mat)
         c.setFillGray(0)
 
-    # код цвета
-    hexv = data.get("color_hex")
-    if hexv:
+    # цвет: название, иначе hex-код
+    color = data.get("color_name") or data.get("color_hex")
+    if color:
         h_size = 5.5
         ty -= h_size + 2.2
         c.setFont(FONT, h_size)
-        centered(hexv, FONT, h_size)
+        centered(_clip(color, FONT, h_size, full_w), FONT, h_size)
 
     ty -= 1.5
 
@@ -351,7 +351,7 @@ def _draw_horizontal(c, x, y, w, h, data, qr_reader, fields):
     # Шапка: 3 строки — производитель, материал, код цвета (без свотча).
     brand = data.get("brand") or data.get("name") or data["label"]
     material = data.get("material")
-    hexv = data.get("color_hex")
+    color = data.get("color_name") or data.get("color_hex")
     ty = y + h - pad
 
     # 1) Производитель (шрифт поменьше)
@@ -373,12 +373,12 @@ def _draw_horizontal(c, x, y, w, h, data, qr_reader, fields):
         c.drawString(text_x + 0.5, ty, mat)
         c.setFillGray(0)
 
-    # 3) Код цвета (обычный чёрный)
-    if hexv:
+    # 3) Цвет: название, иначе hex-код (обычный чёрный)
+    if color:
         h_size = max(4.5, min(7, h * 0.14))
         c.setFont(FONT, h_size)
         ty -= h_size + 2.5
-        c.drawString(text_x, ty, _clip(hexv, FONT, h_size, top_w))
+        c.drawString(text_x, ty, _clip(color, FONT, h_size, top_w))
 
     ty = min(ty, qr_y) - 1.5
 
