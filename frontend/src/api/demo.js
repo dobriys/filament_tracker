@@ -494,21 +494,33 @@ function buildDashboard() {
     last6.push([d.getFullYear(), d.getMonth()]);
   }
   const usageByMonth = {};
+  const usageByMonthMat = {}; // тот же расход, разложенный по материалу катушки
   let consumed30 = 0, consumed30cost = 0, costCurrency = null;
   for (const e of events) {
     if (e.event_type === "print_usage" && e.delta_g != null) {
       const g = Math.max(0, -Number(e.delta_g));
       const ts = new Date(e.created_at);
-      usageByMonth[`${ts.getFullYear()}-${ts.getMonth()}`] = (usageByMonth[`${ts.getFullYear()}-${ts.getMonth()}`] || 0) + g;
+      const key = `${ts.getFullYear()}-${ts.getMonth()}`;
+      usageByMonth[key] = (usageByMonth[key] || 0) + g;
+      const sp = db.spools.find((s) => s.id === e.spool_id);
+      const material = (sp && (sp.material || profileOf(sp)?.material)) || "Прочее";
+      (usageByMonthMat[key] || (usageByMonthMat[key] = {}))[material] =
+        (usageByMonthMat[key][material] || 0) + g;
       if (ts.getTime() >= since30) {
         consumed30 += g;
-        const sp = db.spools.find((s) => s.id === e.spool_id);
         const ppg = sp ? pricePerGram(sp) : null;
         if (ppg) { consumed30cost += g * ppg[0]; costCurrency = costCurrency || ppg[1]; }
       }
     }
   }
-  const monthlyUsage = last6.map(([y, m]) => ({ label: MONTHS_RU[m], grams: Math.round(usageByMonth[`${y}-${m}`] || 0) }));
+  const monthlyUsage = last6.map(([y, m]) => {
+    const byMat = usageByMonthMat[`${y}-${m}`] || {};
+    return {
+      label: MONTHS_RU[m],
+      grams: Math.round(usageByMonth[`${y}-${m}`] || 0),
+      by_material: Object.fromEntries(Object.entries(byMat).map(([k, v]) => [k, Math.round(v)])),
+    };
+  });
 
   // распределение по материалам
   const mat = {};

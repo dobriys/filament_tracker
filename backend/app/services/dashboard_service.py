@@ -81,16 +81,34 @@ def build(db: Session, user: User) -> dict:
     # --- расход по месяцам (последние 6) + за 30 дней ---
     last6 = [_shift_month(now.year, now.month, -i) for i in range(5, -1, -1)]
     usage_by_month: dict[tuple[int, int], float] = defaultdict(float)
+    # тот же расход, но разложенный по материалу катушки — для стопочных столбиков
+    usage_by_month_mat: dict[tuple[int, int], dict[str, float]] = defaultdict(
+        lambda: defaultdict(float)
+    )
     consumed_30 = 0.0
     for ev in events:
         if ev.event_type == "print_usage" and ev.delta_g is not None:
             g = max(0.0, -float(ev.delta_g))
             ts = _aware(ev.created_at)
             usage_by_month[(ts.year, ts.month)] += g
+            sp = spool_map.get(ev.spool_id)
+            prof = profiles.get(sp.filament_profile_id) if sp else None
+            material = (
+                (sp.material if sp else None)
+                or (prof.material if prof else None)
+                or "Прочее"
+            )
+            usage_by_month_mat[(ts.year, ts.month)][material] += g
             if ts >= since_30:
                 consumed_30 += g
     monthly_usage = [
-        {"label": MONTHS_RU[m - 1], "grams": round(usage_by_month.get((y, m), 0.0))}
+        {
+            "label": MONTHS_RU[m - 1],
+            "grams": round(usage_by_month.get((y, m), 0.0)),
+            "by_material": {
+                k: round(v) for k, v in usage_by_month_mat.get((y, m), {}).items()
+            },
+        }
         for (y, m) in last6
     ]
 

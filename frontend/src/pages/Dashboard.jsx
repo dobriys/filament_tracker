@@ -17,7 +17,9 @@ function timeAgo(iso) {
   return `${Math.floor(s / 86400)} ${t("дн назад")}`;
 }
 
-function BarChart({ data }) {
+// Стопочные столбики: каждый месяц разложен по материалу. Цвет закреплён за
+// материалом (colorFor), поэтому столбики и пончик рядом говорят одним цветом.
+function BarChart({ data, materials, colorFor }) {
   const W = 420, H = 165, padL = 34, padB = 24, padT = 8;
   const max = Math.max(1, ...data.map((d) => d.grams));
   // «красивый» потолок чуть выше максимума — столбики читаются при любых данных
@@ -27,33 +29,61 @@ function BarChart({ data }) {
   const bw = (cw / data.length) * 0.55;
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
-      {ticks.map((t, i) => {
-        const y = padT + ch * (1 - t);
-        return (
-          <g key={i}>
-            <line x1={padL} y1={y} x2={W} y2={y} stroke="var(--border)" strokeWidth="1" strokeDasharray="3 4" />
-            <text x={padL - 6} y={y + 3} textAnchor="end" fontSize="9" fill="var(--muted)">{Math.round(niceMax * t)}</text>
-          </g>
-        );
-      })}
-      {data.map((d, i) => {
-        const x = padL + (cw / data.length) * i + (cw / data.length - bw) / 2;
-        const h = ch * (d.grams / niceMax);
-        const y = padT + ch - h;
-        const recent = i >= data.length - 2; // последние 2 месяца — акцент
-        return (
-          <g key={i}>
-            <rect x={x} y={y} width={bw} height={Math.max(0, h)} rx="4" fill={recent ? "var(--accent)" : "var(--border)"} />
-            <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--muted)">{t(d.label)}</text>
-          </g>
-        );
-      })}
-    </svg>
+    <>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+        {ticks.map((tk, i) => {
+          const y = padT + ch * (1 - tk);
+          return (
+            <g key={i}>
+              <line x1={padL} y1={y} x2={W} y2={y} stroke="var(--border)" strokeWidth="1" strokeDasharray="3 4" />
+              <text x={padL - 6} y={y + 3} textAnchor="end" fontSize="9" fill="var(--muted)">{Math.round(niceMax * tk)}</text>
+            </g>
+          );
+        })}
+        {data.map((d, i) => {
+          const x = padL + (cw / data.length) * i + (cw / data.length - bw) / 2;
+          const total = d.grams || 0;
+          const barH = ch * (total / niceMax);
+          const barTop = padT + ch - barH;
+          // Сегменты снизу вверх; крупный материал (первый в materials) — в основании.
+          const segs = materials.map((m) => [m, d.by_material?.[m] || 0]).filter(([, g]) => g > 0);
+          let yb = padT + ch;
+          const clip = `barclip${i}`;
+          return (
+            <g key={i}>
+              {barH > 0 && (
+                <clipPath id={clip}>
+                  <rect x={x} y={barTop} width={bw} height={barH} rx="4" />
+                </clipPath>
+              )}
+              <g clipPath={barH > 0 ? `url(#${clip})` : undefined}>
+                {segs.map(([m, g]) => {
+                  const h = ch * (g / niceMax);
+                  yb -= h;
+                  return (
+                    <rect key={m} x={x} y={yb} width={bw} height={h} fill={colorFor(m)}>
+                      <title>{`${t(d.label)} · ${m}: ${g} ${t("г")}`}</title>
+                    </rect>
+                  );
+                })}
+              </g>
+              <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--muted)">{t(d.label)}</text>
+            </g>
+          );
+        })}
+      </svg>
+      {materials.length > 0 && (
+        <div className="bar-legend">
+          {materials.map((m) => (
+            <span key={m} className="bar-legend-item"><i style={{ background: colorFor(m) }} />{m}</span>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
-function Donut({ data }) {
+function Donut({ data, colorFor }) {
   const total = data.reduce((a, d) => a + d.grams, 0) || 1;
   const r = 55, c = 2 * Math.PI * r, cx = 80, cy = 80;
   let offset = 0;
@@ -66,7 +96,7 @@ function Donut({ data }) {
             const dash = frac * c;
             const el = (
               <circle key={i} cx={cx} cy={cy} r={r} fill="none"
-                stroke={MAT_COLORS[i % MAT_COLORS.length]} strokeWidth="20"
+                stroke={colorFor(d.material)} strokeWidth="20"
                 strokeDasharray={`${dash} ${c - dash}`} strokeDashoffset={-offset} />
             );
             offset += dash;
@@ -79,7 +109,7 @@ function Donut({ data }) {
       <div style={{ fontSize: 13 }}>
         {data.map((d, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-            <span style={{ width: 9, height: 9, borderRadius: 3, background: MAT_COLORS[i % MAT_COLORS.length] }} />
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: colorFor(d.material) }} />
             <span style={{ minWidth: 60 }}>{d.material}</span>
             <span className="muted">{Math.round((d.grams / total) * 100)}%</span>
           </div>
@@ -592,7 +622,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
                   <div className={`zone-env${hasMmu ? "" : " zone-env--bare"}`}>
                     {!hasMmu && <div className="zone-title">{t("Микроклимат")}</div>}
                     {sensors.map((s) => (
-                      <EnvSensor key={s.id} sensor={s} threshold={humidityMax} inline showName={sensors.length > 1} />
+                      <EnvSensor key={s.id} sensor={s} threshold={humidityMax} spread showName={sensors.length > 1} />
                     ))}
                   </div>
                 )}
@@ -677,6 +707,18 @@ export default function Dashboard() {
   }, []);
   if (!d) return <div>{t("Загрузка…")}</div>;
 
+  // Единая палитра материалов для обоих графиков дашборда: цвет закреплён за
+  // материалом, а не за позицией, — столбики расхода и пончик распределения
+  // читаются одним ключом. Порядок — по суммарному расходу (крупный в основании).
+  const matTotals = {};
+  (d.monthly_usage || []).forEach((mth) =>
+    Object.entries(mth.by_material || {}).forEach(([m, g]) => { matTotals[m] = (matTotals[m] || 0) + g; })
+  );
+  (d.material_distribution || []).forEach((x) => { if (!(x.material in matTotals)) matTotals[x.material] = 0; });
+  const matOrder = Object.keys(matTotals).sort((a, b) => (matTotals[b] - matTotals[a]) || a.localeCompare(b));
+  const colorFor = (m) => MAT_COLORS[Math.max(0, matOrder.indexOf(m)) % MAT_COLORS.length];
+  const barMaterials = matOrder.filter((m) => matTotals[m] > 0);
+
   return (
     <div>
       <h2 style={{ marginBottom: 2 }}>{t("Панель")}</h2>
@@ -710,12 +752,14 @@ export default function Dashboard() {
       )}
 
       {looseSensors.length > 0 && (
-        <div className="card">
-          <h3 className="card-title">{t("Условия хранения")}</h3>
-          <div className="card-sub">{t("Температура и влажность по датчикам Home Assistant.")}</div>
-          <div className="env-sensor-list" style={{ marginTop: 12 }}>
+        <div className="card env-conditions">
+          <div className="env-conditions-head">
+            <h3 className="card-title">{t("Условия хранения")}</h3>
+            <span className="env-conditions-note">{t("по датчикам Home Assistant")}</span>
+          </div>
+          <div className="env-conditions-list">
             {looseSensors.map((s) => (
-              <EnvSensor key={s.id} sensor={s} threshold={humidityMax} />
+              <EnvSensor key={s.id} sensor={s} threshold={humidityMax} row />
             ))}
           </div>
         </div>
@@ -727,12 +771,12 @@ export default function Dashboard() {
       <div className="dash-main">
         <div className="card">
           <h3 className="card-title">{t("Расход по месяцам")}</h3>
-          <BarChart data={d.monthly_usage} />
+          <BarChart data={d.monthly_usage} materials={barMaterials} colorFor={colorFor} />
         </div>
 
         <div className="card">
           <h3 className="card-title">{t("Распределение по материалам")}</h3>
-          {d.material_distribution.length ? <Donut data={d.material_distribution} /> : <div className="muted">{t("Нет данных")}</div>}
+          {d.material_distribution.length ? <Donut data={d.material_distribution} colorFor={colorFor} /> : <div className="muted">{t("Нет данных")}</div>}
         </div>
 
         {/* Низкий остаток + быстрое добавление. На мобиле поднимается над графиками. */}

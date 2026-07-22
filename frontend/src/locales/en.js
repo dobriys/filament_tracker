@@ -675,6 +675,7 @@ export const EN = {
     "Readings will appear on the dashboard as a separate “Storage conditions” card.",
   "Условия хранения": "Storage conditions",
   "Температура и влажность по датчикам Home Assistant.": "Temperature and humidity from Home Assistant sensors.",
+  "по датчикам Home Assistant": "from Home Assistant sensors",
   "Условия рядом с принтером": "Conditions near the printer",
   "Микроклимат": "Microclimate",
   "Условия": "Conditions",

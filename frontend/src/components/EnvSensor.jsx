@@ -37,7 +37,7 @@ function ago(iso) {
   return new Date(iso).toLocaleDateString(dateLocale());
 }
 
-export default function EnvSensor({ sensor, threshold = 45, showName = true, inline = false }) {
+export default function EnvSensor({ sensor, threshold = 45, showName = true, inline = false, spread = false, row = false }) {
   if (!sensor) return null;
   const { temperature, humidity, battery, error } = sensor;
   // Порог приходит с сервера уже действующим (свой у датчика либо общий);
@@ -52,47 +52,93 @@ export default function EnvSensor({ sensor, threshold = 45, showName = true, inl
   const fill = humidity != null ? Math.max(0, Math.min(100, humidity)) : 0;
   const mark = Math.max(0, Math.min(100, limit));
 
+  const variantClass = row ? " env-sensor--row" : spread ? " env-sensor--spread" : inline ? " env-sensor--inline" : "";
+
+  // Куски переиспользуются в компактной и растянутой раскладках — держим их
+  // здесь, чтобы разметка не расходилась между вариантами.
+  const humidityHead = (
+    <div className="env-humidity-head">
+      <Icon name="droplet" size={15} />
+      <b className="mono env-humidity-val">
+        {humidity != null ? humidity.toFixed(0) : "—"}<span className="env-unit">%</span>
+      </b>
+      {wet && <span className="env-flag">{t("выше")} {limit}%</span>}
+    </div>
+  );
+  const gauge = (
+    <div
+      className="env-gauge"
+      title={humidity != null ? `${humidity.toFixed(1)}% · ${t("порог")} ${limit}%` : undefined}
+    >
+      <div className="env-gauge-fill" style={{ width: `${fill}%` }} />
+      <div className="env-gauge-mark" style={{ left: `${mark}%` }} />
+    </div>
+  );
+  const tempEl = (
+    <div className="env-temp" title={t("Температура")}>
+      <Icon name="thermometer" size={14} />
+      <span className="mono">{temperature != null ? `${temperature.toFixed(1)}°C` : "—"}</span>
+    </div>
+  );
+  const foot = (battery != null || ago(sensor.updated_at)) ? (
+    <div className="env-sensor-foot">
+      {battery != null && (
+        lowBattery
+          ? <span className="badge empty" title={t("Пора менять батарейку")}><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
+          : <span className="muted inline-ico"><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
+      )}
+      {ago(sensor.updated_at) && <span className="muted">{ago(sensor.updated_at)}</span>}
+    </div>
+  ) : null;
+
+  // Строчный вид — карточка «Условия хранения» на панели. Датчиков там мало,
+  // поэтому каждый умещается в одну плотную линию: имя слева, показания справа.
+  if (row) {
+    return (
+      <div className={`env-sensor env-sensor--row${wet ? " wet" : ""}`}>
+        {showName && <div className="env-row-name">{sensor.name}</div>}
+        {error ? (
+          <div className="env-sensor-error" title={error}>{t("Нет связи с Home Assistant")}</div>
+        ) : (
+          <div className="env-row-metrics">
+            <div className={`env-humidity${wet ? " is-wet" : ""}`}>{humidityHead}</div>
+            {humidity != null && gauge}
+            {tempEl}
+            {foot}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className={`env-sensor${inline ? " env-sensor--inline" : ""}${wet ? " wet" : ""}`}>
+    <div className={`env-sensor${variantClass}${wet ? " wet" : ""}`}>
       {showName && <div className="env-sensor-name">{sensor.name}</div>}
       {error ? (
         <div className="env-sensor-error" title={error}>{t("Нет связи с Home Assistant")}</div>
+      ) : spread ? (
+        // Растянутый вид (под слотами): числа разнесены по ширине блока, а шкала
+        // влаги тянется во всю ширину — по ряду слотов, катушки которых она бережёт.
+        <>
+          <div className="env-spread-row">
+            <div className={`env-humidity${wet ? " is-wet" : ""}`}>{humidityHead}</div>
+            {tempEl}
+            {foot}
+          </div>
+          {humidity != null && gauge}
+        </>
       ) : (
         <>
           <div className="env-readout">
             {/* Влага — единственная реальная угроза филаменту, поэтому она главная. */}
             <div className={`env-humidity${wet ? " is-wet" : ""}`}>
-              <div className="env-humidity-head">
-                <Icon name="droplet" size={15} />
-                <b className="mono env-humidity-val">
-                  {humidity != null ? humidity.toFixed(0) : "—"}<span className="env-unit">%</span>
-                </b>
-                {wet && <span className="env-flag">{t("выше")} {limit}%</span>}
-              </div>
-              <div
-                className="env-gauge"
-                title={humidity != null ? `${humidity.toFixed(1)}% · ${t("порог")} ${limit}%` : undefined}
-              >
-                <div className="env-gauge-fill" style={{ width: `${fill}%` }} />
-                <div className="env-gauge-mark" style={{ left: `${mark}%` }} />
-              </div>
+              {humidityHead}
+              {gauge}
             </div>
             {/* Температура — контекст, держим тихой. */}
-            <div className="env-temp" title={t("Температура")}>
-              <Icon name="thermometer" size={14} />
-              <span className="mono">{temperature != null ? `${temperature.toFixed(1)}°C` : "—"}</span>
-            </div>
+            {tempEl}
           </div>
-          {(battery != null || ago(sensor.updated_at)) && (
-            <div className="env-sensor-foot">
-              {battery != null && (
-                lowBattery
-                  ? <span className="badge empty" title={t("Пора менять батарейку")}><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
-                  : <span className="muted inline-ico"><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
-              )}
-              {ago(sensor.updated_at) && <span className="muted">{ago(sensor.updated_at)}</span>}
-            </div>
-          )}
+          {foot}
         </>
       )}
     </div>
