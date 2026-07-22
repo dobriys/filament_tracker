@@ -19,6 +19,26 @@ def _own(db: Session, user: User, location_id: uuid.UUID) -> Location:
     return loc
 
 
+def _descendant_ids(db: Session, user: User, root_id: uuid.UUID) -> set[uuid.UUID]:
+    """id всех потомков места (без самого места) — для защиты от циклов."""
+    children: dict[uuid.UUID | None, list[uuid.UUID]] = {}
+    for lid, pid in db.execute(
+        select(Location.id, Location.parent_id).where(
+            Location.owner_user_id == user.id
+        )
+    ):
+        children.setdefault(pid, []).append(lid)
+    result: set[uuid.UUID] = set()
+    stack = list(children.get(root_id, []))
+    while stack:
+        cur = stack.pop()
+        if cur in result:
+            continue
+        result.add(cur)
+        stack.extend(children.get(cur, []))
+    return result
+
+
 @router.get("", response_model=list[LocationOut])
 def list_locations(
     db: Session = Depends(get_db), user: User = Depends(get_current_user)
@@ -38,6 +58,8 @@ def create_location(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if data.parent_id is not None:
+        _own(db, user, data.parent_id)  # родитель должен принадлежать пользователю
     loc = Location(owner_user_id=user.id, **data.model_dump())
     db.add(loc)
     db.commit()
@@ -62,7 +84,18 @@ def update_location(
     user: User = Depends(get_current_user),
 ):
     loc = _own(db, user, location_id)
-    for k, v in data.model_dump(exclude_unset=True).items():
+    fields = data.model_dump(exclude_unset=True)
+    if "parent_id" in fields and fields["parent_id"] is not None:
+        new_parent = fields["parent_id"]
+        if new_parent == location_id or new_parent in _descendant_ids(
+            db, user, location_id
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Место нельзя вложить в себя или в свой вложенный узел",
+            )
+        _own(db, user, new_parent)  # родитель должен принадлежать пользователю
+    for k, v in fields.items():
         setattr(loc, k, v)
     db.commit()
     db.refresh(loc)
@@ -76,5 +109,13 @@ def delete_location(
     user: User = Depends(get_current_user),
 ):
     loc = _own(db, user, location_id)
+    has_child = db.scalar(
+        select(Location.id).where(Location.parent_id == location_id).limit(1)
+    )
+    if has_child is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя удалить место, у которого есть вложенные — сначала уберите их",
+        )
     db.delete(loc)
     db.commit()

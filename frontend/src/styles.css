@@ -152,7 +152,6 @@ th,
 .dryer-live-metric span,
 .printer-lifetime-hero span,
 .printer-lifetime-stat span,
-.env-sensor-metric span,
 table.cards-mobile td::before {
   font-size: var(--fs-1);
   font-weight: 700;
@@ -174,7 +173,6 @@ table.cards-mobile td::before {
 .zone-file-box,
 .act-amount,
 .dryer-live-metric b,
-.env-sensor-metric b,
 .printer-lifetime-hero b,
 .printer-lifetime-stat b {
   font-family: var(--font-mono);
@@ -291,6 +289,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 button.secondary { background: var(--panel); border: 1px solid var(--border); color: var(--text-soft); font-weight: 500; }
 button.secondary:hover { background: var(--panel); border-color: var(--muted-2); color: var(--text); }
 button.danger { background: var(--danger); }
+tr.row-active > td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 button.danger.secondary {
   background: var(--panel); font-weight: 500;
   border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
@@ -1313,8 +1312,13 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
 /* Датчики температуры и влажности (Home Assistant). Плашка живёт в трёх местах
    — на панели, под карточкой принтера и в таблице мест хранения, — поэтому
    тянется по ширине контейнера, а не задаёт свою. */
-.env-row { padding: 14px 20px; margin-top: -12px; }
-.env-row .card-sub { margin: 0 0 10px; }
+/* Микроклимат под слотами: показания датчика, лежащего внутри ACE. Отделены
+   от чипов слотов тонкой линией; в блоке приклеены книзу зоны. */
+.zone-env {
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-soft);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.zone-env--bare { margin-top: 0; padding-top: 0; border-top: 0; }
 .env-sensor-list {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;
 }
@@ -1325,17 +1329,63 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
 }
 /* Влажность выше порога — филамент в этот момент набирает влагу. */
 .env-sensor.wet {
-  border-color: var(--badge-warn-text);
-  background: color-mix(in srgb, var(--badge-warn-bg) 55%, var(--panel-2));
+  border-color: color-mix(in srgb, var(--warn) 42%, var(--border));
+  background: color-mix(in srgb, var(--badge-warn-bg) 45%, var(--panel-2));
 }
 .env-sensor-name { font-weight: 700; margin-bottom: 8px; overflow-wrap: anywhere; }
-.env-sensor-metrics { display: flex; gap: 18px; flex-wrap: wrap; }
-.env-sensor-metric { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.env-sensor-metric b {
-  font-size: var(--fs-6); line-height: 1.05; font-weight: 700; letter-spacing: -0.02em;
+
+/* Встроенный вид — ячейка «Условия» в таблице мест. Данные лежат как данные,
+   без коробки, чтобы не спорить со строкой таблицы. */
+.env-sensor--inline { padding: 0; border: 0; border-radius: 0; background: transparent; }
+.env-sensor--inline.wet { background: transparent; }
+
+/* Показания в ряд: влага-герой + приглушённая температура. */
+.env-readout { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+
+/* --- Влажность: единственная цветная величина в блоке, потому что
+   единственная, требующая решения. --- */
+.env-humidity { min-width: 92px; }
+.env-humidity-head { display: flex; align-items: center; gap: 6px; }
+.env-humidity-head > svg { color: var(--accent); flex: none; }
+.env-humidity.is-wet .env-humidity-head > svg { color: var(--warn); }
+.env-humidity-val {
+  font-size: var(--fs-6); line-height: 1; font-weight: 700; letter-spacing: -0.02em;
+  color: var(--text);
 }
+.env-humidity.is-wet .env-humidity-val { color: var(--badge-warn-text); }
+.env-unit { font-size: var(--fs-3); font-weight: 600; margin-left: 1px; color: var(--muted); }
+.env-flag {
+  margin-left: 2px; padding-top: 1px;
+  font-size: var(--fs-1); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--badge-warn-text);
+}
+
+/* Шкала влаги с меткой безопасного порога — видно, насколько близко к «мокрому». */
+.env-gauge {
+  position: relative; height: 5px; margin-top: 7px; border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+.env-gauge-fill {
+  position: absolute; left: 0; top: 0; height: 100%; min-width: 3px;
+  border-radius: var(--radius-pill); background: var(--accent); transition: width .5s ease;
+}
+.env-humidity.is-wet .env-gauge-fill { background: var(--warn); }
+.env-gauge-mark {
+  position: absolute; top: -2px; bottom: -2px; width: 2px; transform: translateX(-1px);
+  border-radius: 1px; background: color-mix(in srgb, var(--text) 42%, transparent);
+}
+
+/* --- Температура: контекст, не тревога. Ахроматична намеренно. --- */
+.env-temp {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--fs-4); color: var(--muted);
+}
+.env-temp > svg { color: var(--muted); flex: none; }
+.env-temp .mono { color: var(--text-soft); font-weight: 600; }
+
 .env-sensor-foot {
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   margin-top: 8px; font-size: var(--fs-2);
 }
+.env-sensor--inline .env-sensor-foot { margin-top: 6px; }
 .env-sensor-error { color: var(--muted); font-size: var(--fs-3); }

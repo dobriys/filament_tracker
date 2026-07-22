@@ -4,6 +4,7 @@ import { api } from "../api/client.js";
 import { MATERIALS } from "../specFields.js";
 import { t } from "../i18n.js";
 import Icon from "../components/Icon.jsx";
+import { locationPath } from "../utils/locations.js";
 
 const STATUS_LABELS = {
   new: t("новая"),
@@ -167,7 +168,7 @@ export default function Spools() {
         </select>
         <select className="filter-chip" value={locFilter} onChange={(e) => setLocFilter(e.target.value)}>
           <option value="">{t("Место: все")}</option>
-          {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          {locations.map((l) => <option key={l.id} value={l.id}>{locationPath(locations, l.id)}</option>)}
         </select>
         <select className="filter-chip" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">{t("Статус: активные")}</option>

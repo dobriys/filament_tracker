@@ -119,10 +119,12 @@ const USER = {
 };
 
 function seed() {
-  const locHome = { id: "loc-shelf", owner_user_id: USER.id, name: "Полка у стола", parent_id: null, description: "Основной стеллаж", created_at: daysAgo(200) };
-  const locBox = { id: "loc-drybox", owner_user_id: USER.id, name: "Сухобокс", parent_id: null, description: "Гермобокс с силикагелем", created_at: daysAgo(180) };
+  const locOffice = { id: "loc-office", owner_user_id: USER.id, name: "Кабинет", parent_id: null, description: "", created_at: daysAgo(205) };
+  const locRack = { id: "loc-rack", owner_user_id: USER.id, name: "Стеллаж", parent_id: locOffice.id, description: "", created_at: daysAgo(203) };
+  const locHome = { id: "loc-shelf", owner_user_id: USER.id, name: "Полка у стола", parent_id: locRack.id, description: "Основной стеллаж", created_at: daysAgo(200) };
+  const locBox = { id: "loc-drybox", owner_user_id: USER.id, name: "Сухобокс", parent_id: locOffice.id, description: "Гермобокс с силикагелем", created_at: daysAgo(180) };
   const locStock = { id: "loc-stock", owner_user_id: USER.id, name: "Запас (кладовка)", parent_id: null, description: "Нераспечатанные", created_at: daysAgo(150) };
-  const locations = [locHome, locBox, locStock];
+  const locations = [locOffice, locRack, locHome, locBox, locStock];
 
   const mkProfile = (o) => ({
     id: o.id, owner_user_id: USER.id, brand: o.brand, name: o.name, material: o.material,
@@ -806,6 +808,14 @@ function dispatch(method, rawPath, { body, form, fileName } = {}) {
     if (M === "POST") {
       const loc = { id: uid(), owner_user_id: db.user.id, name: body.name, parent_id: body.parent_id || null, description: body.description || null, created_at: nowIso() };
       db.locations.push(loc); save(); return loc;
+    }
+    if (M === "PATCH") {
+      const loc = db.locations.find((l) => l.id === parts[1]);
+      if (!loc) return null;
+      if ("name" in body) loc.name = body.name;
+      if ("parent_id" in body) loc.parent_id = body.parent_id || null;
+      if ("description" in body) loc.description = body.description || null;
+      save(); return loc;
     }
     if (M === "DELETE") {
       db.locations = db.locations.filter((l) => l.id !== parts[1]);

@@ -37,7 +37,7 @@ function ago(iso) {
   return new Date(iso).toLocaleDateString(dateLocale());
 }
 
-export default function EnvSensor({ sensor, threshold = 45, showName = true }) {
+export default function EnvSensor({ sensor, threshold = 45, showName = true, inline = false }) {
   if (!sensor) return null;
   const { temperature, humidity, battery, error } = sensor;
   // Порог приходит с сервера уже действующим (свой у датчика либо общий);
@@ -48,33 +48,51 @@ export default function EnvSensor({ sensor, threshold = 45, showName = true }) {
   // настройках выглядит как ничего не сделавшее. Ниже 15 % — плашкой, потому что
   // датчик скоро замолчит, а показания будут выглядеть живыми.
   const lowBattery = battery != null && battery < 15;
+  // Шкала влаги: заливка = текущая влажность, метка = безопасный порог (оба 0–100 %).
+  const fill = humidity != null ? Math.max(0, Math.min(100, humidity)) : 0;
+  const mark = Math.max(0, Math.min(100, limit));
 
   return (
-    <div className={`env-sensor${wet ? " wet" : ""}`}>
+    <div className={`env-sensor${inline ? " env-sensor--inline" : ""}${wet ? " wet" : ""}`}>
       {showName && <div className="env-sensor-name">{sensor.name}</div>}
       {error ? (
         <div className="env-sensor-error" title={error}>{t("Нет связи с Home Assistant")}</div>
       ) : (
         <>
-          <div className="env-sensor-metrics">
-            <div className="env-sensor-metric">
-              <span className="muted">{t("Температура")}</span>
-              <b className="mono">{temperature != null ? `${temperature.toFixed(1)}°C` : "—"}</b>
+          <div className="env-readout">
+            {/* Влага — единственная реальная угроза филаменту, поэтому она главная. */}
+            <div className={`env-humidity${wet ? " is-wet" : ""}`}>
+              <div className="env-humidity-head">
+                <Icon name="droplet" size={15} />
+                <b className="mono env-humidity-val">
+                  {humidity != null ? humidity.toFixed(0) : "—"}<span className="env-unit">%</span>
+                </b>
+                {wet && <span className="env-flag">{t("выше")} {limit}%</span>}
+              </div>
+              <div
+                className="env-gauge"
+                title={humidity != null ? `${humidity.toFixed(1)}% · ${t("порог")} ${limit}%` : undefined}
+              >
+                <div className="env-gauge-fill" style={{ width: `${fill}%` }} />
+                <div className="env-gauge-mark" style={{ left: `${mark}%` }} />
+              </div>
             </div>
-            <div className="env-sensor-metric">
-              <span className="muted">{t("Влажность")}</span>
-              <b className="mono">{humidity != null ? `${humidity.toFixed(1)}%` : "—"}</b>
+            {/* Температура — контекст, держим тихой. */}
+            <div className="env-temp" title={t("Температура")}>
+              <Icon name="thermometer" size={14} />
+              <span className="mono">{temperature != null ? `${temperature.toFixed(1)}°C` : "—"}</span>
             </div>
           </div>
-          <div className="env-sensor-foot">
-            {wet && <span className="badge almost_empty">{t("выше порога")} {limit}%</span>}
-            {battery != null && (
-              lowBattery
-                ? <span className="badge empty" title={t("Пора менять батарейку")}><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
-                : <span className="muted inline-ico"><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
-            )}
-            {ago(sensor.updated_at) && <span className="muted">{ago(sensor.updated_at)}</span>}
-          </div>
+          {(battery != null || ago(sensor.updated_at)) && (
+            <div className="env-sensor-foot">
+              {battery != null && (
+                lowBattery
+                  ? <span className="badge empty" title={t("Пора менять батарейку")}><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
+                  : <span className="muted inline-ico"><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
+              )}
+              {ago(sensor.updated_at) && <span className="muted">{ago(sensor.updated_at)}</span>}
+            </div>
+          )}
         </>
       )}
     </div>

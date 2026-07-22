@@ -577,12 +577,25 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
               </div>
             </div>
 
-            {/* Блок «Слоты» — только если у принтера мультиподача.
-                Сушка вынесена отдельной строкой под карточку. */}
-            {hasMmu && (
+            {/* Блок «Слоты» — только если у принтера мультиподача. Показания
+                датчика идут прямо под слотами: он лежит внутри самого ACE, так
+                что это микроклимат тех катушек, что видно в слотах выше. */}
+            {(hasMmu || sensors.length > 0) && (
               <div className="printer-zone">
-                <div className="zone-title">{mmuTitle}</div>
-                <GateChips gates={gates} />
+                {hasMmu && (
+                  <>
+                    <div className="zone-title">{mmuTitle}</div>
+                    <GateChips gates={gates} />
+                  </>
+                )}
+                {sensors.length > 0 && (
+                  <div className={`zone-env${hasMmu ? "" : " zone-env--bare"}`}>
+                    {!hasMmu && <div className="zone-title">{t("Микроклимат")}</div>}
+                    {sensors.map((s) => (
+                      <EnvSensor key={s.id} sensor={s} threshold={humidityMax} inline showName={sensors.length > 1} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -592,18 +605,6 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
     {!offline && dryer && (
       <div className="card dryer-row">
         <DryerControls printer={printer} dryer={dryer} onChanged={loadOverview} row />
-      </div>
-    )}
-    {/* Датчики Home Assistant, привязанные к этому принтеру: показания рядом с
-        сушилкой, потому что обычно датчик и лежит внутри неё. */}
-    {sensors.length > 0 && (
-      <div className="card env-row">
-        <div className="card-sub">{t("Условия рядом с принтером")}</div>
-        <div className="env-sensor-list">
-          {sensors.map((s) => (
-            <EnvSensor key={s.id} sensor={s} threshold={humidityMax} />
-          ))}
-        </div>
       </div>
     )}
     </>

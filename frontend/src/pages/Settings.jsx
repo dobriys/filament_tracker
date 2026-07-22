@@ -399,7 +399,7 @@ export default function Settings() {
   function bindHint(sensor) {
     if (sensor.bind_type === "printer") {
       const p = printers.find((x) => x.id === sensor.bind_id);
-      return p ? `${t("Показания появятся на панели под карточкой принтера")} «${p.name}».` : null;
+      return p ? `${t("Показания появятся под слотами принтера")} «${p.name}».` : null;
     }
     if (sensor.bind_type === "location") {
       const l = locations.find((x) => x.id === sensor.bind_id);

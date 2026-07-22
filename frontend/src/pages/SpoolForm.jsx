@@ -4,6 +4,7 @@ import { api } from "../api/client.js";
 import { SPEC_GROUPS, SPEC_FIELDS, MATERIALS } from "../specFields.js";
 import { t } from "../i18n.js";
 import Icon from "../components/Icon.jsx";
+import { locationPath } from "../utils/locations.js";
 
 const DIAMETERS = ["1.75", "2.85", "3.0"];
 
@@ -293,7 +294,7 @@ export default function SpoolForm() {
                 <label>{t("Место хранения")}</label>
                 <select value={form.location_id} onChange={set("location_id")}>
                   <option value="">{t("— не указано —")}</option>
-                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  {locations.map((l) => <option key={l.id} value={l.id}>{locationPath(locations, l.id)}</option>)}
                 </select>
               </div>
             </div>
