@@ -15,18 +15,64 @@
 состоянии, которое на самом деле не менялось.
 """
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Printer
-from app.services import notifications, settings_service
+from app.models import Printer, PrintJob
+from app.services import notifications, print_job_service, settings_service
 from app.services.moonraker import MoonrakerClient
 from app.services.moonraker_sync import client_for
 
 log = logging.getLogger("printer_watch")
 
 STATE_PREFIX = "printer_watch:"
+
+# Символы частых валют — на бэкенде готового форматтера денег нет.
+_CURRENCY_SYMBOL = {
+    "RUB": "₽", "USD": "$", "EUR": "€", "UAH": "₴", "KZT": "₸", "BYN": "Br", "GBP": "£",
+}
+
+
+def _fmt_money(amount: float, currency: str) -> str:
+    return f"{amount:.0f} {_CURRENCY_SYMBOL.get(currency, currency)}"
+
+
+def _finished_extra(db: Session, printer: Printer, filename: str | None) -> str:
+    """Доп. строки к «Печать завершена»: время окончания и себестоимость.
+
+    Задание к этому моменту уже импортировано (moonraker_sync в поллере идёт
+    раньше). Ищем его по имени файла среди свежих заданий принтера; стоимость
+    показываем только когда она известна — то есть печать уже списана и у
+    катушек задана цена (иначе jobs_cost вернёт пусто).
+    """
+    fn = (filename or "").split("/")[-1].strip().lower()
+    jobs = list(
+        db.scalars(
+            select(PrintJob)
+            .where(PrintJob.printer_id == printer.id)
+            .order_by(PrintJob.created_at.desc())
+            .limit(10)
+        )
+    )
+    job = next(
+        (j for j in jobs if fn and (j.file_name or "").split("/")[-1].strip().lower() == fn),
+        None,
+    )
+    if job is None:
+        job = jobs[0] if jobs else None
+
+    ts = job.completed_at if (job and job.completed_at) else datetime.now(timezone.utc)
+    # Локальное время сервера (часовой пояс контейнера, переменная TZ).
+    lines = [f"Завершена: {ts.astimezone():%d.%m.%Y %H:%M}"]
+
+    if job is not None:
+        info = print_job_service.jobs_cost(db, [job.id]).get(job.id)
+        if info and info.get("currency"):
+            lines.append(f"Себестоимость: {_fmt_money(info['cost'], info['currency'])}")
+
+    return "\n" + "\n".join(lines)
 
 # Состояния Klipper (print_stats.state) → тип события уведомления.
 STATE_EVENTS = {
@@ -132,6 +178,13 @@ def watch_printer(db: Session, printer: Printer) -> list[str]:
 
     sent = []
     for event, text in diff(prev, cur, printer.name):
+        # «Печать завершена» дополняем временем окончания и себестоимостью —
+        # для этого нужен доступ к БД, поэтому это здесь, а не в чистой diff.
+        if event == "print_finished":
+            try:
+                text += _finished_extra(db, printer, cur.get("filename"))
+            except Exception as e:  # обогащение не должно мешать самому уведомлению
+                log.warning("finished extra %s failed: %s", printer.name, e)
         if notifications.notify(db, event, text):
             sent.append(event)
     settings_service.set_value(db, key, cur)

@@ -53,17 +53,15 @@ def diff(prev: dict, cur: dict, name: str, threshold: float) -> list[tuple[str, 
     label = notifications.esc(name)
     humidity = cur.get("humidity")
     value = f"{humidity:.0f}%" if isinstance(humidity, (int, float)) else "—"
-    temp = cur.get("temperature")
-    temp_part = f", {temp:.0f}°C" if isinstance(temp, (int, float)) else ""
 
     if now_high:
         return [(
             "humidity_high",
-            f"💧 <b>{label}</b>\nВлажность {value}{temp_part} — выше порога {threshold:.0f}%",
+            f"💧 <b>{label}</b>\nВлажность {value} — выше порога {threshold:.0f}%",
         )]
     return [(
         "humidity_high",
-        f"🍃 <b>{label}</b>\nВлажность вернулась в норму: {value}{temp_part}",
+        f"🍃 <b>{label}</b>\nВлажность вернулась в норму: {value}",
     )]
 
 
