@@ -1,8 +1,10 @@
 """Экспорт/импорт профилей и полный бэкап/восстановление данных пользователя.
 
 Экспорт — JSON со всеми данными пользователя. Восстановление заменяет инвентарь
-(места, профили, катушки, принтеры, слоты, события): прежние данные удаляются, из
-файла создаются новые с новыми id и ремаппингом ссылок.
+(места, профили, катушки, события, принтеры, слоты, история назначений слотов,
+задания печати и расход): прежние данные удаляются, из файла создаются новые с
+новыми id и ремаппингом ссылок. Дополнительно переносятся настройки приложения
+(включая токены интеграций) и тема интерфейса пользователя.
 """
 import uuid
 from datetime import date, datetime, timezone
@@ -109,19 +111,43 @@ TOOL_USAGE_COLS = [
 SPOOL_USAGE_COLS = [
     "spool_id", "tool_index", "used_g", "used_mm", "confirmed_at", "created_at",
 ]
-# ключ настройки → её значение по умолчанию (важно для корректного экспорта,
-# когда настройка ни разу не менялась и строки в БД нет)
-SETTINGS_DEFAULTS = {
-    "allow_negative_consumption": False,
-    "moonraker_auto_import": True,
-    "moonraker_auto_consume": False,
-}
+# Настройки приложения, значение которых переносится «как есть» (bool/float/
+# строка/dict/list). Ключи — стабильные строки из соответствующих сервисов
+# (settings_service, moonraker_sync, diagnostics, notifications, homeassistant).
+# Экспортируем только реально сохранённые: несохранённая настройка при
+# восстановлении останется на своём кодовом значении по умолчанию.
+SETTINGS_PLAIN_KEYS = [
+    "allow_negative_consumption", "moonraker_auto_import", "moonraker_auto_consume",
+    "error_logging", "telegram_enabled", "telegram_chat_id", "telegram_events",
+    "spool_low_threshold_g", "humidity_alert_max_pct",
+    "ha_enabled", "ha_base_url", "ha_sensors",
+]
+# Токены интеграций: в БД лежат шифрованными, в бэкап кладём расшифрованными под
+# тем же ключом (как moonraker_api_key), при восстановлении шифруем заново.
+SETTINGS_TOKEN_KEYS = ["telegram_bot_token_encrypted", "ha_token_encrypted"]
 PRINTER_COLS = ["name", "integration_type", "brand", "model", "capabilities", "moonraker_url", "is_active", "notes"]
 SLOT_COLS = ["slot_index", "name", "current_spool_id", "is_active"]
 EVENT_COLS = [
     "spool_id", "event_type", "weight_before_g", "weight_after_g", "delta_g",
     "reason", "event_metadata", "created_at",
 ]
+SLOT_HISTORY_COLS = ["assigned_at", "unassigned_at", "notes"]
+
+
+def _export_settings(db: Session) -> dict:
+    out: dict = {}
+    for key in SETTINGS_PLAIN_KEYS:
+        value = settings_service.get_value(db, key)
+        if value is not None:
+            out[key] = value
+    for key in SETTINGS_TOKEN_KEYS:
+        enc = settings_service.get_value(db, key)
+        if enc:
+            try:
+                out[key] = decrypt_secret(enc)  # в бэкапе — в открытом виде
+            except Exception:
+                pass  # ключ шифрования сменился — токен не переносим
+    return out
 
 
 def full_backup(db: Session, user: User) -> dict:
@@ -134,6 +160,10 @@ def full_backup(db: Session, user: User) -> dict:
     slots = list(
         db.scalars(select(PrinterSlot).where(PrinterSlot.printer_id.in_(printer_ids)))
     ) if printer_ids else []
+    slot_ids = [s.id for s in slots]
+    slot_history = list(
+        db.scalars(select(SlotAssignmentHistory).where(SlotAssignmentHistory.printer_slot_id.in_(slot_ids)))
+    ) if slot_ids else []
     events = list(
         db.scalars(select(SpoolEvent).where(SpoolEvent.spool_id.in_(spool_ids)))
     ) if spool_ids else []
@@ -149,7 +179,7 @@ def full_backup(db: Session, user: User) -> dict:
     return {
         "version": EXPORT_VERSION,
         "exported_at": datetime.now(timezone.utc).isoformat(),
-        "user": {"email": user.email},
+        "user": {"email": user.email, "theme": user.theme},
         "locations": [dict(_row_to_dict(x, LOCATION_COLS), id=str(x.id)) for x in locations],
         "filament_profiles": [
             dict(serialize_profile(x), id=str(x.id), is_public=x.is_public) for x in profiles
@@ -171,6 +201,14 @@ def full_backup(db: Session, user: User) -> dict:
             for x in printers
         ],
         "printer_slots": [dict(_row_to_dict(x, SLOT_COLS), id=str(x.id), printer_id=str(x.printer_id)) for x in slots],
+        "slot_assignment_history": [
+            dict(
+                _row_to_dict(x, SLOT_HISTORY_COLS),
+                printer_slot_id=str(x.printer_slot_id),
+                spool_id=_json_safe(x.spool_id),
+            )
+            for x in slot_history
+        ],
         "print_jobs": [
             dict(_row_to_dict(x, PRINTJOB_COLS), id=str(x.id), printer_id=_json_safe(x.printer_id))
             for x in jobs
@@ -181,7 +219,7 @@ def full_backup(db: Session, user: User) -> dict:
         "print_job_spool_usage": [
             dict(_row_to_dict(x, SPOOL_USAGE_COLS), print_job_id=str(x.print_job_id)) for x in spool_usage
         ],
-        "settings": {k: settings_service.get_bool(db, k, default=d) for k, d in SETTINGS_DEFAULTS.items()},
+        "settings": _export_settings(db),
     }
 
 
@@ -242,6 +280,7 @@ def restore_backup(db: Session, user: User, data: dict) -> dict:
     prof_map: dict[str, uuid.UUID] = {}
     spool_map: dict[str, uuid.UUID] = {}
     printer_map: dict[str, uuid.UUID] = {}
+    slot_map: dict[str, uuid.UUID] = {}
 
     # Места хранения (двумя проходами ради parent_id)
     for item in data.get("locations", []):
@@ -351,15 +390,33 @@ def restore_backup(db: Session, user: User, data: dict) -> dict:
         pid = printer_map.get(item.get("printer_id"))
         if pid is None:
             continue
-        db.add(
-            PrinterSlot(
-                printer_id=pid,
-                slot_index=item.get("slot_index") or 1,
-                name=item.get("name"),
-                current_spool_id=spool_map.get(item.get("current_spool_id")),
-                is_active=bool(item.get("is_active", True)),
-            )
+        slot = PrinterSlot(
+            printer_id=pid,
+            slot_index=item.get("slot_index") or 1,
+            name=item.get("name"),
+            current_spool_id=spool_map.get(item.get("current_spool_id")),
+            is_active=bool(item.get("is_active", True)),
         )
+        db.add(slot)
+        db.flush()
+        slot_map[item["id"]] = slot.id
+
+    # История назначений слотов
+    for item in data.get("slot_assignment_history", []):
+        sid = slot_map.get(item.get("printer_slot_id"))
+        if sid is None:
+            continue
+        hist = SlotAssignmentHistory(
+            printer_slot_id=sid,
+            spool_id=spool_map.get(item.get("spool_id")),
+            user_id=user.id,
+            unassigned_at=_parse_dt(item.get("unassigned_at")),
+            notes=item.get("notes"),
+        )
+        assigned = _parse_dt(item.get("assigned_at"))
+        if assigned:
+            hist.assigned_at = assigned
+        db.add(hist)
 
     # История печати
     job_map: dict[str, uuid.UUID] = {}
@@ -421,10 +478,20 @@ def restore_backup(db: Session, user: User, data: dict) -> dict:
             )
         )
 
-    # Настройки приложения
-    for key, value in (data.get("settings") or {}).items():
-        if key in SETTINGS_DEFAULTS:
-            settings_service.set_value(db, key, bool(value))
+    # Настройки приложения (значение пишем как есть; get_bool/get_value приводят
+    # тип при чтении). Токены в бэкапе открытые — шифруем перед сохранением.
+    settings = data.get("settings") or {}
+    for key, value in settings.items():
+        if key in SETTINGS_TOKEN_KEYS:
+            settings_service.set_value(db, key, encrypt_secret(value) if value else None)
+        elif key in SETTINGS_PLAIN_KEYS:
+            settings_service.set_value(db, key, value)
+
+    # Тема интерфейса пользователя (light/dark). Трогаем только если ключ есть в
+    # бэкапе — старые бэкапы без темы оставляют текущий выбор нетронутым.
+    user_data = data.get("user") or {}
+    if "theme" in user_data and user_data["theme"] in ("light", "dark", None):
+        user.theme = user_data["theme"]
 
     db.commit()
     return {
