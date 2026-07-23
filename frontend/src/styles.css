@@ -290,6 +290,72 @@ button.secondary { background: var(--panel); border: 1px solid var(--border); co
 button.secondary:hover { background: var(--panel); border-color: var(--muted-2); color: var(--text); }
 button.danger { background: var(--danger); }
 tr.row-active > td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+/* ============================================================
+   Дерево мест хранения — вложенные ёмкости (комната → стеллаж → полка).
+   Каждый уровень рисует вертикальную рейку: структура читается как полки
+   под стеллажом. Сворачивается, одинаково работает на десктопе и мобильном.
+   ============================================================ */
+.loc-tree, .loc-children { list-style: none; margin: 0; padding: 0; }
+/* Рейка уровня: вложенные дети сдвинуты и подчёркнуты вертикальной линией. */
+.loc-children { margin-left: 12px; padding-left: 12px; border-left: 1.5px solid var(--border); }
+.loc-node { min-width: 0; }
+
+.loc-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 8px 8px 4px; border-radius: 10px;
+  transition: background 0.12s;
+}
+.loc-row:hover { background: var(--hover-row); }
+.loc-row.is-editing { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.loc-row.is-editing:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+
+/* Шеврон-переключатель; у листа — невидимая распорка той же ширины для выравнивания. */
+.loc-twist {
+  flex: none; width: 24px; height: 24px; margin-top: 1px;
+  display: grid; place-items: center;
+  background: transparent; border: 0; border-radius: 8px; padding: 0;
+  color: var(--muted); cursor: pointer;
+}
+.loc-twist:hover { background: var(--panel-3); color: var(--text); }
+.loc-twist > svg { transform: rotate(-90deg); transition: transform 0.15s; }
+.loc-twist.open > svg { transform: rotate(0deg); }
+.loc-twist.leaf { cursor: default; }
+
+.loc-main { flex: 1; min-width: 0; padding-top: 2px; }
+.loc-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.loc-name { font-weight: 600; overflow-wrap: anywhere; }
+.loc-count {
+  flex: none; font-size: var(--fs-1); font-weight: 600; color: var(--muted-2);
+  background: var(--panel-3); padding: 1px 8px; border-radius: var(--radius-pill);
+}
+.loc-sub {
+  display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap;
+  margin-top: 3px; font-size: var(--fs-2); color: var(--muted);
+}
+.loc-desc { overflow-wrap: anywhere; }
+
+.loc-actions { flex: none; display: flex; gap: 6px; margin-left: auto; }
+.loc-row .icon-btn { min-height: 30px; min-width: 30px; }
+
+/* Инлайн-редактор занимает всю строку узла (правка на месте). */
+.loc-row.is-editing { display: block; }
+.loc-edit { width: 100%; }
+.loc-edit-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+.loc-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  text-align: center; padding: 28px 16px; color: var(--text-soft);
+}
+.loc-empty > svg { color: var(--muted); margin-bottom: 2px; }
+.loc-empty .muted { max-width: 42ch; font-size: var(--fs-3); }
+
+@media (max-width: 640px) {
+  .loc-children { margin-left: 8px; padding-left: 10px; }
+  .loc-row { gap: 6px; }
+  .loc-twist { width: 28px; height: 28px; }
+}
+
 button.danger.secondary {
   background: var(--panel); font-weight: 500;
   border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
@@ -319,6 +385,26 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.65; }
+
+/* Селект — единый вид во всех браузерах: гасим нативную отрисовку (в Safari она
+   рисует двойную стрелку и свою рамку) и ставим собственный шеврон. Цвет стрелки
+   зависит от темы — светлый/тёмный muted. */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='12'%20height='12'%20viewBox='0%200%2012%2012'%20fill='none'%20stroke='%236e6b63'%20stroke-width='1.5'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M2.5%204.5%206%208l3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 12px;
+}
+select::-ms-expand { display: none; }
+[data-theme="dark"] select {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='12'%20height='12'%20viewBox='0%200%2012%2012'%20fill='none'%20stroke='%239c978d'%20stroke-width='1.5'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M2.5%204.5%206%208l3.5-3.5'/%3E%3C/svg%3E");
+}
+
 label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--muted); margin: 10px 0 6px; }
 
 .row { display: flex; gap: 12px; flex-wrap: wrap; }

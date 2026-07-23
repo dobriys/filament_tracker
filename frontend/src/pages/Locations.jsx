@@ -1,57 +1,93 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client.js";
 import { t } from "../i18n.js";
+import Icon from "../components/Icon.jsx";
 import EnvSensor, { useEnvSensors } from "../components/EnvSensor.jsx";
-import { flattenTree, descendantIds } from "../utils/locations.js";
+import { buildTree, flattenTree, descendantIds } from "../utils/locations.js";
+
+// «N внутри» с русским склонением — родитель показывает, что в нём что-то есть.
+function insideLabel(n) {
+  const mod10 = n % 10, mod100 = n % 100;
+  let word = t("мест");
+  if (mod10 === 1 && mod100 !== 11) word = t("место");
+  else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) word = t("места");
+  return `${n} ${word}`;
+}
 
 export default function Locations() {
   const [locations, setLocations] = useState([]);
-  const [editId, setEditId] = useState(null);
+  // Форма добавления и инлайн-правка держат раздельные состояния — иначе правка
+  // «протекает» в поля добавления (одни и те же значения на две формы).
   const [name, setName] = useState("");
   const [parentId, setParentId] = useState("");
   const [description, setDescription] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editParent, setEditParent] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [collapsed, setCollapsed] = useState(new Set());
   const { sensors, humidity_alert_max_pct: humidityMax } = useEnvSensors();
   const sensorFor = (locationId) =>
     sensors.find((s) => s.bind_type === "location" && s.bind_id === locationId);
 
-  const tree = flattenTree(locations);
+  const tree = buildTree(locations);
+  const flat = flattenTree(locations); // для селектов «Внутри» (плоский, с отступами)
   const childCount = (id) => locations.filter((l) => l.parent_id === id).length;
-  // При редактировании исключаем сам узел и его потомков — иначе получится цикл.
   const blocked = editId ? descendantIds(locations, editId) : new Set();
-  const parentOptions = tree.filter((l) => l.id !== editId && !blocked.has(l.id));
+  const editParentOptions = flat.filter((l) => l.id !== editId && !blocked.has(l.id));
 
   function load() {
     api.get("/api/locations").then(setLocations).catch(() => {});
   }
   useEffect(load, []);
 
-  function resetForm() {
-    setEditId(null);
-    setName("");
-    setParentId("");
-    setDescription("");
+  function toggle(id) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   }
 
-  function startEdit(l) {
-    setEditId(l.id);
-    setName(l.name);
-    setParentId(l.parent_id || "");
-    setDescription(l.description || "");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function submit(e) {
+  async function create(e) {
     e.preventDefault();
     if (!name) return;
-    const payload = { name, parent_id: parentId || null, description: description || null };
     try {
-      if (editId) await api.patch(`/api/locations/${editId}`, payload);
-      else await api.post("/api/locations", payload);
+      await api.post("/api/locations", { name, parent_id: parentId || null, description: description || null });
     } catch (err) {
       alert(err?.message || t("Не удалось сохранить"));
       return;
     }
-    resetForm();
+    setName("");
+    setParentId("");
+    setDescription("");
+    load();
+  }
+
+  function startEdit(l) {
+    setEditId(l.id);
+    setEditName(l.name);
+    setEditParent(l.parent_id || "");
+    setEditDesc(l.description || "");
+  }
+  function cancelEdit() {
+    setEditId(null);
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    if (!editName) return;
+    try {
+      await api.patch(`/api/locations/${editId}`, {
+        name: editName,
+        parent_id: editParent || null,
+        description: editDesc || null,
+      });
+    } catch (err) {
+      alert(err?.message || t("Не удалось сохранить"));
+      return;
+    }
+    setEditId(null);
     load();
   }
 
@@ -65,79 +101,117 @@ export default function Locations() {
     } catch (err) {
       alert(err?.message || t("Не удалось удалить"));
     }
-    if (editId === id) resetForm();
+    if (editId === id) setEditId(null);
     load();
+  }
+
+  function renderNode(node) {
+    const kids = node.children.length;
+    const open = !collapsed.has(node.id);
+    const sensor = sensorFor(node.id);
+    const editing = editId === node.id;
+    return (
+      <li key={node.id} className="loc-node">
+        <div className={`loc-row${editing ? " is-editing" : ""}`}>
+          {editing ? (
+            <form className="loc-edit" onSubmit={saveEdit}>
+              <div className="row">
+                <div><label>{t("Название")}</label><input autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
+                <div>
+                  <label>{t("Внутри")}</label>
+                  <select value={editParent} onChange={(e) => setEditParent(e.target.value)}>
+                    <option value="">{t("— Верхний уровень")}</option>
+                    {editParentOptions.map((o) => (
+                      <option key={o.id} value={o.id}>{"  ".repeat(o.depth) + o.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div><label>{t("Описание")}</label><input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} /></div>
+              </div>
+              <div className="loc-edit-actions">
+                <button>{t("Сохранить")}</button>
+                <button type="button" className="secondary" onClick={cancelEdit}>{t("Отменить")}</button>
+              </div>
+            </form>
+          ) : (
+            <>
+              {kids > 0 ? (
+                <button
+                  type="button"
+                  className={`loc-twist${open ? " open" : ""}`}
+                  onClick={() => toggle(node.id)}
+                  aria-label={open ? t("Свернуть") : t("Развернуть")}
+                  aria-expanded={open}
+                >
+                  <Icon name="chevron" size={16} />
+                </button>
+              ) : (
+                <span className="loc-twist leaf" aria-hidden="true" />
+              )}
+              <div className="loc-main">
+                <div className="loc-title">
+                  <span className="loc-name">{node.name}</span>
+                  {kids > 0 && <span className="loc-count">{insideLabel(kids)}</span>}
+                </div>
+                {(node.description || sensor) && (
+                  <div className="loc-sub">
+                    {node.description && <span className="loc-desc">{node.description}</span>}
+                    {sensor && <EnvSensor sensor={sensor} threshold={humidityMax} showName={false} inline />}
+                  </div>
+                )}
+              </div>
+              <div className="loc-actions">
+                <button className="icon-btn" onClick={() => startEdit(node)} title={t("Изменить")} aria-label={t("Изменить")}>
+                  <Icon name="pencil" size={15} />
+                </button>
+                <button
+                  className="icon-btn danger"
+                  disabled={kids > 0}
+                  onClick={() => remove(node.id)}
+                  title={kids > 0 ? t("Нельзя удалить место, у которого есть вложенные — сначала уберите их") : t("Удалить")}
+                  aria-label={t("Удалить")}
+                >
+                  <Icon name="trash" size={15} />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+        {kids > 0 && open && <ul className="loc-children">{node.children.map(renderNode)}</ul>}
+      </li>
+    );
   }
 
   return (
     <div>
       <h2>{t("Места хранения")}</h2>
-      <form className="card" onSubmit={submit}>
+      <form className="card" onSubmit={create}>
         <div className="row">
-          <div><label>{t("Название")}</label><input value={name} onChange={(e) => setName(e.target.value)} /></div>
+          <div><label>{t("Название")}</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Стеллаж, полка, сухобокс…")} /></div>
           <div>
             <label>{t("Внутри")}</label>
             <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
               <option value="">{t("— Верхний уровень")}</option>
-              {parentOptions.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {"  ".repeat(l.depth) + l.name}
-                </option>
+              {flat.map((l) => (
+                <option key={l.id} value={l.id}>{"  ".repeat(l.depth) + l.name}</option>
               ))}
             </select>
           </div>
           <div><label>{t("Описание")}</label><input value={description} onChange={(e) => setDescription(e.target.value)} /></div>
         </div>
-        <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-          <button>{editId ? t("Сохранить") : t("Добавить")}</button>
-          {editId && <button type="button" className="secondary" onClick={resetForm}>{t("Отмена")}</button>}
-        </div>
+        <button style={{ marginTop: 12 }}>{t("Добавить")}</button>
       </form>
 
       <div className="card">
-        <table className="cards-mobile">
-          <thead><tr>
-            <th>{t("Название")}</th>
-            <th>{t("Описание")}</th>
-            {/* Колонка появляется, только когда к местам привязан хоть один датчик. */}
-            {sensors.length > 0 && <th>{t("Условия")}</th>}
-            <th></th>
-          </tr></thead>
-          <tbody>
-            {tree.map((l) => (
-              <tr key={l.id} className={editId === l.id ? "row-active" : ""}>
-                <td data-label={t("Название")}>
-                  <span style={{ paddingLeft: l.depth * 20 }}>
-                    {l.depth > 0 && <span className="muted">└ </span>}
-                    {l.name}
-                  </span>
-                </td>
-                <td data-label={t("Описание")} className="muted">{l.description || ""}</td>
-                {sensors.length > 0 && (
-                  <td data-label={t("Условия")}>
-                    {sensorFor(l.id)
-                      ? <EnvSensor sensor={sensorFor(l.id)} threshold={humidityMax} showName={false} inline />
-                      : <span className="muted">—</span>}
-                  </td>
-                )}
-                <td data-label="">
-                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                    <button className="secondary" onClick={() => startEdit(l)}>{t("Изменить")}</button>
-                    <button
-                      className="danger"
-                      disabled={childCount(l.id) > 0}
-                      title={childCount(l.id) > 0 ? t("Нельзя удалить место, у которого есть вложенные — сначала уберите их") : ""}
-                      onClick={() => remove(l.id)}
-                    >
-                      {t("Удалить")}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {locations.length === 0 && <tr><td colSpan={sensors.length > 0 ? 4 : 3} className="muted">{t("Пока нет мест хранения")}</td></tr>}
-          </tbody>
-        </table>
+        {tree.length === 0 ? (
+          <div className="loc-empty">
+            <Icon name="box" size={26} />
+            <div>{t("Пока нет мест хранения")}</div>
+            <div className="muted">{t("Добавьте первое — комнату, стеллаж или сухобокс, — а потом вкладывайте полки внутрь.")}</div>
+          </div>
+        ) : (
+          <ul className="loc-tree">{tree.map(renderNode)}</ul>
+        )}
       </div>
     </div>
   );

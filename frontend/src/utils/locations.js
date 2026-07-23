@@ -33,6 +33,24 @@ export function descendantIds(locations, id) {
   return result;
 }
 
+// Вложенное дерево: корни с массивом children (по алфавиту). Осиротевшие узлы
+// (родитель не найден) становятся корнями, чтобы ничего не пропало.
+export function buildTree(locations) {
+  const byId = new Map(locations.map((l) => [l.id, { ...l, children: [] }]));
+  const roots = [];
+  for (const node of byId.values()) {
+    const parent = node.parent_id ? byId.get(node.parent_id) : null;
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
+  const sortRec = (arr) => {
+    arr.sort((a, b) => a.name.localeCompare(b.name));
+    arr.forEach((n) => sortRec(n.children));
+  };
+  sortRec(roots);
+  return roots;
+}
+
 // Плоский список в порядке дерева, с глубиной каждого узла (для отступов).
 export function flattenTree(locations) {
   const children = new Map();
