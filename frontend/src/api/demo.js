@@ -383,6 +383,9 @@ function liveStatus(printer) {
     _dryer_active: d?.status === "drying",
   };
 }
+// Режимы подачи филамента — как на бэке (app/services/feed_mode.py).
+const FEED_MODES = ["auto", "mmu", "direct"];
+
 function gatesFor(printer) {
   const slots = db.slots.filter((s) => s.printer_id === printer.id);
   const byIndex = Object.fromEntries(slots.map((s) => [s.slot_index, s]));
@@ -1107,13 +1110,46 @@ function printersRoute(M, parts, query, body) {
     return { ok: true, detail: "Подключено. Состояние: printing" };
   }
   if (sub === "status" && M === "GET") { moonrakerOnly(); return liveStatus(printer); }
+  // Режим подачи (см. app/services/feed_mode.py). В демо телеметрии нет, поэтому
+  // «авто» ведёт себя как мультиподача, если она есть у модели.
+  if (sub === "feed-mode" && M === "POST") {
+    if (!FEED_MODES.includes(body?.mode)) throw new ApiError(`Неизвестный режим подачи: ${body?.mode}`, 422);
+    printer.capabilities = { ...(printer.capabilities || {}), feed_mode: body.mode };
+    if (body.mode !== "auto") {
+      db.slots.filter((s) => s.printer_id === printer.id)
+        .forEach((s) => { s.is_active = body.mode === "mmu" ? true : s.slot_index <= 1; });
+    }
+    save(); return printerOut(printer);
+  }
   if (sub === "overview" && M === "GET") {
     moonrakerOnly();
-    const gates = gatesFor(printer);
-    const dryer = dryerRemaining(printer);
+    const setting = FEED_MODES.includes(printer.capabilities?.feed_mode) ? printer.capabilities.feed_mode : "auto";
+    const direct = setting === "direct";
+    const gates = direct ? [] : gatesFor(printer);
+    const dryer = direct ? null : dryerRemaining(printer);
+    const caps = { ...(printer.capabilities || {}), ...(gates.length ? { has_mmu: true, mmu_slots: gates.length } : {}), ...(dryer ? { has_dryer: true } : {}) };
+    if (direct) {
+      if (printer.capabilities?.has_mmu) caps.mmu_off = true;
+      caps.has_mmu = false; caps.has_dryer = false; delete caps.mmu_slots;
+    }
+    caps.feed_mode = caps.has_mmu ? "mmu" : "direct";
+    caps.feed_mode_setting = setting;
+    const first = db.slots.find((s) => s.printer_id === printer.id && s.slot_index === 1);
+    const firstSpool = first?.current_spool_id ? db.spools.find((s) => s.id === first.current_spool_id) : null;
     return {
-      status: liveStatus(printer), gates, dryer,
-      capabilities: { ...(printer.capabilities || {}), ...(gates.length ? { has_mmu: true, mmu_slots: gates.length } : {}), ...(dryer ? { has_dryer: true } : {}) },
+      status: liveStatus(printer), gates, dryer, capabilities: caps,
+      direct_slot: caps.feed_mode === "direct" && first
+        ? {
+            id: first.id, slot_index: first.slot_index, name: first.name,
+            spool: firstSpool
+              ? {
+                  id: firstSpool.id, label: firstSpool.label, material: firstSpool.material,
+                  color_hex: firstSpool.color_hex, color_name: firstSpool.color_name,
+                  current_weight_g: firstSpool.current_weight_g,
+                }
+              : null,
+          }
+        : null,
       totals: { total_jobs: 342, total_print_time_sec: 1180 * 3600, total_time_sec: 1260 * 3600, total_filament_mm: 4.65e6, longest_print_sec: 18.6 * 3600 },
       system: { klipper_version: "v0.12.0-rinkhals", hostname: "kobra-s1", moonraker_version: "0.9.3", os: "Rinkhals 2.1", cpu: "Cortex-A53 4×1.2GHz" },
     };

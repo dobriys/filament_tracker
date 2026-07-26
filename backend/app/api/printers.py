@@ -10,7 +10,7 @@ from app.core.security import decrypt_secret, encrypt_secret
 from app.db.session import get_db
 from app.deps import get_current_user
 from app.models import AppSetting, Printer, PrintJob, User
-from app.services.moonraker import MoonrakerClient, detect_capabilities, dryer_unit
+from app.services.moonraker import MoonrakerClient, dryer_unit
 from app.schemas.printer import (
     PrinterCreate,
     PrinterOut,
@@ -19,7 +19,7 @@ from app.schemas.printer import (
     TestConnectionResult,
 )
 from app.schemas.slot import SlotCreate, SlotOut
-from app.services import printer_presets, settings_service, slot_service
+from app.services import feed_mode, printer_presets, settings_service, slot_service
 
 router = APIRouter(prefix="/printers", tags=["printers"])
 
@@ -290,6 +290,19 @@ def printer_overview(
         )
     }
     hub = client.get_hub_data()
+
+    # Режим подачи: связь только что подтверждена статусом, так что молчание
+    # хаба здесь — довод в пользу прямой подачи (с гистерезисом внутри).
+    capabilities = feed_mode.resolve_capabilities(
+        db, printer, gates=hub["gates"], dryer=hub["dryer"], online=True,
+        mmu_enabled=hub["enabled"],
+    )
+    if capabilities["feed_mode"] == "direct":
+        # Мультиподачи сейчас нет. Гейты и сушилку при этом прячем не «на всякий
+        # случай»: отключённый ACE продолжает отдавать и то, и другое — пустые
+        # слоты и нулевую сушилку, — и показывать это железо как живое нельзя.
+        hub = {"gates": [], "dryer": None}
+
     gates = []
     for g in hub["gates"]:
         slot = slots.get(g["slot_index"])
@@ -342,18 +355,68 @@ def printer_overview(
             dryer["duration_min"] = sess.get("duration_min", duration_min)
             dryer["remaining_min"] = max(0, round(dryer["duration_min"] - elapsed_min))
 
-    # Возможности: сохранённые (пресет/ручные) + автоопределённые из телеметрии.
-    # Авто важнее — реальное железо перекрывает заявленное.
-    capabilities = {**(printer.capabilities or {}), **detect_capabilities(gates, dryer)}
-
     return {
         "status": status_data,
         "gates": gates,
         "dryer": dryer,
         "capabilities": capabilities,
+        # В прямой подаче слот 1 — та самая катушка с держателя; карточке на
+        # панели нечего показать вместо гейтов без неё.
+        "direct_slot": (
+            _slot_with_spool(db, slots.get(1))
+            if capabilities["feed_mode"] == "direct"
+            else None
+        ),
         "totals": client.get_totals(),
         "system": client.get_system(),
     }
+
+
+def _slot_with_spool(db: Session, slot) -> dict | None:
+    from app.models import Spool
+
+    if slot is None:
+        return None
+    spool = db.get(Spool, slot.current_spool_id) if slot.current_spool_id else None
+    return {
+        "id": str(slot.id),
+        "slot_index": slot.slot_index,
+        "name": slot.name,
+        "spool": (
+            {
+                "id": str(spool.id),
+                "label": spool.label,
+                "material": spool.material,
+                "color_hex": spool.color_hex,
+                "color_name": spool.color_name,
+                "current_weight_g": float(spool.current_weight_g)
+                if spool.current_weight_g is not None
+                else None,
+            }
+            if spool
+            else None
+        ),
+    }
+
+
+class FeedModeRequest(BaseModel):
+    mode: str  # auto | mmu | direct
+
+
+@router.post("/{printer_id}/feed-mode", response_model=PrinterOut)
+def set_feed_mode(
+    printer_id: uuid.UUID,
+    data: FeedModeRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Переключить режим подачи: авто / мультиподача / прямая одна катушка."""
+    printer = _own(db, user, printer_id)
+    try:
+        feed_mode.set_mode(db, printer, data.mode)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _to_out(printer)
 
 
 class DryerRequest(BaseModel):

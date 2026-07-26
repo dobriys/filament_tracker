@@ -124,6 +124,20 @@ def parse_hub(payload: dict) -> list[dict]:
     return gates
 
 
+def parse_hub_enabled(payload: dict) -> bool | None:
+    """Включена ли мультиподача (mmu.enabled). None — объекта mmu нет вовсе.
+
+    Отсоединённый ACE не пропадает из телеметрии: Rinkhals продолжает отдавать
+    и num_gates, и нули сушилки, — но ставит enabled=false. Так что «хаб снят»
+    видно именно по этому флагу, а не по пустым гейтам.
+    """
+    r = payload.get("result", payload) or {}
+    mmu = (r.get("status", {}) or {}).get("mmu")
+    if not isinstance(mmu, dict) or "enabled" not in mmu:
+        return None
+    return bool(mmu["enabled"])
+
+
 def parse_dryer(payload: dict) -> dict | None:
     """Состояние сушки ACE (Rinkhals).
 
@@ -183,18 +197,31 @@ def parse_dryer(payload: dict) -> dict | None:
     return sorted(units.values(), key=lambda x: (x["status"] != "drying", x["unit"]))[0]
 
 
-def detect_capabilities(gates: list | None, dryer: dict | None) -> dict:
+def detect_capabilities(gates: list | None, dryer: dict | None, *, online: bool = False) -> dict:
     """Возможности принтера, выведенные из живой телеметрии Moonraker.
 
     gates/dryer — уже распарсенные (parse_hub / parse_dryer). Пусто/None —
-    значит соответствующей подсистемы у принтера нет.
+    значит соответствующей подсистемы у принтера сейчас нет.
+
+    online=False (по умолчанию) — телеметрия только добавляет возможности:
+    пустой ответ хаба неотличим от обрыва связи (get_hub_data глушит ошибки),
+    поэтому снимать заявленные пресетом возможности по нему нельзя.
+
+    online=True — связь с принтером подтверждена, и молчание хаба означает, что
+    мультиподача физически отключена: тогда has_mmu/has_dryer снимаются. Ставить
+    этот флаг должен вызывающий, убедившись в связи (и в стабильности ответа —
+    см. app.services.feed_mode).
     """
     caps: dict = {}
     if gates:
         caps["has_mmu"] = True
         caps["mmu_slots"] = len(gates)
+    elif online:
+        caps["has_mmu"] = False
     if dryer is not None:
         caps["has_dryer"] = True
+    elif online:
+        caps["has_dryer"] = False
     return caps
 
 
@@ -486,11 +513,12 @@ class MoonrakerClient:
             return []
 
     def get_hub_data(self) -> dict:
-        """Гейты + состояние сушки одним запросом."""
+        """Гейты, состояние сушки и признак включённости хаба одним запросом."""
         try:
             payload = self._get("/printer/objects/query?ota_filament_hub")
             gates = parse_hub(payload)
             dryer = parse_dryer(payload)
+            enabled = parse_hub_enabled(payload)
             if dryer is not None:
                 try:
                     raw_hub = self._get("/printer/objects/query?filament_hub")
@@ -508,9 +536,10 @@ class MoonrakerClient:
                                 dryer[key] = raw_dryer[key]
                 except Exception:
                     pass
-            return {"gates": gates, "dryer": dryer}
+            return {"gates": gates, "dryer": dryer, "enabled": enabled}
         except Exception:
-            return {"gates": [], "dryer": None}
+            # Связь с хабом не удалась — это не «хаба нет», поэтому enabled=None.
+            return {"gates": [], "dryer": None, "enabled": None}
 
     def _post(self, path: str, json_body: dict) -> dict:
         with httpx.Client(

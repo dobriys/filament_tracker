@@ -40,7 +40,13 @@ export function brandAccent(brand) {
 // камера (has_chamber) — корпус вокруг, мультиподача (has_mmu) — внешний бокс со слотами.
 export function PrinterArt({ caps = {}, brand, model, size = 92 }) {
   const accent = brandAccent(brand);
-  const slug = printerSlug(brand, model);
+  // Мультиподача снята (см. feed_mode на бэке) — показываем модель без неё:
+  // у Combo-моделей ровно для этого есть парная иллюстрация без «-combo».
+  const direct = !!caps.mmu_off;
+  const slug = (() => {
+    const s = printerSlug(brand, model);
+    return direct && s?.endsWith("-combo") ? s.slice(0, -"-combo".length) : s;
+  })();
   // Запоминаем именно слаг, для которого файла не нашлось: при смене модели
   // (например, в форме добавления принтера) картинка пробуется заново.
   const [failedSlug, setFailedSlug] = useState(null);
@@ -104,6 +110,21 @@ export function PrinterArt({ caps = {}, brand, model, size = 92 }) {
           {slots}
         </>
       )}
+      {/* Прямая подача: одна катушка на держателе сзади, филамент идёт в голову. */}
+      {n === 0 && direct && (
+        <>
+          <path d="M76 33 H104" stroke={accent} strokeWidth="2" strokeLinecap="round" />
+          <path d="M104 33 V56" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+            opacity="0.6" />
+          <path d="M96 80 H112" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+            opacity="0.6" />
+          <path d="M104 68 V80" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+            opacity="0.6" />
+          <circle cx="104" cy="56" r="12" fill={accent} fillOpacity="0.14"
+            stroke={accent} strokeWidth="2" />
+          <circle cx="104" cy="56" r="3.5" fill={accent} fillOpacity="0.55" />
+        </>
+      )}
     </svg>
   );
 }
@@ -112,6 +133,8 @@ export function PrinterArt({ caps = {}, brand, model, size = 92 }) {
 export function CapabilityChips({ caps = {} }) {
   const chips = [];
   if (caps.has_mmu) chips.push(["slots", `${caps.mmu_name || t("Мультиподача")}${caps.mmu_slots ? ` ×${caps.mmu_slots}` : ""}`]);
+  // Мультиподача у принтера есть, но снята — сейчас он на прямой подаче.
+  if (caps.mmu_off) chips.push(["spool", `${t("Прямая подача")} · ${caps.mmu_name || t("мультиподача")} ${t("отключена")}`]);
   if (caps.has_dryer) chips.push(["flame", t("Сушилка")]);
   if (caps.has_chamber) chips.push(["box", t("Камера")]);
   if (chips.length === 0) return null;

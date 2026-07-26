@@ -1062,6 +1062,35 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
 .gate-tile-cap { font-size: var(--fs-1); font-weight: 600; white-space: nowrap; }
 .gate-tile .gate-verdict { position: absolute; top: 4px; right: 6px; font-size: var(--fs-1); }
 
+/* --- Режим подачи филамента и выключенные слоты --- */
+.feed-mode {
+  margin: 12px 0 16px; padding: 12px 14px; border-radius: var(--radius);
+  border: 1px solid var(--border-soft); background: var(--panel-2);
+}
+.feed-mode label { display: block; font-weight: 600; font-size: var(--fs-2); margin-bottom: 6px; }
+.feed-mode select { max-width: 340px; }
+.feed-mode-note { font-size: var(--fs-1); margin-top: 8px; }
+tr.slot-off > td { opacity: 0.55; }
+
+/* --- Прямая подача: одна катушка вместо плиток слотов --- */
+.direct-feed {
+  display: flex; align-items: center; gap: 12px; min-width: 0; cursor: pointer;
+  border: 1px solid var(--border-soft); border-radius: var(--radius);
+  padding: 10px 12px; background: var(--panel-2); color: inherit;
+}
+.direct-feed:hover { border-color: var(--border); }
+.direct-feed--empty { border-style: dashed; }
+.direct-feed-swatch {
+  width: 42px; height: 42px; border-radius: 10px; flex: 0 0 auto;
+  border: 1px solid var(--border);
+}
+.direct-feed-body { min-width: 0; flex: 1; }
+.direct-feed-title { font-size: var(--fs-2); font-weight: 600; }
+.direct-feed-sub {
+  font-size: var(--fs-1); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* --- Зелёная панель «всё в порядке» --- */
 .ok-panel {
   background: var(--ok-panel-bg); border: 1px solid var(--ok-panel-border);

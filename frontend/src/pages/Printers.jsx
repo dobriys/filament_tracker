@@ -12,6 +12,9 @@ function mmuLabel(caps) {
   return caps?.mmu_name ? `${t("Слоты")} ${caps.mmu_name}` : t("Слоты мультиподачи");
 }
 
+// Режимы подачи филамента (см. app/services/feed_mode.py).
+const FEED_MODES = ["auto", "mmu", "direct"];
+
 export default function Printers() {
   const [printers, setPrinters] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -49,6 +52,9 @@ export default function Printers() {
     load().then((ps) => {
       const mrId = searchParams.get("moonraker");
       if (mrId) { const p = ps.find((x) => x.id === mrId); if (p) setMrPrinter(p); }
+      // Ссылка с панели («катушка не назначена») ведёт прямо в слоты принтера.
+      const slotsId = searchParams.get("slots");
+      if (slotsId) { const p = ps.find((x) => x.id === slotsId); if (p) setSelected(p); }
     });
   }, []);
 
@@ -183,7 +189,17 @@ export default function Printers() {
         </table>
       </div>
 
-      {selected && <SlotsManager printer={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <SlotsManager
+          printer={selected}
+          onClose={() => setSelected(null)}
+          onPrinterChanged={(p) => {
+            setSelected(p);
+            setPrinters((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+            if (mrPrinter?.id === p.id) setMrPrinter(p);
+          }}
+        />
+      )}
       {mrPrinter && <MoonrakerPanel printer={mrPrinter} onClose={() => setMrPrinter(null)} />}
     </div>
   );
@@ -283,6 +299,23 @@ function MoonrakerPanel({ printer, onClose }) {
         </div>
       )}
 
+      {/* Мультиподача у принтера есть, но сейчас снята — вместо пустого места
+          объясняем, почему нет слотов и сушилки. */}
+      {ov?.capabilities?.mmu_off && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <h4 style={{ margin: "0 0 6px" }} className="inline-ico">
+            <Icon name="spool" /> {t("Прямая подача")}
+          </h4>
+          <div className="muted" style={{ fontSize: 13 }}>
+            {ov.capabilities.mmu_name || t("Мультиподача")}{" "}
+            {ov.capabilities.feed_mode_setting === "direct"
+              ? t("отключена вручную — слоты и сушилка скрыты.")
+              : t("не в работе: принтер сообщает, что хаб отключён, — печать идёт с одной катушки.")}{" "}
+            {t("Режим переключается в «Слотах».")}
+          </div>
+        </div>
+      )}
+
       {ov?.dryer && (
         <DryerCard printer={printer} dryer={ov.dryer} onChanged={loadOverview} />
       )}
@@ -374,21 +407,40 @@ const DRYER_PRESETS = [
   { material: "ABS", temp: 60, hours: 4 },
 ];
 
-function SlotsManager({ printer, onClose }) {
+function SlotsManager({ printer, onClose, onPrinterChanged }) {
   const [slots, setSlots] = useState([]);
   const [spools, setSpools] = useState([]);
   const [history, setHistory] = useState(null);
+  const [caps, setCaps] = useState(printer.capabilities || {});
+  const [busy, setBusy] = useState(false);
 
   function load() {
     api.get(`/api/printers/${printer.id}/slots`).then(setSlots).catch(() => {});
   }
   useEffect(() => {
     load();
+    setCaps(printer.capabilities || {});
     api.get("/api/spools").then(setSpools).catch(() => {});
   }, [printer.id]);
 
+  // Режим подачи: «авто» решает телеметрия хаба, остальные — фиксированные.
+  const mode = FEED_MODES.includes(caps.feed_mode) ? caps.feed_mode : "auto";
+  async function setFeedMode(next) {
+    setBusy(true);
+    try {
+      const updated = await api.post(`/api/printers/${printer.id}/feed-mode`, { mode: next });
+      setCaps(updated.capabilities || {});
+      onPrinterChanged?.(updated);
+      load();
+    } finally { setBusy(false); }
+  }
+
   async function addSlot() {
     await api.post(`/api/printers/${printer.id}/slots`, {});
+    load();
+  }
+  async function toggleSlot(slot) {
+    await api.patch(`/api/slots/${slot.id}`, { is_active: !slot.is_active });
     load();
   }
   async function assign(slotId, spoolId) {
@@ -419,23 +471,49 @@ function SlotsManager({ printer, onClose }) {
           <button className="secondary" onClick={onClose}>{t("Закрыть")}</button>
         </div>
       </div>
+
+      <div className="feed-mode">
+        <label htmlFor={`feed-${printer.id}`}>{t("Подача филамента")}</label>
+        <select id={`feed-${printer.id}`} value={mode} disabled={busy}
+          onChange={(e) => setFeedMode(e.target.value)}>
+          <option value="auto">{t("Авто — по телеметрии принтера")}</option>
+          <option value="mmu">{t("Мультиподача (хаб со слотами)")}</option>
+          <option value="direct">{t("Прямая подача — одна катушка")}</option>
+        </select>
+        <div className="muted feed-mode-note">
+          {mode === "auto"
+            ? t("Пока хаб отключён от принтера, приложение само держит прямую подачу и вернёт слоты, когда он снова окажется в работе.")
+            : mode === "direct"
+              ? t("Активен только слот 1 — в него ставится катушка с держателя, по нему же идёт автосписание. Остальные слоты выключены, их история сохранена.")
+              : t("Слоты хаба включены, даже если он сейчас молчит.")}
+        </div>
+      </div>
+
       <table className="cards-mobile">
         <thead><tr><th>{t("Слот")}</th><th>{t("Текущая катушка")}</th><th>{t("Назначить")}</th><th></th></tr></thead>
         <tbody>
           {slots.map((s) => (
-            <tr key={s.id}>
-              <td data-label={t("Слот")}>{s.name || `Slot ${s.slot_index}`}</td>
+            <tr key={s.id} className={s.is_active ? "" : "slot-off"}>
+              <td data-label={t("Слот")}>
+                {s.name || `Slot ${s.slot_index}`}
+                {!s.is_active && <span className="badge" style={{ marginLeft: 6 }}>{t("выключен")}</span>}
+              </td>
               <td data-label={t("Текущая катушка")}>{s.current_spool_id ? <span className="badge in_use">{s.current_spool_label}</span> : <span className="muted">{t("пусто")}</span>}</td>
               <td data-label={t("Назначить")}>
-                <select defaultValue="" onChange={(e) => assign(s.id, e.target.value)}>
-                  <option value="">{t("— выбрать катушку —")}</option>
-                  {spools.map((sp) => (
-                    <option key={sp.id} value={sp.id}>{sp.label || t("Без метки")} ({Number(sp.current_weight_g).toFixed(0)}{" "}{t("г)")}</option>
-                  ))}
-                </select>
+                {s.is_active ? (
+                  <select defaultValue="" onChange={(e) => assign(s.id, e.target.value)}>
+                    <option value="">{t("— выбрать катушку —")}</option>
+                    {spools.map((sp) => (
+                      <option key={sp.id} value={sp.id}>{sp.label || t("Без метки")} ({Number(sp.current_weight_g).toFixed(0)}{" "}{t("г)")}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="muted">{t("слот не используется")}</span>
+                )}
               </td>
               <td data-label="">
                 {s.current_spool_id && <button className="secondary" onClick={() => unassign(s.id)}>{t("Снять")}</button>}{" "}
+                <button className="secondary" onClick={() => toggleSlot(s)}>{s.is_active ? t("Отключить слот") : t("Включить слот")}</button>{" "}
                 <button className="secondary" onClick={() => showHistory(s.id)}>{t("История")}</button>
               </td>
             </tr>

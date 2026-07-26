@@ -365,6 +365,7 @@ function DryerControls({ printer, dryer, onChanged, row = false }) {
 function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax }) {
   const [status, setStatus] = useState(null);
   const [gates, setGates] = useState([]);
+  const [directSlot, setDirectSlot] = useState(null); // слот прямой подачи (без MMU)
   const [dryer, setDryer] = useState(null);
   const [caps, setCaps] = useState(printer.capabilities || {});
   const [job, setJob] = useState(null);
@@ -382,6 +383,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
   const loadOverview = () =>
     api.get(`/api/printers/${printer.id}/overview`).then((o) => {
       setStatus(o.status); setGates(o.gates || []); setDryer(o.dryer);
+      setDirectSlot(o.direct_slot || null);
       setCaps(o.capabilities || {}); setOffline(false);
       onTotals?.(printer.id, o.totals);
       return o;
@@ -511,6 +513,8 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
   // Секции карточки — по возможностям принтера (авто из overview + пресет).
   const hasMmu = caps.has_mmu ?? gates.length > 0;
   const mmuTitle = caps.mmu_name ? `${t("Слоты")} ${caps.mmu_name}` : t("Слоты мультиподачи");
+  // Прямая подача: вместо гейтов показываем единственную катушку с держателя.
+  const showDirect = !hasMmu && !!directSlot;
   const accent = brandAccent(printer.brand);
 
   return (
@@ -610,7 +614,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
             {/* Блок «Слоты» — только если у принтера мультиподача. Показания
                 датчика идут прямо под слотами: он лежит внутри самого ACE, так
                 что это микроклимат тех катушек, что видно в слотах выше. */}
-            {(hasMmu || sensors.length > 0) && (
+            {(hasMmu || showDirect || sensors.length > 0) && (
               <div className="printer-zone">
                 {hasMmu && (
                   <>
@@ -618,9 +622,22 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
                     <GateChips gates={gates} />
                   </>
                 )}
+                {showDirect && (
+                  <>
+                    <div className="zone-title">
+                      {t("Прямая подача")}
+                      {caps.mmu_off && (
+                        <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>
+                          {" · "}{caps.mmu_name || t("мультиподача")} {t("отключена")}
+                        </span>
+                      )}
+                    </div>
+                    <DirectFeed slot={directSlot} printerId={printer.id} navigate={navigate} />
+                  </>
+                )}
                 {sensors.length > 0 && (
-                  <div className={`zone-env${hasMmu ? "" : " zone-env--bare"}`}>
-                    {!hasMmu && <div className="zone-title">{t("Микроклимат")}</div>}
+                  <div className={`zone-env${hasMmu || showDirect ? "" : " zone-env--bare"}`}>
+                    {!hasMmu && !showDirect && <div className="zone-title">{t("Микроклимат")}</div>}
                     {sensors.map((s) => (
                       <EnvSensor key={s.id} sensor={s} threshold={humidityMax} spread showName={sensors.length > 1} />
                     ))}
@@ -638,6 +655,41 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
       </div>
     )}
     </>
+  );
+}
+
+// Единственная катушка прямой подачи — замена плиткам гейтов, когда
+// мультиподача снята (или её у принтера нет). Показывает то же, что и гейт:
+// цвет, материал и что осталось.
+function DirectFeed({ slot, printerId, navigate }) {
+  const spool = slot?.spool;
+  const grams = spool?.current_weight_g;
+  return (
+    <div
+      className={`direct-feed${spool ? "" : " direct-feed--empty"}`}
+      role="button"
+      tabIndex={0}
+      title={spool ? t("Открыть катушку") : t("Назначить катушку на слот")}
+      onClick={() => navigate(spool ? `/spools/${spool.id}` : `/printers?slots=${printerId}`)}
+      onKeyDown={(e) => e.key === "Enter" && navigate(spool ? `/spools/${spool.id}` : `/printers?slots=${printerId}`)}
+    >
+      <div
+        className="direct-feed-swatch"
+        style={{ background: spool?.color_hex || "var(--panel-2)" }}
+      />
+      <div className="direct-feed-body">
+        <div className="direct-feed-title">
+          {spool ? (spool.material || t("Материал не указан")) : t("Катушка не назначена")}
+        </div>
+        <div className="muted direct-feed-sub">
+          {spool
+            ? [spool.color_name || spool.label, grams != null ? `${Math.round(grams)} ${t("г")}` : null]
+                .filter(Boolean).join(" · ")
+            : `${slot?.name || `${t("Слот")} ${slot?.slot_index ?? 1}`} — ${t("привязать в разделе «Принтеры»")}`}
+        </div>
+      </div>
+      <Icon name="spool" size={18} />
+    </div>
   );
 }
 
