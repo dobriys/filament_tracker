@@ -7,6 +7,7 @@ import { GateCard } from "../components/HubGates.jsx";
 import { PrinterArt, CapabilityChips, brandAccent } from "../components/PrinterArt.jsx";
 import Icon from "../components/Icon.jsx";
 import SpoolPicker from "../components/SpoolPicker.jsx";
+import LightToggle from "../components/LightToggle.jsx";
 import { enrichSpool } from "../utils/spools.js";
 
 // Лейбл системы мультиподачи по возможностям: «Слоты ACE Pro» / «Слоты мультиподачи».
@@ -280,9 +281,10 @@ function MoonrakerPanel({ printer, onClose }) {
         <button className="secondary" onClick={onClose}>{t("Закрыть")}</button>
       </div>
       <div className="muted" style={{ marginTop: 6, marginBottom: 8 }}>{printer.moonraker_url}</div>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <button className="secondary" onClick={testConn}>{t("Тест соединения")}</button>
         <button className="secondary" onClick={() => { loadOverview(); loadJobs(); }}>{t("Обновить")}</button>
+        <LightToggle printerId={printer.id} light={ov?.light} onChanged={loadOverview} onError={setError} />
       </div>
       {error && <div className="error">{error}</div>}
 

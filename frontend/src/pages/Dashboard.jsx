@@ -7,6 +7,7 @@ import { GateChips } from "../components/HubGates.jsx";
 import { PrinterArt, brandAccent } from "../components/PrinterArt.jsx";
 import EnvSensor, { useEnvSensors } from "../components/EnvSensor.jsx";
 import Icon from "../components/Icon.jsx";
+import LightToggle from "../components/LightToggle.jsx";
 
 const MAT_COLORS = ["#2e6be6", "#3d4657", "#17a34a", "#f6a723", "#8a5fbf", "#e0526e", "#17a2a6", "#9aa1ab"];
 
@@ -367,6 +368,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
   const [gates, setGates] = useState([]);
   const [directSlot, setDirectSlot] = useState(null); // слот прямой подачи (без MMU)
   const [dryer, setDryer] = useState(null);
+  const [light, setLight] = useState(null); // подсветка камеры, если ею можно управлять
   const [caps, setCaps] = useState(printer.capabilities || {});
   const [job, setJob] = useState(null);
   const [offline, setOffline] = useState(false);
@@ -383,6 +385,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
   const loadOverview = () =>
     api.get(`/api/printers/${printer.id}/overview`).then((o) => {
       setStatus(o.status); setGates(o.gates || []); setDryer(o.dryer);
+      setLight(o.light || null);
       setDirectSlot(o.direct_slot || null);
       setCaps(o.capabilities || {}); setOffline(false);
       onTotals?.(printer.id, o.totals);
@@ -526,6 +529,9 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
           <h3>{printer.name}</h3>
         </div>
         <div className="printer-head-status">
+          {!offline && (
+            <LightToggle printerId={printer.id} light={light} onChanged={loadOverview} onError={setErr} />
+          )}
           {job?.consumed && <span className="badge added">{t("Списано")}</span>}
           {offline ? <span className="badge used">{t("не в сети")}</span> : status && <span className={`act-tag ${stTag}`}>{stLabel}</span>}
         </div>

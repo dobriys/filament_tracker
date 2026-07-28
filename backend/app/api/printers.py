@@ -355,10 +355,16 @@ def printer_overview(
             dryer["duration_min"] = sess.get("duration_min", duration_min)
             dryer["remaining_min"] = max(0, round(dryer["duration_min"] - elapsed_min))
 
+    # Подсветка камеры: есть не у всех и не во всех прошивках, поэтому
+    # возможность выводим из живого ответа, а не из пресета.
+    light = client.get_light()
+    capabilities["has_light"] = light is not None
+
     return {
         "status": status_data,
         "gates": gates,
         "dryer": dryer,
+        "light": light,
         "capabilities": capabilities,
         # В прямой подаче слот 1 — та самая катушка с держателя; карточке на
         # панели нечего показать вместо гейтов без неё.
@@ -465,6 +471,32 @@ def control_dryer(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Moonraker недоступен: {e}")
     return {"ok": True, "dryer": client.get_hub_data()["dryer"]}
+
+
+class LightRequest(BaseModel):
+    on: bool | None = None  # None — переключить в противоположное
+
+
+@router.post("/{printer_id}/light")
+def control_light(
+    printer_id: uuid.UUID,
+    data: LightRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Включить/выключить подсветку камеры (Moonraker device_power)."""
+    printer = _own(db, user, printer_id)
+    client = _moonraker_client(printer)
+    try:
+        light = client.get_light()
+        if light is None:
+            raise HTTPException(status_code=422, detail="У принтера нет управляемой подсветки")
+        client.set_light(light["device"], data.on if data.on is not None else not light["on"])
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Moonraker недоступен: {e}")
+    return {"ok": True, "light": client.get_light()}
 
 
 @router.post("/{printer_id}/reset-error")

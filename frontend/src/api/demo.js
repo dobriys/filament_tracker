@@ -1136,8 +1136,13 @@ function printersRoute(M, parts, query, body) {
     caps.feed_mode_setting = setting;
     const first = db.slots.find((s) => s.printer_id === printer.id && s.slot_index === 1);
     const firstSpool = first?.current_spool_id ? db.spools.find((s) => s.id === first.current_spool_id) : null;
+    // Подсветка камеры — как power-устройство Moonraker (у закрытых принтеров).
+    const light = printer.capabilities?.has_chamber
+      ? { device: "chamber_light", on: !!printer._light, locked: false }
+      : null;
+    caps.has_light = light !== null;
     return {
-      status: liveStatus(printer), gates, dryer, capabilities: caps,
+      status: liveStatus(printer), gates, dryer, light, capabilities: caps,
       direct_slot: caps.feed_mode === "direct" && first
         ? {
             id: first.id, slot_index: first.slot_index, name: first.name,
@@ -1153,6 +1158,13 @@ function printersRoute(M, parts, query, body) {
       totals: { total_jobs: 342, total_print_time_sec: 1180 * 3600, total_time_sec: 1260 * 3600, total_filament_mm: 4.65e6, longest_print_sec: 18.6 * 3600 },
       system: { klipper_version: "v0.12.0-rinkhals", hostname: "kobra-s1", moonraker_version: "0.9.3", os: "Rinkhals 2.1", cpu: "Cortex-A53 4×1.2GHz" },
     };
+  }
+  if (sub === "light" && M === "POST") {
+    moonrakerOnly();
+    if (!printer.capabilities?.has_chamber) throw new ApiError("У принтера нет управляемой подсветки", 422);
+    printer._light = body.on != null ? !!body.on : !printer._light;
+    save();
+    return { ok: true, light: { device: "chamber_light", on: !!printer._light, locked: false } };
   }
   if (sub === "dryer" && M === "POST") {
     moonrakerOnly();

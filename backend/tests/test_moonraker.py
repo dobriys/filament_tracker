@@ -4,6 +4,7 @@ from app.services.moonraker import (
     MoonrakerClient,
     job_to_parsed,
     parse_history,
+    parse_light,
     parse_status,
 )
 
@@ -145,6 +146,61 @@ def test_reset_print_state_sends_sdcard_reset():
     assert seen["method"] == "POST"
     assert seen["path"] == "/printer/gcode/script"
     assert seen["script"] == "SDCARD_RESET_FILE"
+
+
+# Реальный ответ Kobra S1 на Rinkhals: подсветка камеры — shell-девайс.
+POWER_DEVICES = {
+    "result": {
+        "devices": [
+            {"device": "chamber_light", "status": "on",
+             "locked_while_printing": False, "type": "shell"},
+        ]
+    }
+}
+
+
+def test_parse_light_finds_chamber_light():
+    light = parse_light(POWER_DEVICES["result"]["devices"])
+    assert light == {"device": "chamber_light", "on": True, "locked": False}
+
+
+def test_parse_light_ignores_other_power_devices():
+    assert parse_light([{"device": "printer_psu", "status": "on"}]) is None
+    assert parse_light([]) is None
+    assert parse_light(None) is None
+
+
+def test_get_light_off_state():
+    c = _client_returning(
+        {"result": {"devices": [{"device": "led_strip", "status": "off"}]}}
+    )
+    assert c.get_light() == {"device": "led_strip", "on": False, "locked": False}
+
+
+def test_get_light_none_when_endpoint_missing():
+    # Moonraker без компонента power отвечает 404 — это не ошибка, а «нет подсветки».
+    c = _client_returning({"error": "not found"}, status_code=404)
+    assert c.get_light() is None
+
+
+def test_set_light_sends_power_action():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["device"] = request.url.params.get("device")
+        seen["action"] = request.url.params.get("action")
+        return httpx.Response(200, json={"result": {"chamber_light": "off"}})
+
+    c = MoonrakerClient("http://printer.local:7125", transport=httpx.MockTransport(handler))
+    c.set_light("chamber_light", False)
+    assert seen == {
+        "method": "POST",
+        "path": "/machine/device_power/device",
+        "device": "chamber_light",
+        "action": "off",
+    }
 
 
 def test_test_connection_no_network():

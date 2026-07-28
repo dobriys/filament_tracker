@@ -911,6 +911,24 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
 .printer-head-main h3 { margin: 0; font-size: var(--fs-5); }
 .printer-head-sub { color: var(--muted); font-size: var(--fs-3); margin-top: 1px; }
 .printer-head-status { display: flex; gap: 6px; align-items: center; flex: 0 0 auto; }
+/* Подсветка камеры: маленький переключатель в шапке карточки принтера.
+   Включённая лампа подсвечена тёплым — по кнопке видно состояние, не читая
+   подпись, как и у самой лампы в принтере. */
+.light-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 30px; padding: 4px 10px;
+  font-size: var(--fs-2); font-weight: 600;
+  border-radius: var(--radius-pill);
+  background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+}
+.light-toggle:hover:not(:disabled) { background: var(--panel); border-color: var(--muted-2); color: var(--text); }
+.light-toggle .icon { color: var(--muted-2); }
+.light-toggle.on { border-color: var(--warn); color: var(--text); background: var(--badge-warn-bg); }
+.light-toggle.on:hover:not(:disabled) { background: var(--badge-warn-bg); border-color: var(--warn); }
+.light-toggle.on .icon { color: var(--warn); }
+.light-toggle-state { color: var(--muted); font-weight: 500; }
+.light-toggle.on .light-toggle-state { color: var(--badge-warn-text); }
+
 .cap-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .cap-chip {
   display: inline-flex; align-items: center; gap: 4px;

@@ -197,6 +197,34 @@ def parse_dryer(payload: dict) -> dict | None:
     return sorted(units.values(), key=lambda x: (x["status"] != "drying", x["unit"]))[0]
 
 
+# Подсветка камеры живёт не в Klipper, а среди power-устройств Moonraker
+# (у Anycubic на Rinkhals это shell-девайс chamber_light). Имя задаёт прошивка,
+# поэтому ищем по смыслу, а не по точному совпадению.
+_LIGHT_WORDS = ("light", "led", "lamp", "lighting")
+
+
+def parse_light(devices: list | None) -> dict | None:
+    """Устройство подсветки среди /machine/device_power/devices.
+
+    Возвращает {device, on, locked} — или None, если подсветкой управлять нельзя.
+    При нескольких подходящих устройствах берём первое: подсветка камеры на
+    домашних принтерах одна, а выбирать «правильную» без подсказки всё равно
+    неоткуда.
+    """
+    for d in devices or []:
+        if not isinstance(d, dict):
+            continue
+        name = str(d.get("device") or "")
+        if not any(w in name.lower() for w in _LIGHT_WORDS):
+            continue
+        return {
+            "device": name,
+            "on": str(d.get("status") or "").lower() == "on",
+            "locked": bool(d.get("locked_while_printing")),
+        }
+    return None
+
+
 def detect_capabilities(gates: list | None, dryer: dict | None, *, online: bool = False) -> dict:
     """Возможности принтера, выведенные из живой телеметрии Moonraker.
 
@@ -541,6 +569,14 @@ class MoonrakerClient:
             # Связь с хабом не удалась — это не «хаба нет», поэтому enabled=None.
             return {"gates": [], "dryer": None, "enabled": None}
 
+    def get_light(self) -> dict | None:
+        """Подсветка камеры, если принтер отдаёт её как power-устройство."""
+        try:
+            r = self._get("/machine/device_power/devices")
+            return parse_light((r.get("result", r) or {}).get("devices"))
+        except Exception:
+            return None
+
     def _post(self, path: str, json_body: dict) -> dict:
         with httpx.Client(
             timeout=self.timeout, headers=self.headers, transport=self._transport
@@ -558,6 +594,15 @@ class MoonrakerClient:
 
     def stop_drying(self, *, unit: int = 0) -> dict:
         return self._post("/server/filament_hub/stop_drying", {"id": unit})
+
+    def set_light(self, device: str, on: bool) -> dict:
+        """Включить/выключить подсветку (Moonraker device_power)."""
+        from urllib.parse import quote
+
+        action = "on" if on else "off"
+        return self._post(
+            f"/machine/device_power/device?device={quote(device)}&action={action}", {}
+        )
 
     def reset_print_state(self) -> dict:
         """Сбросить защёлкнутое состояние печати (Klipper SDCARD_RESET_FILE).
