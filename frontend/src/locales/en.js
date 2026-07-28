@@ -455,6 +455,8 @@ export const EN = {
   "Заметки": "Notes",
   "Поиск по бренду, материалу, цвету…": "Search by brand, material, colour…",
   "Поиск по названию или метке…": "Search by name or label…",
+  "Поиск: название, материал, цвет…": "Search: name, material, colour…",
+  "без описания": "no details",
   "История использования": "Usage history",
   "🕑 Недавняя активность": "🕑 Recent activity",
   "Хватит примерно на ~": "Enough for roughly ~",

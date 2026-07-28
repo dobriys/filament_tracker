@@ -5,6 +5,7 @@ import { MATERIALS } from "../specFields.js";
 import { t } from "../i18n.js";
 import Icon from "../components/Icon.jsx";
 import { locationPath } from "../utils/locations.js";
+import { spoolTitle } from "../utils/spools.js";
 
 const STATUS_LABELS = {
   new: t("новая"),
@@ -13,11 +14,6 @@ const STATUS_LABELS = {
   empty: t("закончилась"),
   archived: t("архив"),
 };
-// Заголовок без дублирования бренда (если название уже начинается с бренда).
-export function spoolTitle(brand, name) {
-  if (name && brand && name.toLowerCase().startsWith(brand.toLowerCase())) return name;
-  return [brand, name].filter(Boolean).join(" ") || t("Без метки");
-}
 
 export default function Spools() {
   const [spools, setSpools] = useState([]);

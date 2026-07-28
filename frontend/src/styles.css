@@ -1072,6 +1072,80 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
 .feed-mode-note { font-size: var(--fs-1); margin-top: 8px; }
 tr.slot-off > td { opacity: 0.55; }
 
+/* ============================================================
+   Выбор катушки (SpoolPicker)
+
+   Список катушек в нативном <select> сводился к метке и весу: три «PLA+»
+   подряд не различались. Здесь строка — это сама катушка: точка цвета,
+   название, материал с цветом и местом, остаток полосой. Занятые слотами
+   уходят вниз и вместо полосы показывают, где стоят.
+   ============================================================ */
+.spool-picker { position: relative; min-width: 0; }
+.spool-picker-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-width: 220px;
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  font-weight: 500; text-align: left; padding: 9px 12px;
+}
+.spool-picker-btn:hover:not(:disabled) { background: var(--panel-2); border-color: var(--muted-2); }
+.spool-picker-btn > .icon { margin-left: auto; color: var(--muted); }
+.spool-picker-btn[aria-expanded="true"] > .icon { transform: rotate(180deg); }
+.sp-btn-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-btn-g { font-size: var(--fs-2); }
+
+.spool-picker-menu {
+  position: absolute; z-index: 30; left: 0; top: 100%; margin-top: 6px;
+  width: max(370px, 100%); max-width: min(460px, 92vw);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+}
+.spool-picker-menu.up { top: auto; bottom: 100%; margin: 0 0 6px; }
+.sp-search { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border-soft); }
+.sp-search > .icon { color: var(--muted); flex: none; }
+.sp-search input { border: none; background: transparent; padding: 2px 0; }
+.sp-search input:focus { box-shadow: none; }
+
+.sp-list { max-height: min(320px, 45vh); overflow-y: auto; padding: 6px; }
+.sp-opt {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 0;
+  background: transparent; border: none; color: var(--text);
+  padding: 7px 8px; border-radius: var(--radius-sm); text-align: left; font-weight: 500;
+}
+.sp-opt.active, .sp-opt:hover { background: var(--hover-row); }
+.sp-opt.chosen { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+/* Точка цвета — единственный признак, по которому катушка узнаётся мгновенно. */
+.sp-dot { width: 14px; height: 14px; border-radius: 50%; flex: none; border: 1px solid var(--border); }
+.sp-opt-main { flex: 1; min-width: 0; }
+.sp-opt-title, .slot-spool-title {
+  display: block; font-size: var(--fs-3); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sp-opt-sub {
+  display: block; font-size: var(--fs-1); color: var(--muted); margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sp-opt-right { flex: none; width: 96px; text-align: right; }
+.sp-opt-g { display: block; font-size: var(--fs-2); color: var(--text-soft); }
+.sp-opt-g.low { color: var(--danger); }
+.sp-bar { display: block; height: 4px; border-radius: 4px; background: var(--panel-3); margin-top: 4px; overflow: hidden; }
+.sp-bar > i { display: block; height: 100%; }
+.sp-opt-slot {
+  display: block; font-size: var(--fs-1); color: var(--muted); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sp-empty { padding: 14px 10px; font-size: var(--fs-3); text-align: center; }
+
+/* Катушка, уже стоящая в слоте, — в тех же признаках, что и в списке. */
+.slot-spool { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; font-size: var(--fs-3); }
+/* Точка цвета не отрывается от названия при переносе строки. */
+.slot-spool-head { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.slot-spool .muted, .slot-spool .sp-opt-g { font-size: var(--fs-2); }
+.slot-spool .sp-opt-g { display: inline; }
+
+@media (max-width: 640px) {
+  .spool-picker-btn { min-width: 0; }
+  .spool-picker-menu { width: min(92vw, 360px); left: auto; right: 0; }
+}
+
 /* --- Прямая подача: одна катушка вместо плиток слотов --- */
 .direct-feed {
   display: flex; align-items: center; gap: 12px; min-width: 0; cursor: pointer;
@@ -1246,7 +1320,9 @@ tr.slot-off > td { opacity: 0.55; }
    Таблицы → карточки на узких экранах (data-label)
    ============================================================ */
 @media (max-width: 640px) {
-  table.cards-mobile { display: block; }
+  /* Карточками таблица не «уезжает» вбок — горизонтальная прокрутка из
+     общего правила не нужна, а её overflow обрезал бы выпадающие списки. */
+  table.cards-mobile { display: block; overflow: visible; }
   table.cards-mobile thead { display: none; }
   table.cards-mobile tbody { display: block; }
   table.cards-mobile tr {

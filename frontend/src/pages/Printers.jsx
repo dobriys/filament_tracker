@@ -6,6 +6,8 @@ import { t, dateLocale, tServer } from "../i18n.js";
 import { GateCard } from "../components/HubGates.jsx";
 import { PrinterArt, CapabilityChips, brandAccent } from "../components/PrinterArt.jsx";
 import Icon from "../components/Icon.jsx";
+import SpoolPicker from "../components/SpoolPicker.jsx";
+import { enrichSpool } from "../utils/spools.js";
 
 // Лейбл системы мультиподачи по возможностям: «Слоты ACE Pro» / «Слоты мультиподачи».
 function mmuLabel(caps) {
@@ -407,20 +409,59 @@ const DRYER_PRESETS = [
   { material: "ABS", temp: 60, hours: 4 },
 ];
 
+// Катушка, стоящая в слоте: цвет, название, материал и остаток — те же
+// признаки, по которым её выбирают в списке.
+function SlotSpool({ spool, fallback, profiles, locations }) {
+  if (!spool) return <span className="badge in_use">{fallback}</span>;
+  const e = enrichSpool(spool, { profiles, locations });
+  return (
+    <span className="slot-spool">
+      <span className="slot-spool-head">
+        <span className="sp-dot" style={{ background: e.colorHex || "var(--panel-3)" }} />
+        <span className="slot-spool-title">{e.title}</span>
+      </span>
+      <span className="muted">{[e.material, e.colorName].filter(Boolean).join(" · ")}</span>
+      <span className={`mono sp-opt-g${e.low ? " low" : ""}`}>{e.remaining.toFixed(0)}{" "}{t("г")}</span>
+    </span>
+  );
+}
+
 function SlotsManager({ printer, onClose, onPrinterChanged }) {
   const [slots, setSlots] = useState([]);
   const [spools, setSpools] = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [occupied, setOccupied] = useState({}); // spool_id -> «Принтер / Slot 2»
   const [history, setHistory] = useState(null);
   const [caps, setCaps] = useState(printer.capabilities || {});
   const [busy, setBusy] = useState(false);
 
   function load() {
     api.get(`/api/printers/${printer.id}/slots`).then(setSlots).catch(() => {});
+    loadOccupied();
+  }
+  // Занятость катушек по всем принтерам — чтобы в списке было видно, что
+  // катушка уже стоит в другом слоте. Свой принтер подписан коротко (просто
+  // слот), чужой — с именем принтера.
+  async function loadOccupied() {
+    const printers = await api.get("/api/printers").catch(() => []);
+    const map = {};
+    for (const p of printers) {
+      const ss = await api.get(`/api/printers/${p.id}/slots`).catch(() => []);
+      for (const s of ss) {
+        if (!s.current_spool_id) continue;
+        const slotName = s.name || `Slot ${s.slot_index}`;
+        map[s.current_spool_id] = p.id === printer.id ? slotName : `${p.name} / ${slotName}`;
+      }
+    }
+    setOccupied(map);
   }
   useEffect(() => {
     load();
     setCaps(printer.capabilities || {});
     api.get("/api/spools").then(setSpools).catch(() => {});
+    api.get("/api/filament-profiles").then(setProfiles).catch(() => {});
+    api.get("/api/locations").then(setLocations).catch(() => {});
   }, [printer.id]);
 
   // Режим подачи: «авто» решает телеметрия хаба, остальные — фиксированные.
@@ -457,8 +498,9 @@ function SlotsManager({ printer, onClose, onPrinterChanged }) {
     setHistory({ slotId, rows: h });
   }
 
+  const spoolById = (id) => spools.find((x) => x.id === id) || null;
   const spoolLabel = (id) => {
-    const s = spools.find((x) => x.id === id);
+    const s = spoolById(id);
     return s ? s.label || t("Без метки") : "";
   };
 
@@ -498,15 +540,21 @@ function SlotsManager({ printer, onClose, onPrinterChanged }) {
                 {s.name || `Slot ${s.slot_index}`}
                 {!s.is_active && <span className="badge" style={{ marginLeft: 6 }}>{t("выключен")}</span>}
               </td>
-              <td data-label={t("Текущая катушка")}>{s.current_spool_id ? <span className="badge in_use">{s.current_spool_label}</span> : <span className="muted">{t("пусто")}</span>}</td>
+              <td data-label={t("Текущая катушка")}>
+                {s.current_spool_id
+                  ? <SlotSpool spool={spoolById(s.current_spool_id)} fallback={s.current_spool_label}
+                      profiles={profiles} locations={locations} />
+                  : <span className="muted">{t("пусто")}</span>}
+              </td>
               <td data-label={t("Назначить")}>
                 {s.is_active ? (
-                  <select defaultValue="" onChange={(e) => assign(s.id, e.target.value)}>
-                    <option value="">{t("— выбрать катушку —")}</option>
-                    {spools.map((sp) => (
-                      <option key={sp.id} value={sp.id}>{sp.label || t("Без метки")} ({Number(sp.current_weight_g).toFixed(0)}{" "}{t("г)")}</option>
-                    ))}
-                  </select>
+                  <SpoolPicker
+                    spools={spools}
+                    profiles={profiles}
+                    locations={locations}
+                    occupied={occupied}
+                    onSelect={(spoolId) => assign(s.id, spoolId)}
+                  />
                 ) : (
                   <span className="muted">{t("слот не используется")}</span>
                 )}

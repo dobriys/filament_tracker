@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import { SPEC_GROUPS, fmtSpec } from "../specFields.js";
-import { spoolTitle } from "./Spools.jsx";
+import { spoolTitle } from "../utils/spools.js";
 import { t, dateLocale, tReason } from "../i18n.js";
 import Icon from "../components/Icon.jsx";
 
