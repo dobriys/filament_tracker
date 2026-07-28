@@ -3,48 +3,50 @@ import { api } from "../api/client.js";
 import { t } from "../i18n.js";
 import Icon from "./Icon.jsx";
 
-// Переключатель подсветки камеры принтера.
+// Подсветка камеры принтера: два явных действия «вкл» и «выкл».
 //
-// Состояние приходит из overview (light: {device, on, locked}); клик шлёт
-// POST /api/printers/{id}/light. Пока принтер отвечает, кнопка показывает уже
-// новое состояние — щелчок лампой должен ощущаться мгновенным, а расхождение
-// исправит ответ сервера.
-export default function LightToggle({ printerId, light, onChanged, onError, compact = false }) {
-  const [pending, setPending] = useState(null); // ожидаемое состояние, пока идёт запрос
+// Переключателем это было бы честнее на вид, но врало бы по сути: Moonraker
+// отдаёт по такой лампе не показание, а последнюю отданную ей команду (у
+// Anycubic на Rinkhals это power-устройство типа shell). Принтер гасит подсветку
+// сам — по таймауту и после печати, — и Moonraker об этом не узнаёт: состояние
+// остаётся «on», пока кто-нибудь не пошлёт команду. Одна кнопка-переключатель в
+// такой ситуации отправила бы «выкл» уже погасшей лампе, и нажатие выглядело бы
+// сломанным. Две кнопки всегда делают ровно то, что написано, а подсветка
+// активной — это «последняя команда», о чём и говорит подсказка.
+export default function LightToggle({ printerId, light, onChanged, onError }) {
+  const [sent, setSent] = useState(null); // что отправили, пока ждём ответ
   const [busy, setBusy] = useState(false);
   if (!light) return null;
 
-  const on = pending ?? light.on;
+  const on = sent ?? light.on;
 
-  async function toggle() {
-    const next = !on;
-    setPending(next); setBusy(true);
+  async function send(next) {
+    setSent(next); setBusy(true);
     onError?.(null);
     try {
       await api.post(`/api/printers/${printerId}/light`, { on: next });
       await onChanged?.();
     } catch (e) {
-      // Не получилось (нет связи, принтер блокирует переключение в печати) —
-      // возвращаем то, что знает принтер, и говорим почему.
       onError?.(e.message);
     } finally {
       setBusy(false);
-      setPending(null);
+      setSent(null);
     }
   }
 
   return (
-    <button
-      type="button"
-      className={`light-toggle${on ? " on" : ""}`}
-      onClick={toggle}
-      disabled={busy}
-      aria-pressed={on}
-      title={on ? t("Выключить подсветку") : t("Включить подсветку")}
+    <div
+      className={`light-switch${on ? " on" : ""}`}
+      title={t("Принтер не сообщает реальное состояние лампы — отмечена последняя отправленная команда")}
     >
       <Icon name="bulb" size={15} />
-      {!compact && <span>{t("Подсветка")}</span>}
-      <span className="light-toggle-state">{on ? t("вкл") : t("выкл")}</span>
-    </button>
+      <span className="light-switch-label">{t("Подсветка")}</span>
+      <button type="button" className={on ? "active" : ""} disabled={busy} onClick={() => send(true)}>
+        {t("вкл")}
+      </button>
+      <button type="button" className={on ? "" : "active"} disabled={busy} onClick={() => send(false)}>
+        {t("выкл")}
+      </button>
+    </div>
   );
 }

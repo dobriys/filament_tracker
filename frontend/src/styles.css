@@ -911,23 +911,32 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
 .printer-head-main h3 { margin: 0; font-size: var(--fs-5); }
 .printer-head-sub { color: var(--muted); font-size: var(--fs-3); margin-top: 1px; }
 .printer-head-status { display: flex; gap: 6px; align-items: center; flex: 0 0 auto; }
-/* Подсветка камеры: маленький переключатель в шапке карточки принтера.
-   Включённая лампа подсвечена тёплым — по кнопке видно состояние, не читая
-   подпись, как и у самой лампы в принтере. */
-.light-toggle {
-  display: inline-flex; align-items: center; gap: 6px;
-  min-height: 30px; padding: 4px 10px;
-  font-size: var(--fs-2); font-weight: 600;
-  border-radius: var(--radius-pill);
-  background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+/* Подсветка камеры: «вкл» и «выкл» отдельными кнопками в шапке карточки.
+   Отмеченная — последняя отправленная команда (реального состояния лампы
+   принтер не сообщает, см. LightToggle.jsx), поэтому отметка сдержанная:
+   тёплая заливка только на «вкл», без вида включённого тумблера. */
+.light-switch {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
+  background: var(--panel); color: var(--muted);
+  font-size: var(--fs-2);
 }
-.light-toggle:hover:not(:disabled) { background: var(--panel); border-color: var(--muted-2); color: var(--text); }
-.light-toggle .icon { color: var(--muted-2); }
-.light-toggle.on { border-color: var(--warn); color: var(--text); background: var(--badge-warn-bg); }
-.light-toggle.on:hover:not(:disabled) { background: var(--badge-warn-bg); border-color: var(--warn); }
-.light-toggle.on .icon { color: var(--warn); }
-.light-toggle-state { color: var(--muted); font-weight: 500; }
-.light-toggle.on .light-toggle-state { color: var(--badge-warn-text); }
+.light-switch .icon { color: var(--muted-2); flex: none; }
+.light-switch.on .icon { color: var(--warn); }
+.light-switch-label { font-weight: 600; margin-right: 2px; }
+.light-switch button {
+  min-height: 24px; padding: 2px 10px; border: none;
+  background: transparent; color: var(--muted);
+  font-size: var(--fs-2); font-weight: 600; border-radius: var(--radius-pill);
+}
+.light-switch button:hover:not(:disabled) { background: var(--hover-row); color: var(--text); }
+.light-switch button.active { background: var(--panel-3); color: var(--text); }
+.light-switch.on button.active { background: var(--badge-warn-bg); color: var(--badge-warn-text); }
+
+@media (max-width: 640px) {
+  .light-switch-label { display: none; }
+}
 
 .cap-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .cap-chip {
