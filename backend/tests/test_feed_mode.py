@@ -1,11 +1,17 @@
 """Режим подачи: авто/мультиподача/прямая (чистые функции, без БД и сети)."""
 from app.services.feed_mode import (
     MISSES_TO_DIRECT,
+    direct_by_telemetry,
     effective_capabilities,
     next_misses,
     setting_of,
 )
-from app.services.moonraker import detect_capabilities, parse_hub, parse_hub_enabled
+from app.services.moonraker import (
+    detect_capabilities,
+    parse_ext_spool,
+    parse_hub,
+    parse_hub_enabled,
+)
 
 ACE = {"has_mmu": True, "mmu_slots": 4, "mmu_name": "ACE Pro", "has_dryer": True,
        "has_chamber": True}
@@ -125,3 +131,48 @@ def test_setting_of_defaults_to_auto():
     assert setting_of(None) == "auto"
     assert setting_of({"feed_mode": "bogus"}) == "auto"
     assert setting_of({"feed_mode": "direct"}) == "direct"
+
+
+# --- внешняя катушка (filament_hub.ext_spool) ---------------------------
+
+# Снимок реального Kobra S1 с отключённой ACE: объекта нет в objects/list,
+# но на запрос он отвечает именно так.
+EXT_SPOOL_PAYLOAD = {"result": {"status": {"filament_hub": {
+    "auto_refill": 0, "current_filament": "", "cutter_state": 1,
+    "ext_spool": 1, "ext_spool_status": "ready", "filament_hubs": None,
+    "filament_present": 1, "tracker_detection_length": 0,
+    "tracker_filament_present": 0,
+}}}}
+
+
+def test_parse_ext_spool_reads_detached_hub():
+    ext = parse_ext_spool(EXT_SPOOL_PAYLOAD)
+    assert ext == {
+        "active": True, "status": "ready", "filament_present": True,
+        "hub_attached": False,
+    }
+
+
+def test_parse_ext_spool_absent_on_plain_printer():
+    assert parse_ext_spool({"result": {"status": {}}}) is None
+    assert parse_ext_spool({"result": {"status": {"filament_hub": {"dryer_status": {}}}}}) is None
+
+
+def test_ext_spool_switches_to_direct_immediately():
+    """Главный сигнал: держатель задействован, хаба нет — гистерезис не нужен."""
+    assert direct_by_telemetry(parse_ext_spool(EXT_SPOOL_PAYLOAD), None) is True
+
+
+def test_attached_hub_returns_to_mmu_even_before_gates_fill():
+    ext = {"active": False, "hub_attached": True}
+    assert direct_by_telemetry(ext, None) is False
+    # Подключённый хаб важнее залипшего mmu.enabled=false.
+    assert direct_by_telemetry(ext, False) is False
+
+
+def test_mmu_enabled_is_the_fallback_signal():
+    assert direct_by_telemetry(None, False) is True
+    # enabled=true само по себе ничего не доказывает: эмуляция включена и на
+    # снятом ACE — решает счётчик пустых ответов.
+    assert direct_by_telemetry(None, True) is None
+    assert direct_by_telemetry(None, None) is None

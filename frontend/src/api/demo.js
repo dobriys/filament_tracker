@@ -1058,8 +1058,47 @@ function printerOut(p) {
     id: p.id, owner_user_id: p.owner_user_id, name: p.name, integration_type: p.integration_type,
     brand: p.brand, model: p.model, capabilities: p.capabilities || {}, moonraker_url: p.moonraker_url,
     is_active: p.is_active, notes: p.notes, has_moonraker_key: !!p.moonraker_api_key_encrypted,
+    feed_state: p._feed || null,
     created_at: p.created_at, updated_at: p.updated_at,
   };
+}
+// Наблюдение за режимом подачи (см. app/services/feed_mode.py::observe).
+// Первое наблюдение только запоминается — подтверждать нечего.
+function observeFeed(printer, mode) {
+  const resolved = mode || resolvedFeedMode(printer);
+  const prev = printer._feed;
+  if (prev && prev.mode === resolved) return prev;
+  printer._feed = {
+    mode: resolved,
+    prev: prev ? prev.mode : null,
+    changed_at: new Date().toISOString(),
+    confirmed: !prev,
+  };
+  save();
+  return printer._feed;
+}
+// Внешняя катушка (держатель) — слот 0, как на бэке (slot_service.ensure_holder).
+// Заводится у принтеров с хабом при первой прямой подаче; катушка из слота 1
+// переезжает на него, потому что раньше держатель жил именно там.
+const HOLDER_INDEX = 0;
+function ensureHolder(printer) {
+  let holder = db.slots.find((s) => s.printer_id === printer.id && s.slot_index === HOLDER_INDEX);
+  if (holder) return holder;
+  holder = { id: uid(), printer_id: printer.id, slot_index: HOLDER_INDEX, name: "Внешняя катушка", current_spool_id: null, is_active: true };
+  db.slots.push(holder);
+  const first = db.slots.find((s) => s.printer_id === printer.id && s.slot_index === 1);
+  if (first?.current_spool_id) { holder.current_spool_id = first.current_spool_id; first.current_spool_id = null; }
+  save();
+  return holder;
+}
+function hasHub(printer) {
+  const c = printer.capabilities || {};
+  return !!(c.has_mmu || c.mmu_slots || c.mmu_off);
+}
+function resolvedFeedMode(printer) {
+  const setting = FEED_MODES.includes(printer.capabilities?.feed_mode) ? printer.capabilities.feed_mode : "auto";
+  if (setting === "direct") return "direct";
+  return printer.capabilities?.has_mmu ? "mmu" : "direct";
 }
 function printersRoute(M, parts, query, body) {
   if (parts[1] === "presets") return PRESETS;
@@ -1115,11 +1154,32 @@ function printersRoute(M, parts, query, body) {
   if (sub === "feed-mode" && M === "POST") {
     if (!FEED_MODES.includes(body?.mode)) throw new ApiError(`Неизвестный режим подачи: ${body?.mode}`, 422);
     printer.capabilities = { ...(printer.capabilities || {}), feed_mode: body.mode };
+    if (body.mode === "direct" && hasHub(printer)) ensureHolder(printer);
     if (body.mode !== "auto") {
-      db.slots.filter((s) => s.printer_id === printer.id)
-        .forEach((s) => { s.is_active = body.mode === "mmu" ? true : s.slot_index <= 1; });
+      const mine = db.slots.filter((s) => s.printer_id === printer.id);
+      const holder = mine.some((s) => s.slot_index === HOLDER_INDEX);
+      mine.forEach((s) => {
+        if (body.mode === "mmu") s.is_active = s.slot_index !== HOLDER_INDEX;
+        else s.is_active = holder ? s.slot_index === HOLDER_INDEX : s.slot_index <= 1;
+      });
     }
+    // Смена режима = железо переставили: катушки надо подтвердить заново
+    // (на бэке это feed_mode.observe по телеметрии, тут — по выбору).
+    observeFeed(printer);
     save(); return printerOut(printer);
+  }
+  if (sub === "feed-confirm" && M === "POST") {
+    for (const item of body?.slots || []) {
+      const slot = db.slots.find((s) => s.id === item.slot_id && s.printer_id === printer.id);
+      if (!slot) continue;
+      if (item.spool_id) {
+        db.slots.filter((s) => s.current_spool_id === item.spool_id && s.id !== slot.id)
+          .forEach((s) => { s.current_spool_id = null; });
+      }
+      slot.current_spool_id = item.spool_id || null;
+    }
+    if (printer._feed) printer._feed = { ...printer._feed, confirmed: true };
+    save(); return { ok: true };
   }
   if (sub === "overview" && M === "GET") {
     moonrakerOnly();
@@ -1134,15 +1194,38 @@ function printersRoute(M, parts, query, body) {
     }
     caps.feed_mode = caps.has_mmu ? "mmu" : "direct";
     caps.feed_mode_setting = setting;
-    const first = db.slots.find((s) => s.printer_id === printer.id && s.slot_index === 1);
+    if (caps.feed_mode === "direct" && hasHub(printer)) ensureHolder(printer);
+    const mySlots = db.slots.filter((s) => s.printer_id === printer.id);
+    const first = mySlots.find((s) => s.slot_index === HOLDER_INDEX)
+      || mySlots.find((s) => s.slot_index === 1);
     const firstSpool = first?.current_spool_id ? db.spools.find((s) => s.id === first.current_spool_id) : null;
     // Подсветка камеры — как power-устройство Moonraker (у закрытых принтеров).
     const light = printer.capabilities?.has_chamber
       ? { device: "chamber_light", on: !!printer._light, locked: false }
       : null;
     caps.has_light = light !== null;
+    observeFeed(printer, caps.feed_mode);
+    const pending = printer._feed && !printer._feed.confirmed ? printer._feed : null;
     return {
       status: liveStatus(printer), gates, dryer, light, capabilities: caps,
+      feed_change: pending
+        ? {
+            mode: pending.mode, prev: pending.prev, changed_at: pending.changed_at,
+            mmu_name: caps.mmu_name,
+            slots: db.slots
+              .filter((s) => s.printer_id === printer.id && (pending.mode === "direct"
+                ? s.id === first?.id
+                : s.slot_index !== HOLDER_INDEX))
+              .sort((a, b) => a.slot_index - b.slot_index)
+              .map((s) => {
+                const sp = s.current_spool_id ? db.spools.find((x) => x.id === s.current_spool_id) : null;
+                return {
+                  id: s.id, slot_index: s.slot_index, name: s.name,
+                  spool: sp ? { id: sp.id, label: sp.label, material: sp.material, color_hex: sp.color_hex, color_name: sp.color_name, current_weight_g: sp.current_weight_g } : null,
+                };
+              }),
+          }
+        : null,
       direct_slot: caps.feed_mode === "direct" && first
         ? {
             id: first.id, slot_index: first.slot_index, name: first.name,

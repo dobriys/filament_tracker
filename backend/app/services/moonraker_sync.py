@@ -20,7 +20,14 @@ from sqlalchemy.orm import Session
 
 from app.core.security import decrypt_secret
 from app.models import AppSetting, Printer, PrinterSlot, PrintJob, User
-from app.services import diagnostics, notifications, print_job_service, settings_service
+from app.services import (
+    diagnostics,
+    feed_mode,
+    notifications,
+    print_job_service,
+    settings_service,
+    slot_service,
+)
 from app.services import moonraker
 from app.services.moonraker import MoonrakerClient, job_to_parsed
 
@@ -114,23 +121,34 @@ def pick_new_jobs(
     return out
 
 
-def resolve_slot_mappings(tools: list[dict], slots: list) -> list[dict] | None:
-    """Сопоставление tool_index → слот (slot_index == tool_index + 1, катушка есть).
+def resolve_slot_mappings(
+    tools: list[dict], slots: list, *, direct: bool = False
+) -> list[dict] | None:
+    """Сопоставление tool_index → слот (катушка в слоте обязательна).
 
     tool_index приходит от слайсера/хаба и нумеруется с 0 (это номер гейта),
     а слоты приложения — с 1 (конвенция «gate N ↔ slot_index N+1», см.
     parse_hub и printers.py). Поэтому гейт 0 = слот 1 и т.д.
 
+    direct=True — печать идёт с внешней катушки: гейтов нет вообще, номер
+    инструмента ничего не значит, и весь расход уходит на держатель
+    (slot_service.HOLDER_INDEX). У принтера без хаба держателя как отдельной
+    записи нет — там эту роль играет слот 1.
+
     Возвращает mappings для confirm_usage или None, если хотя бы один
     инструмент с расходом не сопоставился (тогда оставляем черновик).
     """
     by_index = {s.slot_index: s for s in slots if s.current_spool_id is not None}
+    if direct:
+        target = by_index.get(slot_service.HOLDER_INDEX) or by_index.get(1)
+        if target is None:
+            return None
     mappings = []
     for t in tools:
         # tool «используется», если есть граммы или хотя бы длина (fallback).
         if float(t.get("used_g") or 0) <= 0 and float(t.get("used_mm") or 0) <= 0:
             continue
-        slot = by_index.get(t["tool_index"] + 1)
+        slot = target if direct else by_index.get(t["tool_index"] + 1)
         if slot is None:
             return None
         mappings.append({"tool_index": t["tool_index"], "slot_id": slot.id})
@@ -139,6 +157,47 @@ def resolve_slot_mappings(tools: list[dict], slots: list) -> list[dict] | None:
 
 def _loaded_slots(slots: list) -> int:
     return sum(1 for s in slots if s.current_spool_id is not None)
+
+
+def _watch_feed_mode(db: Session, printer: Printer) -> tuple[dict | None, str | None]:
+    """Проверить режим подачи: (неподтверждённая смена, разрешённый режим).
+
+    Живёт здесь, а не в printer_watch: тот целиком пропускается, пока не
+    настроены уведомления, а пауза автосписания нужна всегда. Ошибку связи
+    глушим — тогда телеметрии просто нет, и режим остаётся прежним.
+    """
+    client = _client(printer)
+    try:
+        hub = client.get_hub_data()
+    except Exception as e:
+        log.debug("feed watch %s: %s", printer.name, e)
+        known = feed_mode.state_of(db, printer)
+        return feed_mode.pending(db, printer), (known or {}).get("mode")
+
+    before = feed_mode.state_of(db, printer)
+    caps = feed_mode.resolve_capabilities(
+        db, printer, gates=hub["gates"], dryer=hub["dryer"], online=True,
+        mmu_enabled=hub["enabled"], ext_spool=hub.get("ext_spool"),
+    )
+    state = feed_mode.pending(db, printer)
+    changed = state is not None and (before or {}).get("mode") != state.get("mode")
+    if changed:
+        mmu_name = (printer.capabilities or {}).get("mmu_name") or "мультиподача"
+        text = (
+            f"Мультиподача ({mmu_name}) отключена — печать идёт с отдельной катушки."
+            if state["mode"] == "direct"
+            else f"Мультиподача ({mmu_name}) снова подключена."
+        )
+        diagnostics.event(
+            "warning", "poller", f"Режим подачи изменился: {text}",
+            category="feed", context={"printer": printer.name, "mode": state["mode"]},
+        )
+        notifications.notify(
+            db, "feed_changed",
+            f"🔄 <b>{notifications.esc(printer.name)}</b>\n{notifications.esc(text)}\n"
+            "Подтвердите катушки в приложении — до этого автосписание на паузе.",
+        )
+    return state, caps["feed_mode"]
 
 
 def poll_printer(db: Session, printer: Printer, *, auto_consume: bool) -> dict:
@@ -155,6 +214,10 @@ def poll_printer(db: Session, printer: Printer, *, auto_consume: bool) -> dict:
         # Первый запуск: не импортируем историю задним числом.
         settings_service.set_value(db, wm_key, newest)
         return {"printer": printer.name, "initialized": True}
+
+    # Режим подачи сверяем до списания: если ACE сняли или поставили, слоты в
+    # базе больше не описывают железо, и списывать по ним нельзя.
+    feed_pending, feed_resolved = _watch_feed_mode(db, printer)
 
     new_jobs = pick_new_jobs(
         jobs, watermark, _imported_job_ids(db, printer), _consumed_names(db, printer)
@@ -174,8 +237,19 @@ def poll_printer(db: Session, printer: Printer, *, auto_consume: bool) -> dict:
             "info", "poller", f"Импортирована печать «{job.file_name}»",
             category="import", context={"printer": printer.name},
         )
-        if auto_consume:
-            mappings = resolve_slot_mappings(parsed.get("tools", []), slots)
+        if auto_consume and feed_pending is not None:
+            diagnostics.event(
+                "warning", "poller",
+                f"Автосписание на паузе: подача сменилась на "
+                f"«{'прямую' if feed_pending['mode'] == 'direct' else 'мультиподачу'}», "
+                f"катушки не подтверждены — «{job.file_name}» осталась черновиком",
+                category="consume",
+                context={"printer": printer.name, "feed_mode": feed_pending["mode"]},
+            )
+        elif auto_consume:
+            mappings = resolve_slot_mappings(
+                parsed.get("tools", []), slots, direct=feed_resolved == "direct"
+            )
             if mappings and moonraker.is_interrupted(raw) and _loaded_slots(slots) > 1:
                 # У оборванной печати есть только суммарная длина: каким гейтом
                 # мультиподачи её выдавили — неизвестно. Не гадаем, оставляем

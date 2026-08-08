@@ -45,6 +45,7 @@ EVENTS: dict[str, bool] = {
     "dryer_started": False,
     "dryer_finished": True,
     "consume_failed": True,
+    "feed_changed": True,
     "spool_low": True,
     "humidity_high": True,
 }

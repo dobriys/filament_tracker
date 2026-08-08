@@ -138,6 +138,32 @@ def parse_hub_enabled(payload: dict) -> bool | None:
     return bool(mmu["enabled"])
 
 
+def parse_ext_spool(payload: dict) -> dict | None:
+    """Внешняя (прямая) катушка по объекту filament_hub.
+
+    Объекта нет в /printer/objects/list, но на запрос он отвечает — именно там
+    Rinkhals держит единственный прямой признак прямой подачи:
+      * ext_spool / ext_spool_status — держатель внешней катушки задействован;
+      * filament_hubs — список подключённых ACE; null означает, что хаба нет.
+    В отличие от mmu.enabled это утверждение о железе («печатаем с держателя»),
+    а не о состоянии эмуляции, поэтому переключать режим по нему можно сразу.
+
+    None — объекта нет (обычный принтер, другая прошивка): решают старые сигналы.
+    """
+    r = payload.get("result", payload) or {}
+    fh = (r.get("status", {}) or {}).get("filament_hub")
+    if not isinstance(fh, dict) or "ext_spool" not in fh:
+        return None
+    hubs = fh.get("filament_hubs")
+    return {
+        "active": bool(fh.get("ext_spool")),
+        "status": fh.get("ext_spool_status") or None,
+        "filament_present": bool(fh.get("filament_present")),
+        # null → ACE не подключена; список (даже пустой) → хаб на связи.
+        "hub_attached": hubs is not None,
+    }
+
+
 def parse_dryer(payload: dict) -> dict | None:
     """Состояние сушки ACE (Rinkhals).
 
@@ -541,33 +567,39 @@ class MoonrakerClient:
             return []
 
     def get_hub_data(self) -> dict:
-        """Гейты, состояние сушки и признак включённости хаба одним запросом."""
+        """Гейты, сушка, признак включённости хаба и внешняя катушка.
+
+        Два запроса: ota_filament_hub (гейты и эмуляция mmu) и filament_hub —
+        второй нужен и ради остатка сушки, и ради ext_spool (см. parse_ext_spool),
+        поэтому берём его всегда, а не только при живой сушилке.
+        """
         try:
             payload = self._get("/printer/objects/query?ota_filament_hub")
             gates = parse_hub(payload)
             dryer = parse_dryer(payload)
             enabled = parse_hub_enabled(payload)
-            if dryer is not None:
-                try:
-                    raw_hub = self._get("/printer/objects/query?filament_hub")
-                    raw_dryer = parse_dryer(raw_hub)
-                    if raw_dryer and (
-                        not dryer.get("remaining_min")
-                        or raw_dryer.get("remaining_min")
-                        or raw_dryer.get("duration_min")
-                    ):
-                        for key in ("unit", "status"):
-                            if raw_dryer.get(key) is not None:
-                                dryer[key] = raw_dryer[key]
-                        for key in ("temp", "target_temp", "remaining_min", "duration_min", "humidity"):
-                            if raw_dryer.get(key):
-                                dryer[key] = raw_dryer[key]
-                except Exception:
-                    pass
-            return {"gates": gates, "dryer": dryer, "enabled": enabled}
+            ext_spool = None
+            try:
+                raw_hub = self._get("/printer/objects/query?filament_hub")
+                ext_spool = parse_ext_spool(raw_hub)
+                raw_dryer = parse_dryer(raw_hub)
+                if dryer is not None and raw_dryer and (
+                    not dryer.get("remaining_min")
+                    or raw_dryer.get("remaining_min")
+                    or raw_dryer.get("duration_min")
+                ):
+                    for key in ("unit", "status"):
+                        if raw_dryer.get(key) is not None:
+                            dryer[key] = raw_dryer[key]
+                    for key in ("temp", "target_temp", "remaining_min", "duration_min", "humidity"):
+                        if raw_dryer.get(key):
+                            dryer[key] = raw_dryer[key]
+            except Exception:
+                pass
+            return {"gates": gates, "dryer": dryer, "enabled": enabled, "ext_spool": ext_spool}
         except Exception:
             # Связь с хабом не удалась — это не «хаба нет», поэтому enabled=None.
-            return {"gates": [], "dryer": None, "enabled": None}
+            return {"gates": [], "dryer": None, "enabled": None, "ext_spool": None}
 
     def get_light(self) -> dict | None:
         """Подсветка камеры, если принтер отдаёт её как power-устройство."""

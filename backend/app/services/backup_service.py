@@ -390,9 +390,12 @@ def restore_backup(db: Session, user: User, data: dict) -> dict:
         pid = printer_map.get(item.get("printer_id"))
         if pid is None:
             continue
+        idx = item.get("slot_index")
         slot = PrinterSlot(
             printer_id=pid,
-            slot_index=item.get("slot_index") or 1,
+            # Слот 0 — внешняя катушка, поэтому проверяем именно на None:
+            # «or 1» превращал бы держатель в первый гейт хаба.
+            slot_index=1 if idx is None else int(idx),
             name=item.get("name"),
             current_spool_id=spool_map.get(item.get("current_spool_id")),
             is_active=bool(item.get("is_active", True)),

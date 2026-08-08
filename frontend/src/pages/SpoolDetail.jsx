@@ -4,6 +4,7 @@ import { api } from "../api/client.js";
 import { SPEC_GROUPS, fmtSpec } from "../specFields.js";
 import { spoolTitle } from "../utils/spools.js";
 import { t, dateLocale, tReason } from "../i18n.js";
+import { slotLabel } from "../utils/slots.js";
 import Icon from "../components/Icon.jsx";
 
 const STATUS_RU = {
@@ -106,7 +107,8 @@ export default function SpoolDetail() {
       const all = [];
       for (const p of printers) {
         const ss = await api.get(`/api/printers/${p.id}/slots`).catch(() => []);
-        for (const s of ss) all.push({ id: s.id, label: `${p.name} / ${s.name || "Slot " + s.slot_index}` });
+        const detached = p.feed_state?.mode === "direct";
+        for (const s of ss) all.push({ id: s.id, label: `${p.name} / ${slotLabel(s, { detached })}` });
       }
       setSlots(all);
     })();

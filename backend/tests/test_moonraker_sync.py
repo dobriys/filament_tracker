@@ -78,6 +78,43 @@ def test_resolve_mappings_no_usage_returns_none():
     assert resolve_slot_mappings([{"tool_index": 0, "used_g": 0}], [_slot(1)]) is None
 
 
+def test_direct_feed_maps_everything_to_the_holder():
+    """Прямая подача: гейтов нет, весь расход уходит на внешнюю катушку (слот 0).
+
+    Без этого печать с держателя списывалась бы со слота 1 — то есть с катушки,
+    которая уехала вместе со снятым хабом.
+    """
+    tools = [{"tool_index": 0, "used_g": 85.1}]
+    slots = [_slot(0), _slot(1)]
+    assert resolve_slot_mappings(tools, slots, direct=True) == [
+        {"tool_index": 0, "slot_id": "slot0"}
+    ]
+    # Тот же набор слотов в мультиподаче держатель игнорирует.
+    assert resolve_slot_mappings(tools, slots) == [{"tool_index": 0, "slot_id": "slot1"}]
+
+
+def test_direct_feed_falls_back_to_slot_one_without_holder():
+    """У принтера без хаба держателя как отдельной записи нет — это слот 1."""
+    tools = [{"tool_index": 0, "used_g": 12.0}]
+    assert resolve_slot_mappings(tools, [_slot(1)], direct=True) == [
+        {"tool_index": 0, "slot_id": "slot1"}
+    ]
+
+
+def test_direct_feed_without_loaded_spool_stays_draft():
+    assert resolve_slot_mappings(
+        [{"tool_index": 0, "used_g": 5}], [_slot(0, spool=False)], direct=True
+    ) is None
+
+
+def test_direct_feed_ignores_tool_index_from_slicer():
+    """Файл нарезан под мультиподачу, а печатают с держателя: гейт 2 не значит слот 3."""
+    tools = [{"tool_index": 2, "used_g": 40.0}]
+    assert resolve_slot_mappings(tools, [_slot(0)], direct=True) == [
+        {"tool_index": 2, "slot_id": "slot0"}
+    ]
+
+
 def test_resolve_mappings_uses_length_when_no_grams():
     # Fallback-tool без граммов, но с длиной — тоже маппится (граммы посчитает confirm).
     tools = [{"tool_index": 0, "used_g": None, "used_mm": 40904.0}]

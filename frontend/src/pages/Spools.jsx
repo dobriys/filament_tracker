@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import { MATERIALS } from "../specFields.js";
 import { t } from "../i18n.js";
+import { slotLabel } from "../utils/slots.js";
 import Icon from "../components/Icon.jsx";
 import { locationPath } from "../utils/locations.js";
 import { spoolTitle } from "../utils/spools.js";
@@ -44,7 +45,8 @@ export default function Spools() {
       const sm = {};
       for (const p of printers) {
         const slots = await api.get(`/api/printers/${p.id}/slots`).catch(() => []);
-        for (const s of slots) if (s.current_spool_id) sm[s.current_spool_id] = `${p.name} / ${s.name || "Slot " + s.slot_index}`;
+        const detached = p.feed_state?.mode === "direct";
+        for (const s of slots) if (s.current_spool_id) sm[s.current_spool_id] = `${p.name} / ${slotLabel(s, { detached })}`;
       }
       setSlotMap(sm);
     })();

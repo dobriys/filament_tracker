@@ -235,6 +235,7 @@ export default function Settings() {
     ["dryer_finished", t("Сушка завершена")],
     ["printer_offline", t("Принтер недоступен / снова на связи")],
     ["consume_failed", t("Автосписание не выполнено")],
+    ["feed_changed", t("Подача изменилась (хаб сняли/поставили)")],
     ["spool_low", t("Катушка заканчивается")],
     ["humidity_high", t("Влажность выше порога")],
   ];

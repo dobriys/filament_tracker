@@ -6,6 +6,8 @@ import { t, tReason } from "../i18n.js";
 import { GateChips } from "../components/HubGates.jsx";
 import { PrinterArt, brandAccent } from "../components/PrinterArt.jsx";
 import EnvSensor, { useEnvSensors } from "../components/EnvSensor.jsx";
+import FeedChangeBanner from "../components/FeedChangeBanner.jsx";
+import { slotLabel } from "../utils/slots.js";
 import Icon from "../components/Icon.jsx";
 import LightToggle from "../components/LightToggle.jsx";
 
@@ -367,6 +369,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
   const [status, setStatus] = useState(null);
   const [gates, setGates] = useState([]);
   const [directSlot, setDirectSlot] = useState(null); // слот прямой подачи (без MMU)
+  const [feedChange, setFeedChange] = useState(null); // подача сменилась, катушки не подтверждены
   const [dryer, setDryer] = useState(null);
   const [light, setLight] = useState(null); // подсветка камеры, если ею можно управлять
   const [caps, setCaps] = useState(printer.capabilities || {});
@@ -387,6 +390,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
       setStatus(o.status); setGates(o.gates || []); setDryer(o.dryer);
       setLight(o.light || null);
       setDirectSlot(o.direct_slot || null);
+      setFeedChange(o.feed_change || null);
       setCaps(o.capabilities || {}); setOffline(false);
       onTotals?.(printer.id, o.totals);
       return o;
@@ -561,6 +565,13 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
               {knownErr && <div className="printer-error-raw">{fmtPrinterError(errMsg)}</div>}
             </div>
           )}
+          {feedChange && (
+            <FeedChangeBanner
+              printer={printer}
+              change={feedChange}
+              onConfirmed={loadOverview}
+            />
+          )}
           <div className="printer-grid">
             {/* Блок «Печать» */}
             <div className="printer-zone">
@@ -631,7 +642,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
                 {showDirect && (
                   <>
                     <div className="zone-title">
-                      {t("Прямая подача")}
+                      {directSlot?.slot_index === 0 ? t("Внешняя катушка") : t("Прямая подача")}
                       {caps.mmu_off && (
                         <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>
                           {" · "}{caps.mmu_name || t("мультиподача")} {t("отключена")}
@@ -691,7 +702,7 @@ function DirectFeed({ slot, printerId, navigate }) {
           {spool
             ? [spool.color_name || spool.label, grams != null ? `${Math.round(grams)} ${t("г")}` : null]
                 .filter(Boolean).join(" · ")
-            : `${slot?.name || `${t("Слот")} ${slot?.slot_index ?? 1}`} — ${t("привязать в разделе «Принтеры»")}`}
+            : `${slotLabel(slot) || t("Внешняя катушка")} — ${t("привязать в разделе «Принтеры»")}`}
         </div>
       </div>
       <Icon name="spool" size={18} />

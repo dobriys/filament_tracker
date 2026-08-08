@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../api/client.js";
 import { t, tServer } from "../i18n.js";
+import { slotLabel } from "../utils/slots.js";
 
 const Swatch = ({ hex, size = 13 }) => (
   <span style={{ display: "inline-block", width: size, height: size, borderRadius: 3, background: hex || "#666", border: "1px solid var(--border)", verticalAlign: "middle" }} />
@@ -41,7 +42,7 @@ export default function ConsumeJob() {
       for (const p of printers) {
         const slots = await api.get(`/api/printers/${p.id}/slots`).catch(() => []);
         for (const s of slots) {
-          if (s.current_spool_id) sm[s.current_spool_id] = `${p.name} / ${s.name || "Slot " + s.slot_index}`;
+          if (s.current_spool_id) sm[s.current_spool_id] = `${p.name} / ${slotLabel(s, { detached: p.feed_state?.mode === "direct" })}`;
           if (p.id === j.printer_id && s.current_spool_id) slotByIndex[s.slot_index] = s.current_spool_id;
         }
       }

@@ -41,6 +41,9 @@ class PrinterOut(PrinterBase):
     id: uuid.UUID
     owner_user_id: uuid.UUID
     has_moonraker_key: bool
+    # Наблюдение за железом: {mode, prev, changed_at, confirmed} — см. feed_mode.
+    # None, пока принтер ни разу не опрашивали.
+    feed_state: dict | None = None
     created_at: datetime
     updated_at: datetime
 

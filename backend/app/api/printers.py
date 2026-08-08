@@ -31,8 +31,14 @@ def _own(db: Session, user: User, printer_id: uuid.UUID) -> Printer:
     return printer
 
 
-def _to_out(printer: Printer) -> dict:
+def _to_out(printer: Printer, db: Session | None = None) -> dict:
+    # feed_state — последний разрешённый режим подачи и признак «катушки ещё не
+    # подтверждены». Хранится в настройках, а не в capabilities: capabilities —
+    # это выбор пользователя и пресет, а тут наблюдение за железом. Списку
+    # принтеров он нужен, чтобы прятать слоты снятого хаба без опроса принтера.
+    state = feed_mode.state_of(db, printer) if db is not None else None
     return {
+        "feed_state": state,
         "id": printer.id,
         "owner_user_id": printer.owner_user_id,
         "name": printer.name,
@@ -60,7 +66,7 @@ def list_printers(db: Session = Depends(get_db), user: User = Depends(get_curren
     printers = db.scalars(
         select(Printer).where(Printer.owner_user_id == user.id).order_by(Printer.name)
     )
-    return [_to_out(p) for p in printers]
+    return [_to_out(p, db) for p in printers]
 
 
 @router.post("", response_model=PrinterOut, status_code=status.HTTP_201_CREATED)
@@ -107,7 +113,7 @@ def create_printer(
         )
     db.commit()
     db.refresh(printer)
-    return _to_out(printer)
+    return _to_out(printer, db)
 
 
 @router.get("/{printer_id}", response_model=PrinterOut)
@@ -116,7 +122,7 @@ def get_printer(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    return _to_out(_own(db, user, printer_id))
+    return _to_out(_own(db, user, printer_id), db)
 
 
 @router.patch("/{printer_id}", response_model=PrinterOut)
@@ -135,7 +141,7 @@ def update_printer(
         setattr(printer, k, v)
     db.commit()
     db.refresh(printer)
-    return _to_out(printer)
+    return _to_out(printer, db)
 
 
 @router.delete("/{printer_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -295,7 +301,7 @@ def printer_overview(
     # хаба здесь — довод в пользу прямой подачи (с гистерезисом внутри).
     capabilities = feed_mode.resolve_capabilities(
         db, printer, gates=hub["gates"], dryer=hub["dryer"], online=True,
-        mmu_enabled=hub["enabled"],
+        mmu_enabled=hub["enabled"], ext_spool=hub.get("ext_spool"),
     )
     if capabilities["feed_mode"] == "direct":
         # Мультиподачи сейчас нет. Гейты и сушилку при этом прячем не «на всякий
@@ -366,15 +372,59 @@ def printer_overview(
         "dryer": dryer,
         "light": light,
         "capabilities": capabilities,
-        # В прямой подаче слот 1 — та самая катушка с держателя; карточке на
-        # панели нечего показать вместо гейтов без неё.
+        # В прямой подаче показываем внешнюю катушку — карточке на панели
+        # нечего показать вместо гейтов без неё.
         "direct_slot": (
-            _slot_with_spool(db, slots.get(1))
+            _slot_with_spool(db, _feed_slot(slots))
             if capabilities["feed_mode"] == "direct"
             else None
         ),
+        # Режим подачи только что сменился и катушки ещё не подтверждены —
+        # фронт показывает баннер, а автосписание стоит на паузе.
+        "feed_change": _feed_change(db, printer, capabilities),
         "totals": client.get_totals(),
         "system": client.get_system(),
+    }
+
+
+def _feed_slot(slots: dict):
+    """Слот, с которого печатают в прямой подаче: держатель, иначе слот 1.
+
+    Отдельная запись под держатель заводится только у принтеров с хабом (см.
+    slot_service.ensure_holder) — у остальных слот 1 и есть держатель.
+    """
+    return slots.get(slot_service.HOLDER_INDEX) or slots.get(1)
+
+
+def _feed_change(db: Session, printer: Printer, capabilities: dict) -> dict | None:
+    """Блок «подтвердите катушки» для фронта: что изменилось и что предложить.
+
+    В прямой подаче подтверждать нужно одну внешнюю катушку, в мультиподаче —
+    все слоты хаба (держатель туда не попадает: печать идёт не с него). Список
+    слотов отдаём вместе с катушками, чтобы диалогу хватило одного запроса.
+    """
+    from app.models import PrinterSlot
+
+    state = feed_mode.pending(db, printer)
+    if state is None:
+        return None
+    mode = capabilities["feed_mode"]
+    slots = sorted(
+        db.scalars(select(PrinterSlot).where(PrinterSlot.printer_id == printer.id)),
+        key=lambda s: s.slot_index,
+    )
+    if mode == "direct":
+        by_index = {s.slot_index: s for s in slots}
+        target = _feed_slot(by_index)
+        slots = [target] if target is not None else []
+    else:
+        slots = [s for s in slots if s.slot_index != slot_service.HOLDER_INDEX]
+    return {
+        "mode": mode,
+        "prev": state.get("prev"),
+        "changed_at": state.get("changed_at"),
+        "mmu_name": capabilities.get("mmu_name"),
+        "slots": [_slot_with_spool(db, s) for s in slots],
     }
 
 
@@ -422,7 +472,55 @@ def set_feed_mode(
         feed_mode.set_mode(db, printer, data.mode)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    return _to_out(printer)
+    return _to_out(printer, db)
+
+
+class FeedConfirmSlot(BaseModel):
+    slot_id: uuid.UUID
+    spool_id: uuid.UUID | None = None  # null — слот пустой
+
+
+class FeedConfirmRequest(BaseModel):
+    # Пустой список — «всё как было», подтверждаем без перестановок.
+    slots: list[FeedConfirmSlot] = []
+
+
+@router.post("/{printer_id}/feed-confirm")
+def confirm_feed_change(
+    printer_id: uuid.UUID,
+    data: FeedConfirmRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Подтвердить катушки после смены режима подачи и снять паузу автосписания.
+
+    Приходит от баннера «подача изменилась»: пользователь либо расставляет
+    катушки заново, либо просто подтверждает текущие. Слоты не своего принтера
+    молча игнорируем — баннер их и не предлагает.
+    """
+    from app.models import PrinterSlot, Spool
+
+    printer = _own(db, user, printer_id)
+    own_slots = {
+        s.id: s
+        for s in db.scalars(select(PrinterSlot).where(PrinterSlot.printer_id == printer.id))
+    }
+    for item in data.slots:
+        slot = own_slots.get(item.slot_id)
+        if slot is None:
+            continue
+        if item.spool_id is None:
+            slot_service.unassign_spool(db, slot, user=user)
+            continue
+        if slot.current_spool_id == item.spool_id:
+            continue
+        spool = db.get(Spool, item.spool_id)
+        if spool is None or spool.owner_user_id != user.id:
+            raise HTTPException(status_code=404, detail="Катушка не найдена")
+        slot_service.assign_spool(db, slot, spool=spool, user=user)
+
+    feed_mode.confirm(db, printer)
+    return {"ok": True}
 
 
 class DryerRequest(BaseModel):

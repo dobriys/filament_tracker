@@ -7,8 +7,10 @@ import { GateCard } from "../components/HubGates.jsx";
 import { PrinterArt, CapabilityChips, brandAccent } from "../components/PrinterArt.jsx";
 import Icon from "../components/Icon.jsx";
 import SpoolPicker from "../components/SpoolPicker.jsx";
+import FeedChangeBanner from "../components/FeedChangeBanner.jsx";
 import LightToggle from "../components/LightToggle.jsx";
 import { enrichSpool } from "../utils/spools.js";
+import { HOLDER_INDEX, slotLabel } from "../utils/slots.js";
 
 // Лейбл системы мультиподачи по возможностям: «Слоты ACE Pro» / «Слоты мультиподачи».
 function mmuLabel(caps) {
@@ -436,6 +438,7 @@ function SlotsManager({ printer, onClose, onPrinterChanged }) {
   const [occupied, setOccupied] = useState({}); // spool_id -> «Принтер / Slot 2»
   const [history, setHistory] = useState(null);
   const [caps, setCaps] = useState(printer.capabilities || {});
+  const [feedState, setFeedState] = useState(printer.feed_state || null);
   const [busy, setBusy] = useState(false);
 
   function load() {
@@ -452,7 +455,7 @@ function SlotsManager({ printer, onClose, onPrinterChanged }) {
       const ss = await api.get(`/api/printers/${p.id}/slots`).catch(() => []);
       for (const s of ss) {
         if (!s.current_spool_id) continue;
-        const slotName = s.name || `Slot ${s.slot_index}`;
+        const slotName = slotLabel(s);
         map[s.current_spool_id] = p.id === printer.id ? slotName : `${p.name} / ${slotName}`;
       }
     }
@@ -461,6 +464,7 @@ function SlotsManager({ printer, onClose, onPrinterChanged }) {
   useEffect(() => {
     load();
     setCaps(printer.capabilities || {});
+    setFeedState(printer.feed_state || null);
     api.get("/api/spools").then(setSpools).catch(() => {});
     api.get("/api/filament-profiles").then(setProfiles).catch(() => {});
     api.get("/api/locations").then(setLocations).catch(() => {});
@@ -468,11 +472,46 @@ function SlotsManager({ printer, onClose, onPrinterChanged }) {
 
   // Режим подачи: «авто» решает телеметрия хаба, остальные — фиксированные.
   const mode = FEED_MODES.includes(caps.feed_mode) ? caps.feed_mode : "auto";
+  // Что получилось на деле: в «авто» это последнее наблюдение за железом
+  // (feed_state с бэка), иначе — сам выбор. Слоты снятого хаба прячем: их
+  // катушек в принтере физически нет, а привязки и история остаются.
+  const resolved = mode === "auto" ? feedState?.mode || null : mode;
+  const holder = slots.find((s) => s.slot_index === HOLDER_INDEX) || null;
+  // В прямой подаче остаётся одна строка — внешняя катушка (у принтера без
+  // хаба её роль играет слот 1). В мультиподаче держатель прячем: печать идёт
+  // не с него, а катушка на нём может преспокойно стоять дальше.
+  const feedSlot = holder || slots.find((s) => s.slot_index === 1) || null;
+  const shownSlots = resolved === "direct"
+    ? (feedSlot ? [feedSlot] : [])
+    : slots.filter((s) => s.slot_index !== HOLDER_INDEX);
+  const hubHidden = resolved === "direct" && slots.length > shownSlots.length;
+  // Баннер подтверждения — тот же, что на панели: смену железа надо подтвердить
+  // и отсюда, иначе автосписание так и останется на паузе.
+  const feedChange = feedState && !feedState.confirmed
+    ? {
+        mode: resolved || feedState.mode,
+        prev: feedState.prev,
+        mmu_name: caps.mmu_name,
+        slots: shownSlots.map((s) => ({
+          id: s.id,
+          slot_index: s.slot_index,
+          name: slotLabel(s),
+          spool: s.current_spool_id ? { id: s.current_spool_id } : null,
+        })),
+      }
+    : null;
+
+  async function onFeedConfirmed() {
+    const updated = await api.get(`/api/printers/${printer.id}`).catch(() => null);
+    if (updated) { setFeedState(updated.feed_state || null); onPrinterChanged?.(updated); }
+    load();
+  }
   async function setFeedMode(next) {
     setBusy(true);
     try {
       const updated = await api.post(`/api/printers/${printer.id}/feed-mode`, { mode: next });
       setCaps(updated.capabilities || {});
+      setFeedState(updated.feed_state || null);
       onPrinterChanged?.(updated);
       load();
     } finally { setBusy(false); }
@@ -528,18 +567,31 @@ function SlotsManager({ printer, onClose, onPrinterChanged }) {
           {mode === "auto"
             ? t("Пока хаб отключён от принтера, приложение само держит прямую подачу и вернёт слоты, когда он снова окажется в работе.")
             : mode === "direct"
-              ? t("Активен только слот 1 — в него ставится катушка с держателя, по нему же идёт автосписание. Остальные слоты выключены, их история сохранена.")
+              ? holder
+                ? t("Активна только внешняя катушка — та, что стоит на держателе; по ней же идёт автосписание. Слоты хаба выключены, их история сохранена.")
+                : t("Активен только слот 1 — в него ставится катушка с держателя, по нему же идёт автосписание. Остальные слоты выключены, их история сохранена.")
               : t("Слоты хаба включены, даже если он сейчас молчит.")}
         </div>
       </div>
 
+      {feedChange && (
+        <FeedChangeBanner printer={printer} change={feedChange} onConfirmed={onFeedConfirmed} />
+      )}
+
+      {hubHidden && (
+        <div className="muted feed-mode-note" style={{ marginBottom: 10 }}>
+          <Icon name="alert" size={13} />{" "}
+          {t("Слоты хаба скрыты — он сейчас не подключён. Катушки остались привязанными, история цела.")}
+        </div>
+      )}
+
       <table className="cards-mobile">
         <thead><tr><th>{t("Слот")}</th><th>{t("Текущая катушка")}</th><th>{t("Назначить")}</th><th></th></tr></thead>
         <tbody>
-          {slots.map((s) => (
+          {shownSlots.map((s) => (
             <tr key={s.id} className={s.is_active ? "" : "slot-off"}>
               <td data-label={t("Слот")}>
-                {s.name || `Slot ${s.slot_index}`}
+                {slotLabel(s)}
                 {!s.is_active && <span className="badge" style={{ marginLeft: 6 }}>{t("выключен")}</span>}
               </td>
               <td data-label={t("Текущая катушка")}>
@@ -568,7 +620,7 @@ function SlotsManager({ printer, onClose, onPrinterChanged }) {
               </td>
             </tr>
           ))}
-          {slots.length === 0 && <tr><td colSpan={4} className="muted">{t("Нет слотов")}</td></tr>}
+          {shownSlots.length === 0 && <tr><td colSpan={4} className="muted">{t("Нет слотов")}</td></tr>}
         </tbody>
       </table>
 

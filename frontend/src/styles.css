@@ -1099,6 +1099,29 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
 .feed-mode-note { font-size: var(--fs-1); margin-top: 8px; }
 tr.slot-off > td { opacity: 0.55; }
 
+/* Смена режима подачи: ACE сняли или поставили — надо подтвердить катушки.
+   Предупреждающий, а не аварийный вид: печатать это не мешает, но до
+   подтверждения автосписание стоит на паузе. */
+.feed-change {
+  margin-bottom: 12px; padding: 12px 14px; border-radius: var(--radius);
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+}
+.feed-change-head { display: flex; gap: 8px; align-items: flex-start; font-size: var(--fs-3); }
+.feed-change-sub { font-size: var(--fs-1); margin-top: 3px; }
+.feed-change-slots { display: grid; gap: 8px; margin: 12px 0 10px; }
+.feed-change-slot {
+  display: grid; grid-template-columns: minmax(90px, 130px) minmax(0, 1fr) auto;
+  gap: 8px; align-items: center; font-size: var(--fs-2);
+}
+.feed-change-clear { padding: 4px 9px; line-height: 1; }
+.feed-change-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 560px) {
+  .feed-change-slot { grid-template-columns: minmax(0, 1fr) auto; }
+  .feed-change-slot > span { grid-column: 1 / -1; }
+}
+
 /* ============================================================
    Выбор катушки (SpoolPicker)
 

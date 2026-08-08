@@ -2,6 +2,12 @@
 
 Инвариант: одна катушка одновременно может быть только в одном слоте.
 Каждое назначение/снятие отражается в slot_assignment_history.
+
+Слоты нумеруются с 1 и соответствуют гейтам хаба (gate N ↔ slot_index N+1).
+Индекс 0 зарезервирован под ВНЕШНЮЮ КАТУШКУ — держатель сбоку от принтера, с
+которого печатают, когда хаб снят. Это отдельное физическое место, а не «слот 1
+в другом режиме»: пока они делили одну запись, история назначений не отличала
+гейт от держателя, а возврат хаба молча «переставлял» катушку в слот 1.
 """
 from datetime import datetime, timezone
 
@@ -15,6 +21,11 @@ from app.models import (
     User,
 )
 
+# Внешняя катушка (держатель). Индекс 0 не совпадает ни с одним гейтом — сверка
+# со слотами идёт по gate + 1, то есть с единицы.
+HOLDER_INDEX = 0
+HOLDER_NAME = "Внешняя катушка"
+
 
 def next_slot_index(db: Session, printer_id) -> int:
     current_max = db.scalar(
@@ -22,7 +33,8 @@ def next_slot_index(db: Session, printer_id) -> int:
             PrinterSlot.printer_id == printer_id
         )
     )
-    return (current_max or 0) + 1
+    # Держатель (0) не считается «последним слотом»: следующий после него — 1.
+    return max(current_max or 0, 0) + 1
 
 
 def create_slot(
@@ -33,11 +45,63 @@ def create_slot(
     slot = PrinterSlot(
         printer_id=printer_id,
         slot_index=slot_index,
-        name=name or f"Slot {slot_index}",
+        name=name or default_slot_name(slot_index),
         is_active=is_active,
     )
     db.add(slot)
     return slot
+
+
+def default_slot_name(slot_index: int) -> str:
+    return HOLDER_NAME if slot_index == HOLDER_INDEX else f"Slot {slot_index}"
+
+
+def holder_of(db: Session, printer_id) -> PrinterSlot | None:
+    """Слот внешней катушки принтера, если он уже заведён."""
+    return db.scalar(
+        select(PrinterSlot).where(
+            PrinterSlot.printer_id == printer_id,
+            PrinterSlot.slot_index == HOLDER_INDEX,
+        )
+    )
+
+
+def ensure_holder(db: Session, printer, *, user: User | None = None) -> PrinterSlot:
+    """Слот внешней катушки — завести при первой же прямой подаче.
+
+    Заводится только у принтеров с хабом: там «слот 1» двусмыслен. У обычного
+    принтера слот 1 и есть держатель, отдельная запись ему не нужна.
+
+    Разовый переезд: до появления держателя катушку с него держали в слоте 1 —
+    такова была конвенция. Поэтому при создании держателя катушка из слота 1
+    переезжает на него, если он пуст. Иначе после обновления катушка осталась бы
+    числиться в гейте снятого хаба, а держатель выглядел бы пустым.
+    """
+    holder = holder_of(db, printer.id)
+    if holder is not None:
+        return holder
+
+    holder = create_slot(
+        db, printer_id=printer.id, slot_index=HOLDER_INDEX, name=None, is_active=True
+    )
+    db.flush()
+
+    first = db.scalar(
+        select(PrinterSlot).where(
+            PrinterSlot.printer_id == printer.id, PrinterSlot.slot_index == 1
+        )
+    )
+    if first is not None and first.current_spool_id is not None:
+        spool = db.get(Spool, first.current_spool_id)
+        if spool is not None:
+            assign_spool(
+                db, holder, spool=spool,
+                user=user or db.get(User, printer.owner_user_id),
+                notes="Перенос со слота 1: печать идёт с внешней катушки",
+            )
+    db.commit()
+    db.refresh(holder)
+    return holder
 
 
 def _close_open_history(db: Session, slot_id) -> None:
