@@ -12,9 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Spool, SpoolEvent, User
-
-# Порог, ниже которого катушка считается «почти закончилась» (граммы пластика).
-LOW_THRESHOLD_G = Decimal("50")
+from app.services import settings_service
 
 
 def price_per_gram(db: Session, spool_ids: list) -> dict:
@@ -58,13 +56,24 @@ def filament_left_g(spool: Spool) -> Decimal:
     return Decimal(spool.current_weight_g)
 
 
-def recompute_status(spool: Spool) -> None:
+def low_threshold(db: Session, spool: Spool) -> float:
+    """Порог «заканчивается» для конкретной катушки — от её же ёмкости."""
+    return settings_service.spool_low_threshold(db, spool.initial_filament_weight_g)
+
+
+def recompute_status(spool: Spool, threshold_g: float) -> None:
+    """Статус катушки по остатку. Порог в граммах приходит снаружи.
+
+    Чистая функция: сам порог считает settings_service.low_threshold_for от
+    ёмкости катушки, а здесь остаётся только сравнение — так статус можно
+    проверять без БД.
+    """
     if spool.status == "archived":
         return
     left = filament_left_g(spool)
     if left <= 0:
         spool.status = "empty"
-    elif left <= LOW_THRESHOLD_G:
+    elif left <= Decimal(str(threshold_g)):
         spool.status = "almost_empty"
     elif spool.status in ("new",):
         # не трогаем «new», пока пользователь сам не начнёт печатать
@@ -86,7 +95,7 @@ def _record_change(
     before = Decimal(spool.current_weight_g)
     after = Decimal(new_weight)
     spool.current_weight_g = after
-    recompute_status(spool)
+    recompute_status(spool, low_threshold(db, spool))
 
     event = SpoolEvent(
         spool_id=spool.id,

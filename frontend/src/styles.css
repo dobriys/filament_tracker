@@ -1673,3 +1673,15 @@ tr.slot-off > td { opacity: 0.55; }
 }
 .env-sensor--inline .env-sensor-foot { margin-top: 6px; }
 .env-sensor-error { color: var(--muted); font-size: var(--fs-3); }
+
+/* Порог остатка: что правило даёт для ходовых размеров катушек. Числа рядом с
+   полями, чтобы не считать проценты в уме. */
+.low-preview {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;
+}
+.low-preview > div {
+  display: flex; gap: 6px; align-items: baseline;
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  background: var(--panel-2); border: 1px solid var(--border-soft);
+  font-size: var(--fs-2);
+}

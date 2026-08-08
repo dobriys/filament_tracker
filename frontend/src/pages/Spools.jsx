@@ -6,7 +6,7 @@ import { t } from "../i18n.js";
 import { slotLabel } from "../utils/slots.js";
 import Icon from "../components/Icon.jsx";
 import { locationPath } from "../utils/locations.js";
-import { spoolTitle } from "../utils/spools.js";
+import { lowThresholdFor, spoolTitle } from "../utils/spools.js";
 
 const STATUS_LABELS = {
   new: t("новая"),
@@ -60,7 +60,9 @@ export default function Spools() {
     const remaining = Number(s.current_weight_g);
     const capacity = Number(s.initial_filament_weight_g) || 1000;
     const pct = Math.max(0, Math.min(1, remaining / capacity));
-    const low = s.status === "almost_empty" || s.status === "empty" || pct < 0.15;
+    // Тот же порог, что у enrichSpool и у статуса на сервере: доля от ёмкости
+    // именно этой катушки, подрезанная зажимами.
+    const low = s.status === "empty" || remaining <= lowThresholdFor(capacity);
     const brand = s.manufacturer || p?.brand;
     const name = p?.name || s.label;
     const dia = s.diameter_mm || p?.diameter_mm;
@@ -139,13 +141,11 @@ export default function Spools() {
   }
 
   // Шкала остатка окрашена самим филаментом: полоса показывает, сколько
-  // осталось именно этого цвета. На критическом и низком остатке цвет
-  // перебивается статусным — тревога должна читаться раньше материала.
-  const barColor = (e) => {
-    if (e.pct <= 0.1 || e.low) return "var(--danger)";
-    if (e.pct <= 0.25) return "var(--warn)";
-    return e.colorHex || "var(--muted-2)";
-  };
+  // осталось именно этого цвета. Ниже порога цвет перебивается статусным —
+  // тревога должна читаться раньше материала. Порог один и тот же на всё
+  // приложение (см. utils/spools.js), процентных ступеней тут больше нет:
+  // они срабатывали вразнобой со статусом на катушках нестандартного веса.
+  const barColor = (e) => (e.low ? "var(--danger)" : e.colorHex || "var(--muted-2)");
 
   return (
     <div onClick={() => setMenu(null)}>

@@ -185,7 +185,7 @@ def update_spool(
     for k, v in data.model_dump(exclude_unset=True).items():
         setattr(spool, k, v)
     # при ручной правке остатка пересчитываем статус
-    spool_service.recompute_status(spool)
+    spool_service.recompute_status(spool, spool_service.low_threshold(db, spool))
     db.commit()
     db.refresh(spool)
     return spool

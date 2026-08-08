@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams, useLocation, Link } from "reac
 import { api } from "../api/client.js";
 import { SPEC_GROUPS, SPEC_FIELDS, MATERIALS } from "../specFields.js";
 import { t } from "../i18n.js";
+import { lowThresholdFor } from "../utils/spools.js";
 import Icon from "../components/Icon.jsx";
 import { locationPath } from "../utils/locations.js";
 
@@ -322,7 +323,7 @@ export default function SpoolForm() {
                 : <div style={{ width: 70, height: 70, borderRadius: 10, background: form.color_hex, border: "1px solid var(--border)" }} />}
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", fontWeight: 600, marginTop: 4 }}>{remaining.toFixed(0)}{t("г /")}{" "}{capacity.toFixed(0)}{t("г")}</div>
-            <div className="progress" style={{ marginTop: 8, height: 12 }}><div style={{ width: `${Math.round(pct * 100)}%`, background: pct < 0.15 ? "var(--danger)" : "var(--accent)" }} /></div>
+            <div className="progress" style={{ marginTop: 8, height: 12 }}><div style={{ width: `${Math.round(pct * 100)}%`, background: remaining <= lowThresholdFor(capacity) ? "var(--danger)" : "var(--accent)" }} /></div>
             <div className="muted" style={{ marginTop: 12, fontSize: 13 }}>{t("⏱ Хватит примерно на ~")}{benchys}{" "}{t("стандартных Benchy.")}</div>
           </div>
 

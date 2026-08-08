@@ -252,8 +252,13 @@ def _notify_low_spools(db: Session, spools: list[tuple]) -> None:
     Сравниваем остаток до и после списания: без этого одно и то же уведомление
     приходило бы после каждой следующей печати с той же катушки.
     """
-    threshold = Decimal(str(notifications.spool_low_threshold(db)))
+    cfg = settings_service.low_config(db)
     for spool, before in spools:
+        # Порог свой у каждой катушки: он считается от её ёмкости, иначе
+        # пробник 250 г и бухта 3 кг предупреждали бы в один и тот же момент.
+        threshold = Decimal(str(
+            settings_service.low_threshold_for(spool.initial_filament_weight_g, cfg)
+        ))
         after = Decimal(spool.current_weight_g)
         if before > threshold >= after:
             title = spool.label or f"{spool.material or ''} {spool.color_name or ''}".strip()

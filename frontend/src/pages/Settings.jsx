@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { useAuth } from "../api/auth.jsx";
 import { t } from "../i18n.js";
+import { lowThresholdFor, setLowConfig } from "../utils/spools.js";
 import Icon from "../components/Icon.jsx";
 
 // ------------------------------------------------------------------
@@ -15,6 +16,7 @@ import Icon from "../components/Icon.jsx";
 const SECTION_TITLES = {
   prints: t("Завершённые печати"),
   consumption: t("Списание"),
+  low: t("Остаток филамента"),
   telegram: t("Уведомления в Telegram"),
   sensors: t("Датчики температуры и влажности"),
   catalog: t("Каталог филамента"),
@@ -23,7 +25,7 @@ const SECTION_TITLES = {
   journal: t("Диагностический журнал"),
 };
 const GROUPS = [
-  { title: t("Автоматика"), ids: ["prints", "consumption"] },
+  { title: t("Автоматика"), ids: ["prints", "consumption", "low"] },
   { title: t("Подключения"), ids: ["telegram", "sensors"] },
   { title: t("Данные"), ids: ["catalog", "spoolman", "backup", "journal"] },
 ];
@@ -41,7 +43,9 @@ export default function Settings() {
     telegram_chat_id: "",
     telegram_token_set: false,
     telegram_events: {},
-    spool_low_threshold_g: 100,
+    spool_low_pct: 10,
+    spool_low_min_g: 50,
+    spool_low_max_g: 200,
     humidity_alert_max_pct: 45,
     ha_enabled: false,
     ha_base_url: "",
@@ -59,7 +63,11 @@ export default function Settings() {
   // Токен не приходит с сервера — поле пустое, пока пользователь не введёт новый.
   const [tgToken, setTgToken] = useState("");
   const [tgChat, setTgChat] = useState("");
-  const [tgLow, setTgLow] = useState("");
+  // Порог «катушка заканчивается»: доля от ёмкости катушки и зажимы в граммах.
+  const [lowPct, setLowPct] = useState("");
+  const [lowMin, setLowMin] = useState("");
+  const [lowMax, setLowMax] = useState("");
+  const [lowBusy, setLowBusy] = useState(false);
   const [tgBusy, setTgBusy] = useState(false);
   // Свой статус рядом с кнопками: общий msg рисуется вверху страницы, а карточка
   // Telegram далеко внизу — результат «Отправить тест» туда просто не видно.
@@ -87,8 +95,11 @@ export default function Settings() {
   useEffect(() => {
     api.get("/api/settings").then((v) => {
       setS(v);
+      setLowConfig(v);
       setTgChat(v.telegram_chat_id || "");
-      setTgLow(String(v.spool_low_threshold_g ?? 100));
+      setLowPct(String(v.spool_low_pct ?? 10));
+      setLowMin(String(v.spool_low_min_g ?? 50));
+      setLowMax(String(v.spool_low_max_g ?? 200));
       setHaUrl(v.ha_base_url || "");
       setHaWet(String(v.humidity_alert_max_pct ?? 45));
       setHaSensors(v.ha_sensors || []);
@@ -244,7 +255,11 @@ export default function Settings() {
     setMsg(null);
     setTgMsg(null);
     try {
-      setS(await api.put("/api/settings", patch));
+      const next = await api.put("/api/settings", patch);
+      setS(next);
+      // Порог остатка красит катушки по всему приложению — обновляем его сразу,
+      // не дожидаясь перезахода (см. utils/spools.js).
+      setLowConfig(next);
       setMsg(t("Настройка сохранена"));
       setTgMsg({ ok: true, text: t("Настройка сохранена") });
       return true;
@@ -259,12 +274,43 @@ export default function Settings() {
     return (e) => saveTelegram({ telegram_events: { [key]: e.target.checked } });
   }
 
+  async function saveLow() {
+    const patch = {
+      spool_low_pct: Number(lowPct),
+      spool_low_min_g: Number(lowMin),
+      spool_low_max_g: Number(lowMax),
+    };
+    if (!Number.isFinite(patch.spool_low_pct) || patch.spool_low_min_g <= 0 || patch.spool_low_max_g <= 0) {
+      setMsg(t("Заполните долю и оба зажима"));
+      return;
+    }
+    setLowBusy(true);
+    setMsg(null);
+    try {
+      const next = await api.put("/api/settings", patch);
+      setS(next);
+      setLowConfig(next);
+      setMsg(t("Настройка сохранена"));
+    } catch (err) { setMsg(err.message); }
+    setLowBusy(false);
+  }
+
+  // Что правило даёт для ходовых размеров катушек — чтобы не считать в уме.
+  const lowPreview = [250, 750, 1000, 3000].map((capacity) => ({
+    capacity,
+    threshold: Math.round(
+      lowThresholdFor(capacity, {
+        pct: Number(lowPct),
+        min_g: Number(lowMin),
+        max_g: Number(lowMax),
+      })
+    ),
+  }));
+
   async function saveTelegramBot() {
     const patch = { telegram_chat_id: tgChat.trim() };
     // Пустое поле токена = «не менять»; стереть можно кнопкой ниже.
     if (tgToken.trim()) patch.telegram_bot_token = tgToken.trim();
-    const low = Number(tgLow);
-    if (low > 0) patch.spool_low_threshold_g = low;
     setTgBusy(true);
     if (await saveTelegram(patch)) setTgToken("");
     setTgBusy(false);
@@ -536,6 +582,51 @@ export default function Settings() {
         {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
       </section>
     ),
+    low: (
+      <section key="low" id="low" className="card settings-section">
+        <h3 className="card-title-lg">{t("Остаток филамента")}</h3>
+        <p className="muted">
+          {t("Когда считать, что катушка заканчивается. По этому порогу катушка получает статус «почти закончилась», краснеет остаток в списках и уходит уведомление.")}
+        </p>
+        <p className="muted" style={{ marginTop: -6 }}>
+          {t("Порог считается от ёмкости самой катушки: 100 г на пробнике 250 г — это уже 40 %, а на бухте 3 кг — всего 3 %. Зажимы не дают доле уехать в крайности.")}
+        </p>
+        <div className="row">
+          <label>
+            {t("Доля от катушки, %")}
+            <input type="number" min="0" max="100" value={lowPct}
+              onChange={(e) => setLowPct(e.target.value)} disabled={!isAdmin} />
+          </label>
+          <label>
+            {t("Не меньше, г")}
+            <input type="number" min="1" value={lowMin}
+              onChange={(e) => setLowMin(e.target.value)} disabled={!isAdmin} />
+          </label>
+          <label>
+            {t("Не больше, г")}
+            <input type="number" min="1" value={lowMax}
+              onChange={(e) => setLowMax(e.target.value)} disabled={!isAdmin} />
+          </label>
+        </div>
+        <div className="low-preview">
+          {lowPreview.map((p) => (
+            <div key={p.capacity}>
+              <span className="muted">
+                {p.capacity >= 1000 ? `${p.capacity / 1000} ${t("кг")}` : `${p.capacity} ${t("г")}`}
+              </span>
+              <b className="mono">{p.threshold}{" "}{t("г")}</b>
+            </div>
+          ))}
+        </div>
+        {isAdmin ? (
+          <button className="secondary" onClick={saveLow} disabled={lowBusy} style={{ marginTop: 12 }}>
+            {t("Сохранить")}
+          </button>
+        ) : (
+          <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>
+        )}
+      </section>
+    ),
     telegram: (
       <section key="telegram" id="telegram" className="card settings-section">
         <h3 className="card-title-lg">{t("Уведомления в Telegram")}</h3>
@@ -572,15 +663,6 @@ export default function Settings() {
               <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
                 {t("Напишите боту «/start» и нажмите «Определить chat id» — вводить вручную не нужно.")}
               </div>
-              <label>
-                {t("Порог «катушка заканчивается», г")}
-                <input
-                  type="number"
-                  min="1"
-                  value={tgLow}
-                  onChange={(e) => setTgLow(e.target.value)}
-                />
-              </label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button className="secondary" onClick={saveTelegramBot} disabled={tgBusy}>
                   {t("Сохранить")}

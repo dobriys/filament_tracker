@@ -119,7 +119,8 @@ SPOOL_USAGE_COLS = [
 SETTINGS_PLAIN_KEYS = [
     "allow_negative_consumption", "moonraker_auto_import", "moonraker_auto_consume",
     "error_logging", "telegram_enabled", "telegram_chat_id", "telegram_events",
-    "spool_low_threshold_g", "humidity_alert_max_pct",
+    "spool_low_threshold_g", "spool_low_pct", "spool_low_min_g", "spool_low_max_g",
+    "humidity_alert_max_pct",
     "ha_enabled", "ha_base_url", "ha_sensors",
 ]
 # Токены интеграций: в БД лежат шифрованными, в бэкап кладём расшифрованными под

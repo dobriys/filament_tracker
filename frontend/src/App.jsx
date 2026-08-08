@@ -19,6 +19,7 @@ import { getTheme, setTheme } from "./theme.js";
 import { api } from "./api/client.js";
 import { useEffect, useRef, useState } from "react";
 import Icon from "./components/Icon.jsx";
+import { setLowConfig } from "./utils/spools.js";
 
 // Логотип сайта — иконка катушки (бывший SpoolThumb): кольцо с отверстием.
 function Logo({ size = 22 }) {
@@ -202,6 +203,13 @@ function Layout({ children }) {
 
 export default function App() {
   const { user, loading } = useAuth();
+  // Настройки порога «катушка заканчивается» живут на сервере. Тянем один раз
+  // после входа: они нужны в списках, карточках и выборе катушки, а меняются
+  // редко. До ответа действуют значения по умолчанию (10 %, 50–200 г).
+  useEffect(() => {
+    if (!user) return;
+    api.get("/api/settings").then(setLowConfig).catch(() => {});
+  }, [user?.id]);
   if (loading) return <div style={{ padding: 40 }}>{t("Загрузка…")}</div>;
   if (!user) {
     return (

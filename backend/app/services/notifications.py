@@ -29,9 +29,6 @@ ENABLED_KEY = "telegram_enabled"
 TOKEN_KEY = "telegram_bot_token_encrypted"
 CHAT_ID_KEY = "telegram_chat_id"
 EVENTS_KEY = "telegram_events"
-# Порог «катушка заканчивается», граммы.
-SPOOL_LOW_KEY = "spool_low_threshold_g"
-SPOOL_LOW_DEFAULT = 100
 
 # Типы событий и значения по умолчанию. Шумные (старт печати, пауза, отмена)
 # выключены по умолчанию — включаются осознанно.
@@ -86,13 +83,6 @@ def set_events(db: Session, events: dict[str, bool]) -> None:
         if key in EVENTS:
             current[key] = bool(value)
     settings_service.set_value(db, EVENTS_KEY, current)
-
-
-def spool_low_threshold(db: Session) -> float:
-    try:
-        return float(settings_service.get_value(db, SPOOL_LOW_KEY, SPOOL_LOW_DEFAULT))
-    except (TypeError, ValueError):
-        return SPOOL_LOW_DEFAULT
 
 
 def is_configured(db: Session) -> bool:

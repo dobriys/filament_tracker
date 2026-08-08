@@ -791,4 +791,11 @@ export const EN = {
   "Подтвердите, какая катушка стоит снаружи на держателе. Слоты хаба скрыты, привязки сохранены.": "Confirm which spool is on the external holder. Hub slots are hidden, assignments kept.",
   "Активна только внешняя катушка — та, что стоит на держателе; по ней же идёт автосписание. Слоты хаба выключены, их история сохранена.": "Only the external spool is active — the one on the holder; auto-deduction follows it. Hub slots are off, their history is kept.",
   "хаб снят": "hub removed",
+  "Один порог на всё приложение: по нему катушка получает статус «почти закончилась», краснеет остаток в списках и уходит это уведомление.": "One threshold for the whole app: it sets the “almost empty” status, turns the remaining weight red in lists, and triggers this notification.",
+  "Когда считать, что катушка заканчивается. По этому порогу катушка получает статус «почти закончилась», краснеет остаток в списках и уходит уведомление.": "When a spool counts as running out. This threshold sets the “almost empty” status, turns the remaining weight red in lists, and triggers the notification.",
+  "Порог считается от ёмкости самой катушки: 100 г на пробнике 250 г — это уже 40 %, а на бухте 3 кг — всего 3 %. Зажимы не дают доле уехать в крайности.": "The threshold scales with the spool: 100 g is 40% of a 250 g sample but only 3% of a 3 kg roll. The clamps keep the percentage from going to extremes.",
+  "Доля от катушки, %": "Share of the spool, %",
+  "Не меньше, г": "No less than, g",
+  "Не больше, г": "No more than, g",
+  "Заполните долю и оба зажима": "Fill in the share and both clamps",
 };

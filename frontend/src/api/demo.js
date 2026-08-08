@@ -20,7 +20,20 @@ const DENSITY = {
   PLA: 1.24, "PLA+": 1.24, PETG: 1.27, PET: 1.27, ABS: 1.04, ASA: 1.07,
   TPU: 1.21, TPE: 1.21, PC: 1.2, NYLON: 1.14, PA: 1.14, HIPS: 1.04, PVA: 1.23, PP: 0.9,
 };
-const LOW_THRESHOLD_G = 50;
+// Порог «катушка заканчивается» — доля от ёмкости катушки с зажимами, как на
+// бэке (settings_service.low_threshold_for). Одним числом в граммах не обойтись:
+// 100 г на пробнике 250 г — это 40 %, а на бухте 3 кг — 3 %.
+const LOW_DEFAULTS = { pct: 10, min_g: 50, max_g: 200 };
+const DEFAULT_CAPACITY_G = 1000;
+function lowThresholdG(capacity) {
+  const c = Number(capacity) || DEFAULT_CAPACITY_G;
+  const cfg = db.settings || {};
+  const pct = Number(cfg.spool_low_pct ?? LOW_DEFAULTS.pct);
+  let lo = Number(cfg.spool_low_min_g ?? LOW_DEFAULTS.min_g);
+  let hi = Number(cfg.spool_low_max_g ?? LOW_DEFAULTS.max_g);
+  if (hi < lo) [lo, hi] = [hi, lo];
+  return Math.min(Math.max((c * pct) / 100, lo), hi);
+}
 const HYGROSCOPIC_DAYS = [
   ["PVA", 5], ["PA", 7], ["NYLON", 7], ["PC", 14], ["TPU", 14], ["TPE", 14],
   ["PETG", 30], ["PET", 30], ["ABS", 45], ["ASA", 45], ["HIPS", 45],
@@ -148,7 +161,7 @@ function seed() {
     const empty = o.empty ?? 220;
     const initial = o.initial ?? 1000;
     const current = o.current ?? initial;
-    const status = o.status || (current <= 0 ? "empty" : current <= LOW_THRESHOLD_G ? "almost_empty" : "in_use");
+    const status = o.status || (current <= 0 ? "empty" : current <= 100 ? "almost_empty" : "in_use");
     return {
       id: o.id, owner_user_id: USER.id, filament_profile_id: o.profile || null, location_id: o.location || null,
       label: o.label, sku: o.sku || null, manufacturer: o.brand || null, barcode: null, photo: null,
@@ -276,6 +289,7 @@ function seed() {
     mrJobs, printJobs,
     settings: {
       allow_negative_consumption: false, moonraker_auto_import: true, moonraker_auto_consume: false, error_logging: false,
+      spool_low_pct: LOW_DEFAULTS.pct, spool_low_min_g: LOW_DEFAULTS.min_g, spool_low_max_g: LOW_DEFAULTS.max_g,
       // Датчики Home Assistant: в демо «подключены», чтобы показания было видно
       // на панели и в местах хранения — значения генерируются локально.
       humidity_alert_max_pct: 45, ha_enabled: true, ha_base_url: "http://homeassistant.local:8123", ha_token_set: true,
@@ -337,7 +351,7 @@ function recompute(sp) {
   if (sp.status === "archived") return;
   const left = Number(sp.current_weight_g);
   if (left <= 0) sp.status = "empty";
-  else if (left <= LOW_THRESHOLD_G) sp.status = "almost_empty";
+  else if (left <= lowThresholdG(sp.initial_filament_weight_g)) sp.status = "almost_empty";
   else if (sp.status !== "new") sp.status = "in_use";
 }
 function addEvent(spoolId, { type, before, after, delta, reason, meta }) {
@@ -779,7 +793,14 @@ function dispatch(method, rawPath, { body, form, fileName } = {}) {
   // --- settings ---
   if (r === "settings") {
     if (M === "GET") return db.settings;
-    if (M === "PUT") { Object.assign(db.settings, body || {}); save(); return db.settings; }
+    if (M === "PUT") {
+      Object.assign(db.settings, body || {});
+      // Порог задаёт статусы, а не только момент уведомления (см. бэк:
+      // app/api/settings.py::_recompute_spool_statuses).
+      if (body?.spool_low_pct != null || body?.spool_low_min_g != null || body?.spool_low_max_g != null) db.spools.forEach(recompute);
+      save();
+      return db.settings;
+    }
   }
 
   // --- diagnostics (в демо бэкенда нет — журнал всегда пуст) ---
