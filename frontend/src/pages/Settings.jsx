@@ -31,6 +31,15 @@ const GROUPS = [
 ];
 const SECTION_IDS = GROUPS.flatMap((g) => g.ids);
 
+// Готовые ответы на вопрос «когда предупреждать, что катушка кончается».
+// Рядовому пользователю не нужно знать про доли и границы — ему нужно выбрать,
+// узнавать ли заранее. Точные числа остаются под «Настроить точнее».
+const LOW_PRESETS = [
+  { key: "early",  label: "Заранее",           hint: "успеть заказать замену", pct: 15, min_g: 80, max_g: 400 },
+  { key: "normal", label: "Обычно",            hint: "рекомендуется",          pct: 10, min_g: 50, max_g: 200 },
+  { key: "late",   label: "В самом конце",     hint: "меньше уведомлений",     pct: 5,  min_g: 40, max_g: 100 },
+];
+
 export default function Settings() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -68,6 +77,10 @@ export default function Settings() {
   const [lowMin, setLowMin] = useState("");
   const [lowMax, setLowMax] = useState("");
   const [lowBusy, setLowBusy] = useState(false);
+  // Раскрыт ли блок точной настройки. Держим в состоянии, а не отдаём атрибуту
+  // open как есть: React переприменяет его на каждый рендер и захлопывал бы
+  // панель прямо под руками, стоит совпасть с пресетом.
+  const [lowAdv, setLowAdv] = useState(false);
   const [tgBusy, setTgBusy] = useState(false);
   // Свой статус рядом с кнопками: общий msg рисуется вверху страницы, а карточка
   // Telegram далеко внизу — результат «Отправить тест» туда просто не видно.
@@ -100,6 +113,12 @@ export default function Settings() {
       setLowPct(String(v.spool_low_pct ?? 10));
       setLowMin(String(v.spool_low_min_g ?? 50));
       setLowMax(String(v.spool_low_max_g ?? 200));
+      // Настройки не из пресета — сразу показываем, откуда взялись числа.
+      setLowAdv(
+        !LOW_PRESETS.some(
+          (p) => p.pct === v.spool_low_pct && p.min_g === v.spool_low_min_g && p.max_g === v.spool_low_max_g
+        )
+      );
       setHaUrl(v.ha_base_url || "");
       setHaWet(String(v.humidity_alert_max_pct ?? 45));
       setHaSensors(v.ha_sensors || []);
@@ -274,11 +293,12 @@ export default function Settings() {
     return (e) => saveTelegram({ telegram_events: { [key]: e.target.checked } });
   }
 
-  async function saveLow() {
+  async function saveLow(values) {
+    const src = values || { pct: Number(lowPct), min_g: Number(lowMin), max_g: Number(lowMax) };
     const patch = {
-      spool_low_pct: Number(lowPct),
-      spool_low_min_g: Number(lowMin),
-      spool_low_max_g: Number(lowMax),
+      spool_low_pct: src.pct,
+      spool_low_min_g: src.min_g,
+      spool_low_max_g: src.max_g,
     };
     if (!Number.isFinite(patch.spool_low_pct) || patch.spool_low_min_g <= 0 || patch.spool_low_max_g <= 0) {
       setMsg(t("Заполните долю и оба зажима"));
@@ -293,6 +313,21 @@ export default function Settings() {
       setMsg(t("Настройка сохранена"));
     } catch (err) { setMsg(err.message); }
     setLowBusy(false);
+  }
+
+  // Текущее состояние полей (ещё не сохранённое) — по нему считаются и подпись
+  // «скажем, когда останется…», и подсветка выбранного пресета.
+  const lowCfgDraft = { pct: Number(lowPct), min_g: Number(lowMin), max_g: Number(lowMax) };
+  const lowPresetKey =
+    LOW_PRESETS.find(
+      (p) => p.pct === lowCfgDraft.pct && p.min_g === lowCfgDraft.min_g && p.max_g === lowCfgDraft.max_g
+    )?.key || "custom";
+
+  async function applyLowPreset(preset) {
+    setLowPct(String(preset.pct));
+    setLowMin(String(preset.min_g));
+    setLowMax(String(preset.max_g));
+    await saveLow({ pct: preset.pct, min_g: preset.min_g, max_g: preset.max_g });
   }
 
   // Что правило даёт для ходовых размеров катушек — чтобы не считать в уме.
@@ -586,45 +621,79 @@ export default function Settings() {
       <section key="low" id="low" className="card settings-section">
         <h3 className="card-title-lg">{t("Остаток филамента")}</h3>
         <p className="muted">
-          {t("Когда считать, что катушка заканчивается. По этому порогу катушка получает статус «почти закончилась», краснеет остаток в списках и уходит уведомление.")}
+          {t("Когда предупреждать, что катушка заканчивается: остаток краснеет в списках, катушка попадает в «Заканчиваются» на панели и уходит уведомление.")}
         </p>
-        <p className="muted" style={{ marginTop: -6 }}>
-          {t("Порог считается от ёмкости самой катушки: 100 г на пробнике 250 г — это уже 40 %, а на бухте 3 кг — всего 3 %. Зажимы не дают доле уехать в крайности.")}
-        </p>
-        <div className="row">
-          <label>
-            {t("Доля от катушки, %")}
-            <input type="number" min="0" max="100" value={lowPct}
-              onChange={(e) => setLowPct(e.target.value)} disabled={!isAdmin} />
-          </label>
-          <label>
-            {t("Не меньше, г")}
-            <input type="number" min="1" value={lowMin}
-              onChange={(e) => setLowMin(e.target.value)} disabled={!isAdmin} />
-          </label>
-          <label>
-            {t("Не больше, г")}
-            <input type="number" min="1" value={lowMax}
-              onChange={(e) => setLowMax(e.target.value)} disabled={!isAdmin} />
-          </label>
-        </div>
-        <div className="low-preview">
-          {lowPreview.map((p) => (
-            <div key={p.capacity}>
-              <span className="muted">
-                {p.capacity >= 1000 ? `${p.capacity / 1000} ${t("кг")}` : `${p.capacity} ${t("г")}`}
-              </span>
-              <b className="mono">{p.threshold}{" "}{t("г")}</b>
-            </div>
+
+        <div className="low-presets">
+          {LOW_PRESETS.map((preset) => (
+            <button
+              key={preset.key}
+              type="button"
+              className={`low-preset${lowPresetKey === preset.key ? " active" : ""}`}
+              disabled={!isAdmin || lowBusy}
+              onClick={() => applyLowPreset(preset)}
+            >
+              <b>{t(preset.label)}</b>
+              <span className="muted">{t(preset.hint)}</span>
+            </button>
           ))}
         </div>
-        {isAdmin ? (
-          <button className="secondary" onClick={saveLow} disabled={lowBusy} style={{ marginTop: 12 }}>
-            {t("Сохранить")}
-          </button>
-        ) : (
-          <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>
+
+        {/* Главное объяснение — не формула, а два числа: когда именно скажем.
+            Порог считается от размера катушки, поэтому и примера два. */}
+        <div className="low-explain">
+          {t("Скажем, когда останется")}{" "}
+          <b className="mono">{Math.round(lowThresholdFor(1000, lowCfgDraft))}{" "}{t("г")}</b>{" "}
+          {t("на обычной катушке 1 кг")}
+          {" — "}
+          {t("и")}{" "}
+          <b className="mono">{Math.round(lowThresholdFor(250, lowCfgDraft))}{" "}{t("г")}</b>{" "}
+          {t("на маленькой 250 г.")}
+        </div>
+
+        {isAdmin && (
+          <details
+            className="low-advanced"
+            open={lowAdv}
+            onToggle={(e) => setLowAdv(e.currentTarget.open)}
+          >
+            <summary>{t("Настроить точнее")}</summary>
+            <p className="muted" style={{ fontSize: 12 }}>
+              {t("Порог считается как доля от размера катушки, но не выходит за границы в граммах. Это и позволяет одной настройке работать и на пробнике 250 г, и на бухте 3 кг.")}
+            </p>
+            <div className="row">
+              <label>
+                {t("Доля от катушки, %")}
+                <input type="number" min="0" max="100" value={lowPct}
+                  onChange={(e) => setLowPct(e.target.value)} />
+              </label>
+              <label>
+                {t("Не меньше, г")}
+                <input type="number" min="1" value={lowMin}
+                  onChange={(e) => setLowMin(e.target.value)} />
+              </label>
+              <label>
+                {t("Не больше, г")}
+                <input type="number" min="1" value={lowMax}
+                  onChange={(e) => setLowMax(e.target.value)} />
+              </label>
+            </div>
+            <div className="low-preview">
+              {lowPreview.map((p) => (
+                <div key={p.capacity}>
+                  <span className="muted">
+                    {p.capacity >= 1000 ? `${p.capacity / 1000} ${t("кг")}` : `${p.capacity} ${t("г")}`}
+                  </span>
+                  <b className="mono">{p.threshold}{" "}{t("г")}</b>
+                </div>
+              ))}
+            </div>
+            <button className="secondary" onClick={saveLow} disabled={lowBusy} style={{ marginTop: 12 }}>
+              {t("Сохранить")}
+            </button>
+          </details>
         )}
+        {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
       </section>
     ),
     telegram: (
