@@ -1,4 +1,5 @@
 import httpx
+import pytest
 
 from app.services.moonraker import (
     MoonrakerClient,
@@ -132,6 +133,26 @@ def test_test_connection_unauthorized():
     res = c.test_connection()
     assert res["ok"] is False
     assert "401" in res["detail"]
+
+
+def test_print_control_posts_to_moonraker():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        return httpx.Response(200, json={"result": "ok"})
+
+    c = MoonrakerClient("http://printer.local:7125", transport=httpx.MockTransport(handler))
+    for action in ("pause", "resume", "cancel"):
+        assert c.print_control(action)["result"] == "ok"
+        assert seen == {"method": "POST", "path": f"/printer/print/{action}"}
+
+
+def test_print_control_rejects_unknown_action():
+    c = _client_returning({"result": "ok"})
+    with pytest.raises(ValueError):
+        c.print_control("shutdown")
 
 
 def test_reset_print_state_sends_sdcard_reset():

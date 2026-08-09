@@ -1,6 +1,7 @@
 import time
 import uuid
 
+import httpx
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -10,7 +11,12 @@ from app.core.security import decrypt_secret, encrypt_secret
 from app.db.session import get_db
 from app.deps import get_current_user
 from app.models import AppSetting, Printer, PrintJob, User
-from app.services.moonraker import MoonrakerClient, dryer_unit
+from app.services.moonraker import (
+    PRINT_ACTIONS,
+    PRINT_CONTROL_TIMEOUT,
+    MoonrakerClient,
+    dryer_unit,
+)
 from app.schemas.printer import (
     PrinterCreate,
     PrinterOut,
@@ -187,7 +193,7 @@ def delete_printer(
     db.commit()
 
 
-def _moonraker_client(printer: Printer) -> MoonrakerClient:
+def _moonraker_client(printer: Printer, timeout: float | None = None) -> MoonrakerClient:
     if printer.integration_type != "moonraker" or not printer.moonraker_url:
         raise HTTPException(
             status_code=400, detail="Принтер без интеграции Moonraker"
@@ -197,7 +203,9 @@ def _moonraker_client(printer: Printer) -> MoonrakerClient:
         if printer.moonraker_api_key_encrypted
         else None
     )
-    return MoonrakerClient(printer.moonraker_url, api_key)
+    if timeout is None:
+        return MoonrakerClient(printer.moonraker_url, api_key)
+    return MoonrakerClient(printer.moonraker_url, api_key, timeout=timeout)
 
 
 @router.post("/{printer_id}/test-connection", response_model=TestConnectionResult)
@@ -627,6 +635,37 @@ def control_light(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Moonraker недоступен: {e}")
     return {"ok": True, "light": client.get_light()}
+
+
+class PrintControlRequest(BaseModel):
+    action: str  # pause | resume | cancel
+
+
+@router.post("/{printer_id}/print-control")
+def control_print(
+    printer_id: uuid.UUID,
+    data: PrintControlRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Пауза, продолжение или отмена текущей печати."""
+    printer = _own(db, user, printer_id)
+    if data.action not in PRINT_ACTIONS:
+        raise HTTPException(status_code=422, detail="Неизвестное действие")
+    client = _moonraker_client(printer, timeout=PRINT_CONTROL_TIMEOUT)
+    try:
+        client.print_control(data.action)
+    except httpx.HTTPStatusError as e:
+        # Прошивка отказала (например, «пауза» без печати) — это не сбой связи,
+        # а понятный ответ принтера: показываем его причину как есть.
+        try:
+            detail = (e.response.json().get("error") or {}).get("message")
+        except Exception:
+            detail = None
+        raise HTTPException(status_code=409, detail=detail or "Принтер отклонил команду")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Moonraker недоступен: {e}")
+    return {"ok": True, "status": client.get_status()}
 
 
 @router.post("/{printer_id}/reset-error")

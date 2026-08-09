@@ -472,6 +472,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
     ? [t("Подготовка"), "in_use"]
     : STATE_RU[st] || [st || "—", ""];
   const isPrinting = st === "printing" && !isPreparing;
+  const isPaused = st === "paused";
   // Текст ошибки принтера: распознанный (описание + код + вики) либо сырой + гугл.
   const errMsg = st === "error" ? status?.message : null;
   const knownErr = recognizePrinterError(errMsg);
@@ -498,6 +499,19 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
     try {
       await api.post(`/api/printers/${printer.id}/reset-error`);
       await loadOverview();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  }
+
+  // Пауза, продолжение и отмена текущей печати. Команду выполняет прошивка
+  // (макросы отвода головы), поэтому ответ приходит не мгновенно; свежий статус
+  // бэкенд отдаёт вместе с ответом, чтобы кнопки переключились сразу.
+  async function printControl(action) {
+    if (action === "cancel" && !window.confirm(t("Остановить печать? Отменённое задание продолжить нельзя."))) return;
+    setErr(null); setBusy(true);
+    try {
+      const res = await api.post(`/api/printers/${printer.id}/print-control`, { action });
+      if (res?.status) setStatus(res.status);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   }
@@ -589,7 +603,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
           <div className="printer-grid">
             {/* Блок «Печать» */}
             <div className="printer-zone">
-              <div className="zone-title">{isPreparing ? t("Подготовка к печати") : isPrinting ? t("Печатается") : t("Последняя печать")}</div>
+              <div className="zone-title">{isPreparing ? t("Подготовка к печати") : isPrinting ? t("Печатается") : isPaused ? t("Печать на паузе") : t("Последняя печать")}</div>
               <div className="zone-file-row">
                 {thumb && <img className="zone-thumb" src={thumb} alt="" title={file} />}
                 <div className="zone-file-box" title={file}>{file || t("нет данных")}</div>
@@ -606,11 +620,13 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
                     <div><span className="muted">{t("Стол")}</span><b className="mono">{status?.bed_temp != null ? Math.round(status.bed_temp) + "°" : "—"}{status?.bed_target > 0 ? ` / ${Math.round(status.bed_target)}°` : ""}</b></div>
                   </div>
                 </>
-              ) : isPrinting ? (
+              ) : isPrinting || isPaused ? (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "10px 0 6px" }}>
                     <span className="mono" style={{ fontSize: 26, fontWeight: 600 }}>{pct != null ? pct + "%" : "—"}</span>
-                    <span className="muted" style={{ fontSize: 13 }}>{t("осталось ~")}{remaining != null ? fmtDur(remaining) : t("считаем…")}</span>
+                    <span className="muted" style={{ fontSize: 13 }}>
+                      {isPaused ? t("печать приостановлена") : `${t("осталось ~")}${remaining != null ? fmtDur(remaining) : t("считаем…")}`}
+                    </span>
                   </div>
                   <div className="progress"><div style={{ width: `${pct || 0}%`, background: "var(--accent)" }} /></div>
                   <div className="zone-metrics">
@@ -629,6 +645,27 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
               )}
               {err && <div className="error">{err}</div>}
               <div className="printer-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: "auto", paddingTop: 14 }}>
+                {/* Управление печатью — только пока есть что паузить или отменять. */}
+                {(isPrinting || isPreparing || isPaused) && (
+                  <>
+                    <button
+                      className="secondary"
+                      onClick={() => printControl(isPaused ? "resume" : "pause")}
+                      disabled={busy}
+                      title={isPaused ? t("Продолжить печать с места остановки") : t("Приостановить печать")}
+                    >
+                      <Icon name={isPaused ? "play" : "pause"} size={14} /> {isPaused ? t("Продолжить") : t("На паузу")}
+                    </button>
+                    <button
+                      className="danger secondary"
+                      onClick={() => printControl("cancel")}
+                      disabled={busy}
+                      title={t("Отменить текущую печать")}
+                    >
+                      <Icon name="stop" size={14} /> {t("Остановить")}
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={consume}
                   disabled={!canConsume || busy}

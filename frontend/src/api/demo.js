@@ -379,11 +379,13 @@ function displayName(sp) {
 function liveStatus(printer) {
   const pr = printer._print;
   if (!pr) return { state: "ready", filename: null, progress: null, nozzle_temp: 24, bed_temp: 24 };
-  const elapsed = ((Date.now() - pr.startedAt) / 1000) % pr.totalSec;
+  // На паузе прогресс замирает, после отмены печать останавливается совсем
+  // (как на принтере: вернуть отменённое задание нельзя, помогает «Сбросить демо»).
+  const elapsed = ((((pr.pausedAt || Date.now()) - pr.startedAt) / 1000) % pr.totalSec);
   const progress = Math.min(0.999, elapsed / pr.totalSec);
   const d = printer._dryer;
   return {
-    state: "printing",
+    state: pr.cancelled ? "cancelled" : pr.pausedAt ? "paused" : "printing",
     filename: pr.file,
     print_duration_sec: Math.round(elapsed),
     total_duration_sec: pr.totalSec,
@@ -1172,6 +1174,23 @@ function printersRoute(M, parts, query, body) {
   if (sub === "status" && M === "GET") { moonrakerOnly(); return liveStatus(printer); }
   // Превью модели: в демо gcode-файлов нет, поэтому картинки не будет.
   if (sub === "thumbnail" && M === "GET") { moonrakerOnly(); return { thumbnail: null }; }
+  if (sub === "print-control" && M === "POST") {
+    moonrakerOnly();
+    const pr = printer._print;
+    if (!pr || pr.cancelled) throw new ApiError("Принтер сейчас не печатает", 409);
+    if (body?.action === "pause") {
+      if (pr.pausedAt) throw new ApiError("Печать уже на паузе", 409);
+      pr.pausedAt = Date.now();
+    } else if (body?.action === "resume") {
+      if (!pr.pausedAt) throw new ApiError("Печать не на паузе", 409);
+      // Сдвигаем старт на длительность паузы — прогресс продолжится с того же места.
+      pr.startedAt += Date.now() - pr.pausedAt;
+      pr.pausedAt = null;
+    } else if (body?.action === "cancel") {
+      pr.cancelled = true; pr.pausedAt = pr.pausedAt || Date.now();
+    } else throw new ApiError("Неизвестное действие", 422);
+    save(); return { ok: true, status: liveStatus(printer) };
+  }
   // Режим подачи (см. app/services/feed_mode.py). В демо телеметрии нет, поэтому
   // «авто» ведёт себя как мультиподача, если она есть у модели.
   if (sub === "feed-mode" && M === "POST") {

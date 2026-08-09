@@ -12,6 +12,12 @@ DEFAULT_TIMEOUT = 5.0
 # Превью отдаём вместе с JSON (data-URL), поэтому ограничиваем размер: обычные
 # миниатюры слайсера — единицы килобайт.
 MAX_THUMBNAIL_BYTES = 512 * 1024
+# Управление текущей печатью — эндпоинты /printer/print/<действие>.
+PRINT_ACTIONS = ("pause", "resume", "cancel")
+# Пауза и отмена отрабатывают макросами прошивки (отвод головы, подъём стола),
+# и ответ приходит только по их завершении — на живом Kobra S1 это больше 8 с,
+# так что обычные 5 с здесь мало.
+PRINT_CONTROL_TIMEOUT = 30.0
 
 
 def parse_printer_info(payload: dict) -> dict:
@@ -711,6 +717,17 @@ class MoonrakerClient:
         return self._post(
             f"/machine/device_power/device?device={quote(device)}&action={action}", {}
         )
+
+    def print_control(self, action: str) -> dict:
+        """Пауза/продолжение/отмена текущей печати (Moonraker /printer/print/*).
+
+        Прошивка сама решает, допустима ли команда: на неподходящем состоянии
+        (пауза без печати, продолжение без паузы) вернётся HTTP-ошибка с
+        объяснением — её и показываем пользователю.
+        """
+        if action not in PRINT_ACTIONS:
+            raise ValueError(f"Неизвестное действие: {action}")
+        return self._post(f"/printer/print/{action}", {})
 
     def reset_print_state(self) -> dict:
         """Сбросить защёлкнутое состояние печати (Klipper SDCARD_RESET_FILE).
