@@ -1,3 +1,4 @@
+import { DEMO_PREVIEW } from "./demoPreview.js";
 // Демо-режим: полностью клиентский мок API. Когда включён (VITE_DEMO=1 при
 // сборке или window.__FT_CONFIG__.demo), client.js направляет все вызовы сюда
 // вместо fetch — бэкенд не нужен. Данные живут в памяти и localStorage, правки
@@ -1176,8 +1177,13 @@ function printersRoute(M, parts, query, body) {
     return { ok: true, detail: "Подключено. Состояние: printing" };
   }
   if (sub === "status" && M === "GET") { moonrakerOnly(); return liveStatus(printer); }
-  // Превью модели: в демо gcode-файлов нет, поэтому картинки не будет.
-  if (sub === "thumbnail" && M === "GET") { moonrakerOnly(); return { thumbnail: null }; }
+  // Превью модели: у живого принтера картинку отдаёт слайсер из gcode, в демо —
+  // заглушка (см. demoPreview.js), и только пока что-то печатается.
+  if (sub === "thumbnail" && M === "GET") {
+    moonrakerOnly();
+    const printing = printer._print && !printer._print.cancelled;
+    return { thumbnail: printing ? { data_url: DEMO_PREVIEW, width: 230, height: 110 } : null };
+  }
   if (sub === "reset-error" && M === "POST") {
     moonrakerOnly();
     // SDCARD_RESET_FILE: прошивка забывает задание и уходит в «Ожидание».

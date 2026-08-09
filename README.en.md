@@ -56,17 +56,23 @@ and "Reset demo" puts everything back.
   In the list, each row carries a stripe of the filament's real color, so you spot
   the spool you want without reading a single name.
 - **Accurate remaining amount** — deduction by weight, manual corrections, full
-  movement history.
+  movement history. The "running low" threshold is measured against the spool's own
+  size, so one setting fits both kilogram rolls and samples.
 - **Filament profiles** — brand and material templates with every temperature, so you
   don't fill in the same card twice.
 - **Storage locations and printer slots** — see what's on the shelf and what's loaded.
+  A slot takes its spool from a searchable list with color, material and what's left.
 - **Labels and QR codes** — stickers with a live preview, printed one at a time or as
   an A4 sheet. Scanning the QR opens the spool on your phone.
 
 ### Printer
 
 - **Moonraker and Rinkhals** — live print status on the dashboard: progress, layer,
-  temperatures, time remaining.
+  temperatures, time remaining and the model preview your slicer left in the gcode.
+- **Print control** — pause, resume and stop right from the printer card. When the
+  firmware latches a state with no job behind it, a reset shows up next to them.
+- **Direct feed and multi-material** — the app sees whether filament comes from the hub
+  or the external holder, and asks you to confirm spools when the feed changes.
 - **Printer catalog** — 50+ Klipper/Moonraker models (Anycubic, Creality, Sovol, QIDI,
   FLSUN, ELEGOO, Prusa and more). Connection type, slot count and capabilities fill
   themselves in.
@@ -85,12 +91,15 @@ and "Reset demo" puts everything back.
   shown where they matter. Above the threshold, they light up and message you.
 - **Drying control** — on compatible hubs such as the Anycubic ACE, drying starts
   right from the app, with per-material presets.
+- **Chamber light** — if the printer exposes its lamp as a power device, you switch it
+  on and off from the card.
 
 ### Your data
 
 - **Spoolman import** — pull your inventory over the network from
   [Spoolman](https://github.com/Donkie/Spoolman) in one click.
-- **Backups** — export and restore everything as a single JSON file.
+- **Backups** — export and restore as a single JSON file: inventory, history, settings
+  with integration keys, even the theme you picked.
 - **Your own server** — login-based access, printer keys stored encrypted, nothing
   leaves the machine.
 - **Two languages** — English and Russian, switched on the fly.
@@ -102,9 +111,10 @@ and "Reset demo" puts everything back.
 ### Dashboard
 
 Inventory at a glance: how many spools, what's running low, total remaining and how
-many print hours that buys. Below it, a card per printer with live status and a
-**Deduct** button that wakes up when the print is done. Then sensor readings, usage by
-month, the split by material, and a feed of recent events.
+many print hours that buys. Below it, a card per printer: the model being printed,
+progress, pause and stop buttons, and **Deduct**, which wakes up when the print is
+done. Then sensor readings, usage by month, the split by material, and a feed of
+recent events.
 
 ![Dashboard](docs/screenshots/en/dashboard.png)
 
@@ -153,8 +163,9 @@ offline, so a new spool takes a couple of clicks.
 
 ### Storage locations
 
-Shelves, boxes, dryers. If a Home Assistant sensor is bound to a location, its
-temperature and humidity show right in the row.
+Shelves, boxes, dryers — as a tree, with nested places and editing right in the row.
+If a Home Assistant sensor is bound to a location, its temperature and humidity show
+there too.
 
 ![Storage locations](docs/screenshots/en/locations.png)
 
