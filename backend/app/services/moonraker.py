@@ -128,6 +128,29 @@ def parse_thumbnails(payload: dict) -> list[dict]:
     return out
 
 
+def pick_thumbnail(thumbs: list[dict]) -> dict | None:
+    """Самая наглядная миниатюра из набора.
+
+    Размер — плохой критерий. Anycubic кладёт рядом с превью ещё и квадратные
+    картинки для файлового менеджера на экране принтера, а это вид строго
+    сверху: у нашей же 512×512 деталь не узнать, зато на 230×110 она нарисована
+    в изометрии и в цвете филамента. Поэтому сначала выбираем среди неквадратных
+    (их рисуют «камерой» — как в самом Moonraker), и только если таких нет,
+    берём самую крупную квадратную (Bambu, Cura и прочие обходятся ими).
+    """
+    if not thumbs:
+        return None
+
+    def area(t: dict) -> int:
+        return (t.get("width") or 0) * (t.get("height") or 0)
+
+    def is_wide(t: dict) -> bool:
+        w, h = t.get("width") or 0, t.get("height") or 0
+        return bool(w and h) and abs(w / h - 1) > 0.1
+
+    return max([t for t in thumbs if is_wide(t)] or thumbs, key=area)
+
+
 def thumbnail_path(gcode_filename: str, relative_path: str) -> str:
     """Путь миниатюры в корне gcodes: папка задания + relative_path."""
     folder = gcode_filename.rsplit("/", 1)[0] if "/" in gcode_filename else ""
@@ -654,8 +677,8 @@ class MoonrakerClient:
         """Превью модели по имени gcode-файла — как data-URL.
 
         Картинка лежит на принтере, но забираем её мы: браузеру не нужен ни
-        прямой доступ к Moonraker, ни API-ключ. Берём самую крупную миниатюру
-        (обычно 512×512, единицы килобайт).
+        прямой доступ к Moonraker, ни API-ключ. Какую из миниатюр показывать —
+        см. pick_thumbnail.
         """
         if not filename:
             return None
@@ -664,10 +687,9 @@ class MoonrakerClient:
 
         try:
             meta = self._get(f"/server/files/metadata?filename={quote(filename)}")
-            thumbs = parse_thumbnails(meta)
-            if not thumbs:
+            best = pick_thumbnail(parse_thumbnails(meta))
+            if not best:
                 return None
-            best = max(thumbs, key=lambda t: (t.get("width") or 0) * (t.get("height") or 0))
             path = thumbnail_path(filename, best["relative_path"])
             got = self._get_bytes(f"/server/files/gcodes/{quote(path)}", MAX_THUMBNAIL_BYTES)
             if not got:

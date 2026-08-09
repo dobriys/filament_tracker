@@ -8,6 +8,7 @@ from app.services.moonraker import (
     parse_light,
     parse_status,
     parse_thumbnails,
+    pick_thumbnail,
     thumbnail_path,
 )
 
@@ -196,12 +197,36 @@ def test_parse_thumbnails_skips_entries_without_path():
     assert parse_thumbnails({"result": {}}) == []
 
 
+def test_pick_thumbnail_prefers_camera_render_over_top_view():
+    # У Anycubic квадратные картинки — вид сверху для файлового менеджера,
+    # деталь на них не узнать; изометрия лежит в широкой 230×110.
+    best = pick_thumbnail(parse_thumbnails(FILE_METADATA))
+    assert (best["width"], best["height"]) == (230, 110)
+
+
+def test_pick_thumbnail_falls_back_to_largest_square():
+    thumbs = [
+        {"width": 32, "height": 32, "relative_path": "a.png"},
+        {"width": 300, "height": 300, "relative_path": "b.png"},
+    ]
+    assert pick_thumbnail(thumbs)["relative_path"] == "b.png"
+    assert pick_thumbnail([]) is None
+
+
+def test_pick_thumbnail_takes_largest_of_wide_ones():
+    thumbs = [
+        {"width": 32, "height": 15, "relative_path": "small.png"},
+        {"width": 230, "height": 110, "relative_path": "big.png"},
+    ]
+    assert pick_thumbnail(thumbs)["relative_path"] == "big.png"
+
+
 def test_thumbnail_path_is_relative_to_gcode_folder():
     assert thumbnail_path("a/b.gcode", ".thumbs/b.png") == "a/.thumbs/b.png"
     assert thumbnail_path("b.gcode", ".thumbs/b.png") == ".thumbs/b.png"
 
 
-def test_get_thumbnail_takes_largest_and_returns_data_url():
+def test_get_thumbnail_returns_data_url():
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -214,8 +239,8 @@ def test_get_thumbnail_takes_largest_and_returns_data_url():
     c = MoonrakerClient("http://printer.local:7125", transport=httpx.MockTransport(handler))
     thumb = c.get_thumbnail(".3mf_temp/stand_plate(01)_PLA.gcode")
     assert seen["filename"] == ".3mf_temp/stand_plate(01)_PLA.gcode"
-    assert seen["image"] == "/server/files/gcodes/.3mf_temp/.thumbs/stand_plate(01)_PLA-512x512.png"
-    assert (thumb["width"], thumb["height"]) == (512, 512)
+    assert seen["image"] == "/server/files/gcodes/.3mf_temp/.thumbs/stand_plate(01)_PLA-230x110.png"
+    assert (thumb["width"], thumb["height"]) == (230, 110)
     assert thumb["data_url"].startswith("data:image/png;base64,")
 
 

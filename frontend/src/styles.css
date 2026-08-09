@@ -800,7 +800,9 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
 .zone-file-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .zone-file-row > .zone-file-box { flex: 1; min-width: 0; }
 .zone-thumb {
-  flex: 0 0 auto; width: 64px; height: 64px; object-fit: contain;
+  /* Высота фиксированная, ширина по картинке: у слайсеров превью широкое
+     (230×110 у Anycubic), и обрезать его до квадрата — терять деталь. */
+  flex: 0 0 auto; height: 88px; width: auto; max-width: 190px; object-fit: contain;
   /* Превью прозрачное, и модель часто светлая — подложка чуть темнее панели,
      иначе белый филамент на светлой теме почти не виден. */
   background: color-mix(in srgb, var(--muted-2) 14%, var(--panel-2));
@@ -1262,6 +1264,7 @@ tr.slot-off > td { opacity: 0.55; }
   .zone-metrics { grid-template-columns: 1fr; gap: 6px; }
   .zone-metrics > div { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 12px; }
   .zone-file-box { white-space: normal; overflow-wrap: anywhere; }
+  .zone-thumb { height: 72px; max-width: 150px; }
   .printer-actions { flex-direction: column; }
   .printer-actions > button { width: 100%; }
   .gate-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
