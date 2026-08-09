@@ -6,6 +6,8 @@ from app.services.moonraker import (
     parse_history,
     parse_light,
     parse_status,
+    parse_thumbnails,
+    thumbnail_path,
 )
 
 # Реальное задание Anycubic Kobra S1 (Rinkhals) — пофиловый расход в граммах.
@@ -146,6 +148,71 @@ def test_reset_print_state_sends_sdcard_reset():
     assert seen["method"] == "POST"
     assert seen["path"] == "/printer/gcode/script"
     assert seen["script"] == "SDCARD_RESET_FILE"
+
+
+# Реальный ответ Kobra S1 на Rinkhals: метаданные задания с миниатюрами.
+FILE_METADATA = {
+    "result": {
+        "filename": ".3mf_temp/stand_plate(01)_PLA.gcode",
+        "thumbnails": [
+            {"width": 32, "height": 32, "size": 436,
+             "relative_path": ".thumbs/stand_plate(01)_PLA-32x32.png"},
+            {"width": 512, "height": 512, "size": 5297,
+             "relative_path": ".thumbs/stand_plate(01)_PLA-512x512.png"},
+            {"width": 230, "height": 110, "size": 3429,
+             "relative_path": ".thumbs/stand_plate(01)_PLA-230x110.png"},
+        ],
+    }
+}
+
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+
+
+def test_parse_thumbnails_skips_entries_without_path():
+    thumbs = parse_thumbnails(FILE_METADATA)
+    assert [t["width"] for t in thumbs] == [32, 512, 230]
+    assert parse_thumbnails({"result": {"thumbnails": [{"width": 32}]}}) == []
+    assert parse_thumbnails({"result": {}}) == []
+
+
+def test_thumbnail_path_is_relative_to_gcode_folder():
+    assert thumbnail_path("a/b.gcode", ".thumbs/b.png") == "a/.thumbs/b.png"
+    assert thumbnail_path("b.gcode", ".thumbs/b.png") == ".thumbs/b.png"
+
+
+def test_get_thumbnail_takes_largest_and_returns_data_url():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/server/files/metadata":
+            seen["filename"] = request.url.params.get("filename")
+            return httpx.Response(200, json=FILE_METADATA)
+        seen["image"] = request.url.path
+        return httpx.Response(200, content=PNG_BYTES, headers={"content-type": "image/png"})
+
+    c = MoonrakerClient("http://printer.local:7125", transport=httpx.MockTransport(handler))
+    thumb = c.get_thumbnail(".3mf_temp/stand_plate(01)_PLA.gcode")
+    assert seen["filename"] == ".3mf_temp/stand_plate(01)_PLA.gcode"
+    assert seen["image"] == "/server/files/gcodes/.3mf_temp/.thumbs/stand_plate(01)_PLA-512x512.png"
+    assert (thumb["width"], thumb["height"]) == (512, 512)
+    assert thumb["data_url"].startswith("data:image/png;base64,")
+
+
+def test_get_thumbnail_none_without_metadata():
+    # Старый Moonraker (или временный файл без метаданных) — просто нет превью.
+    assert _client_returning({"error": "not found"}, status_code=404).get_thumbnail("a.gcode") is None
+    assert _client_returning({"result": {}}).get_thumbnail("a.gcode") is None
+    assert _client_returning(FILE_METADATA).get_thumbnail("") is None
+
+
+def test_get_thumbnail_skips_oversized_image():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/server/files/metadata":
+            return httpx.Response(200, json=FILE_METADATA)
+        return httpx.Response(200, content=b"0" * (600 * 1024))
+
+    c = MoonrakerClient("http://printer.local:7125", transport=httpx.MockTransport(handler))
+    assert c.get_thumbnail(".3mf_temp/stand_plate(01)_PLA.gcode") is None
 
 
 # Реальный ответ Kobra S1 на Rinkhals: подсветка камеры — shell-девайс.

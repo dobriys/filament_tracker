@@ -796,6 +796,17 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
   border-radius: var(--radius); padding: 10px 14px; font-weight: 500; font-size: var(--fs-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Имя задания и превью модели из gcode рядом; без превью — как раньше. */
+.zone-file-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.zone-file-row > .zone-file-box { flex: 1; min-width: 0; }
+.zone-thumb {
+  flex: 0 0 auto; width: 64px; height: 64px; object-fit: contain;
+  /* Превью прозрачное, и модель часто светлая — подложка чуть темнее панели,
+     иначе белый филамент на светлой теме почти не виден. */
+  background: color-mix(in srgb, var(--muted-2) 14%, var(--panel-2));
+  border: 1px solid color-mix(in srgb, var(--border-soft) 70%, transparent);
+  border-radius: var(--radius);
+}
 .dryer-control { display: flex; flex-direction: column; gap: 12px; }
 
 /* Сушка отдельной строкой во всю ширину под карточкой принтера */

@@ -9,6 +9,9 @@ import re
 import httpx
 
 DEFAULT_TIMEOUT = 5.0
+# Превью отдаём вместе с JSON (data-URL), поэтому ограничиваем размер: обычные
+# миниатюры слайсера — единицы килобайт.
+MAX_THUMBNAIL_BYTES = 512 * 1024
 
 
 def parse_printer_info(payload: dict) -> dict:
@@ -93,6 +96,36 @@ def parse_status(payload: dict) -> dict:
         "speed_factor": gm.get("speed_factor"),     # множитель скорости
         "extrude_factor": gm.get("extrude_factor"), # множитель потока
     }
+
+
+def parse_thumbnails(payload: dict) -> list[dict]:
+    """Миниатюры задания из /server/files/metadata.
+
+    Слайсер кладёт в gcode превью моделей, Moonraker раскладывает их файлами и
+    отдаёт список {width, height, size, relative_path}. relative_path — путь
+    относительно папки самого gcode (см. thumbnail_path).
+    """
+    r = payload.get("result", payload) or {}
+    out = []
+    for th in r.get("thumbnails") or []:
+        rel = (th or {}).get("relative_path")
+        if not rel:
+            continue
+        out.append(
+            {
+                "width": th.get("width"),
+                "height": th.get("height"),
+                "size": th.get("size"),
+                "relative_path": rel,
+            }
+        )
+    return out
+
+
+def thumbnail_path(gcode_filename: str, relative_path: str) -> str:
+    """Путь миниатюры в корне gcodes: папка задания + relative_path."""
+    folder = gcode_filename.rsplit("/", 1)[0] if "/" in gcode_filename else ""
+    return f"{folder}/{relative_path}" if folder else relative_path
 
 
 def parse_hub(payload: dict) -> list[dict]:
@@ -600,6 +633,49 @@ class MoonrakerClient:
         except Exception:
             # Связь с хабом не удалась — это не «хаба нет», поэтому enabled=None.
             return {"gates": [], "dryer": None, "enabled": None, "ext_spool": None}
+
+    def _get_bytes(self, path: str, max_bytes: int) -> tuple[bytes, str] | None:
+        with httpx.Client(
+            timeout=self.timeout, headers=self.headers, transport=self._transport
+        ) as client:
+            resp = client.get(f"{self.base}{path}")
+            resp.raise_for_status()
+            if len(resp.content) > max_bytes:
+                return None
+            return resp.content, resp.headers.get("content-type", "image/png")
+
+    def get_thumbnail(self, filename: str) -> dict | None:
+        """Превью модели по имени gcode-файла — как data-URL.
+
+        Картинка лежит на принтере, но забираем её мы: браузеру не нужен ни
+        прямой доступ к Moonraker, ни API-ключ. Берём самую крупную миниатюру
+        (обычно 512×512, единицы килобайт).
+        """
+        if not filename:
+            return None
+        from base64 import b64encode
+        from urllib.parse import quote
+
+        try:
+            meta = self._get(f"/server/files/metadata?filename={quote(filename)}")
+            thumbs = parse_thumbnails(meta)
+            if not thumbs:
+                return None
+            best = max(thumbs, key=lambda t: (t.get("width") or 0) * (t.get("height") or 0))
+            path = thumbnail_path(filename, best["relative_path"])
+            got = self._get_bytes(f"/server/files/gcodes/{quote(path)}", MAX_THUMBNAIL_BYTES)
+            if not got:
+                return None
+            data, ctype = got
+            return {
+                "data_url": f"data:{ctype};base64,{b64encode(data).decode()}",
+                "width": best.get("width"),
+                "height": best.get("height"),
+            }
+        except Exception:
+            # Превью — украшение: ни отсутствие файла, ни старый Moonraker без
+            # metadata не должны мешать показывать карточку принтера.
+            return None
 
     def get_light(self) -> dict | None:
         """Подсветка камеры, если принтер отдаёт её как power-устройство."""

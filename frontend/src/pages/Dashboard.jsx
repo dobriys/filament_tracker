@@ -374,6 +374,7 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
   const [light, setLight] = useState(null); // подсветка камеры, если ею можно управлять
   const [caps, setCaps] = useState(printer.capabilities || {});
   const [job, setJob] = useState(null);
+  const [thumb, setThumb] = useState(null); // превью модели из метаданных задания
   const [offline, setOffline] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -501,7 +502,20 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
     setBusy(false);
   }
 
-  const file = (status?.filename || job?.filename || "").split("/").pop();
+  const filePath = status?.filename || job?.filename || "";
+  const file = filePath.split("/").pop();
+
+  // Превью тянем отдельно и только при смене файла: картинка весит килобайты и
+  // для файла неизменна, а статус опрашивается каждые 7 секунд.
+  useEffect(() => {
+    if (!filePath) { setThumb(null); return; }
+    let alive = true;
+    api.get(`/api/printers/${printer.id}/thumbnail?filename=${encodeURIComponent(filePath)}`)
+      .then((r) => { if (alive) setThumb(r?.thumbnail?.data_url || null); })
+      .catch(() => { if (alive) setThumb(null); });
+    return () => { alive = false; };
+  }, [printer.id, filePath]);
+
   const pct = status?.progress != null ? Math.round(status.progress * 100) : null;
   const elapsed = status?.print_duration_sec;
   // Остаток берём у прошивки — она знает план печати, а не экстраполирует.
@@ -576,7 +590,10 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
             {/* Блок «Печать» */}
             <div className="printer-zone">
               <div className="zone-title">{isPreparing ? t("Подготовка к печати") : isPrinting ? t("Печатается") : t("Последняя печать")}</div>
-              <div className="zone-file-box" title={file}>{file || t("нет данных")}</div>
+              <div className="zone-file-row">
+                {thumb && <img className="zone-thumb" src={thumb} alt="" title={file} />}
+                <div className="zone-file-box" title={file}>{file || t("нет данных")}</div>
+              </div>
               {isPreparing ? (
                 <>
                   <div style={{ margin: "10px 0 6px", fontSize: 15 }}>

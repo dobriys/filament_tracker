@@ -1170,6 +1170,8 @@ function printersRoute(M, parts, query, body) {
     return { ok: true, detail: "Подключено. Состояние: printing" };
   }
   if (sub === "status" && M === "GET") { moonrakerOnly(); return liveStatus(printer); }
+  // Превью модели: в демо gcode-файлов нет, поэтому картинки не будет.
+  if (sub === "thumbnail" && M === "GET") { moonrakerOnly(); return { thumbnail: null }; }
   // Режим подачи (см. app/services/feed_mode.py). В демо телеметрии нет, поэтому
   // «авто» ведёт себя как мультиподача, если она есть у модели.
   if (sub === "feed-mode" && M === "POST") {

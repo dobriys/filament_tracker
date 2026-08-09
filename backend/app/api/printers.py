@@ -226,6 +226,38 @@ def printer_status(
         raise HTTPException(status_code=502, detail=f"Moonraker недоступен: {e}")
 
 
+# Кэш превью: {(printer_id, filename): (время, превью|None)}. Картинка для файла
+# не меняется, а карточка принтера перезапрашивает её при каждом монтировании,
+# поэтому держим недолгий кэш — вместе с «пустым» ответом, чтобы не дёргать
+# принтер из-за заданий без миниатюры.
+_THUMB_CACHE: dict[tuple, tuple[float, dict | None]] = {}
+_THUMB_TTL = 600.0
+_THUMB_CACHE_MAX = 32
+
+
+@router.get("/{printer_id}/thumbnail")
+def printer_thumbnail(
+    printer_id: uuid.UUID,
+    filename: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Превью модели по имени gcode-файла (data-URL) или {"thumbnail": null}."""
+    printer = _own(db, user, printer_id)
+    if not filename:
+        return {"thumbnail": None}
+    key = (printer.id, filename)
+    now = time.time()
+    hit = _THUMB_CACHE.get(key)
+    if hit and now - hit[0] < _THUMB_TTL:
+        return {"thumbnail": hit[1]}
+    thumb = _moonraker_client(printer).get_thumbnail(filename)
+    if len(_THUMB_CACHE) >= _THUMB_CACHE_MAX:
+        _THUMB_CACHE.pop(min(_THUMB_CACHE, key=lambda k: _THUMB_CACHE[k][0]), None)
+    _THUMB_CACHE[key] = (now, thumb)
+    return {"thumbnail": thumb}
+
+
 def _annotate_consumption(db: Session, user: User, jobs: list[dict]) -> list[dict]:
     """Помечает задания Moonraker признаком списания.
 
