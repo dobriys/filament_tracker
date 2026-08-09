@@ -98,8 +98,11 @@ def test_no_event_while_state_holds():
 
 
 def test_alert_text_carries_readings():
+    # В уведомлении только влажность и порог: температуру из него убрали
+    # намеренно (68bcb51) — она к порогу отношения не имеет и лишь шумит.
     _, text = diff(_cur(30, False), _cur(52.4, True, temperature=46.3), "Шкаф", 45.0)[0]
-    assert "52%" in text and "46°C" in text and "45%" in text
+    assert "52%" in text and "45%" in text
+    assert "°C" not in text
 
 
 def test_recovery_text_differs_from_alert():
