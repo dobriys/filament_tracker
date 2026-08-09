@@ -473,6 +473,10 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
     : STATE_RU[st] || [st || "—", ""];
   const isPrinting = st === "printing" && !isPreparing;
   const isPaused = st === "paused";
+  // «Пауза», за которой нет задания: прошивка защёлкнула print_stats после
+  // ручных операций или оборванной печати. Продолжать и отменять там нечего —
+  // CANCEL_PRINT молча ничего не делает, помогает только сброс состояния.
+  const stuckPaused = isPaused && status?.is_paused === false && status?.sd_active === false;
   // Текст ошибки принтера: распознанный (описание + код + вики) либо сырой + гугл.
   const errMsg = st === "error" ? status?.message : null;
   const knownErr = recognizePrinterError(errMsg);
@@ -492,15 +496,24 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
   }
 
   // Сброс на принтере: шлём SDCARD_RESET_FILE, print_stats возвращается в
-  // standby, и ошибка исчезает по-настоящему (а не скрывается локально).
-  async function resetError() {
-    if (!window.confirm(t("Отправить принтеру команду сброса ошибки? Состояние вернётся в «Ожидание»."))) return;
+  // standby, и состояние исчезает по-настоящему (а не скрывается локально).
+  async function sendReset() {
     setErr(null); setBusy(true);
     try {
       await api.post(`/api/printers/${printer.id}/reset-error`);
       await loadOverview();
     } catch (e) { setErr(e.message); }
     setBusy(false);
+  }
+
+  async function resetError() {
+    if (!window.confirm(t("Отправить принтеру команду сброса ошибки? Состояние вернётся в «Ожидание»."))) return;
+    await sendReset();
+  }
+
+  async function resetStuck() {
+    if (!window.confirm(t("Сбросить залипшее состояние? Принтер вернётся в «Ожидание», задание будет забыто."))) return;
+    await sendReset();
   }
 
   // Пауза, продолжение и отмена текущей печати. Команду выполняет прошивка
@@ -608,6 +621,12 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
                 {thumb && <img className="zone-thumb" src={thumb} alt="" title={file} />}
                 <div className="zone-file-box" title={file}>{file || t("нет данных")}</div>
               </div>
+              {stuckPaused && (
+                <div className="printer-hint">
+                  <Icon name="alert" size={14} />
+                  {t("Принтер держит паузу, но задания за ней нет: продолжать и отменять нечего — поможет «Сбросить».")}
+                </div>
+              )}
               {isPreparing ? (
                 <>
                   <div style={{ margin: "10px 0 6px", fontSize: 15 }}>
@@ -664,6 +683,16 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
                     >
                       <Icon name="stop" size={14} /> {t("Остановить")}
                     </button>
+                    {stuckPaused && (
+                      <button
+                        className="secondary"
+                        onClick={resetStuck}
+                        disabled={busy}
+                        title={t("Вернуть принтер в «Ожидание» (SDCARD_RESET_FILE)")}
+                      >
+                        {t("Сбросить")}
+                      </button>
+                    )}
                   </>
                 )}
                 <button

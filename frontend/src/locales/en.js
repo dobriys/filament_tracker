@@ -369,6 +369,11 @@ export const EN = {
   "Сбросить ошибку на принтере": "Reset the error on the printer",
   "Отправить принтеру команду сброса ошибки? Состояние вернётся в «Ожидание».": "Send the printer a reset command? The state will return to “Standby”.",
   "На паузу": "Pause",
+  "Сбросить залипшее состояние? Принтер вернётся в «Ожидание», задание будет забыто.":
+    "Reset the stuck state? The printer will return to “Standby” and forget the job.",
+  "Вернуть принтер в «Ожидание» (SDCARD_RESET_FILE)": "Return the printer to “Standby” (SDCARD_RESET_FILE)",
+  "Принтер держит паузу, но задания за ней нет: продолжать и отменять нечего — поможет «Сбросить».":
+    "The printer holds a pause with no job behind it: there is nothing to resume or cancel — use “Reset”.",
   "Продолжить": "Resume",
   "Остановить": "Stop",
   "Приостановить печать": "Pause the print",

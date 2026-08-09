@@ -398,6 +398,26 @@ PREPARING = {
 }
 
 
+def test_status_reports_whether_a_real_print_is_behind_the_state():
+    """Защёлкнутая пауза: state=paused, но за ним ни задания, ни настоящей паузы."""
+    stuck = parse_status(
+        {
+            "result": {
+                "status": {
+                    "print_stats": {"state": "paused", "filename": "old.gcode"},
+                    "virtual_sdcard": {"is_active": False},
+                    "pause_resume": {"is_paused": False},
+                }
+            }
+        }
+    )
+    assert stuck["state"] == "paused"
+    assert stuck["sd_active"] is False and stuck["is_paused"] is False
+    # Прошивка без этих объектов ничего не утверждает — и мы тоже.
+    blank = parse_status({"result": {"status": {}}})
+    assert blank["sd_active"] is None and blank["is_paused"] is None
+
+
 def test_status_detects_preparing_phase():
     s = parse_status(PREPARING)
     assert s["state"] == "printing"

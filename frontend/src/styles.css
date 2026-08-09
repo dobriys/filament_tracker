@@ -439,6 +439,16 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
   font-size: var(--fs-3);
   font-weight: 500;
 }
+/* Пояснение к состоянию принтера — тише ошибки, но заметнее обычного текста. */
+.printer-hint {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 10px; padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  border: 1px solid color-mix(in srgb, var(--border-soft) 70%, transparent);
+  color: var(--muted); font-size: var(--fs-2);
+}
+.printer-hint > .icon { flex: 0 0 auto; }
 .printer-error-main {
   display: flex;
   gap: 10px;

@@ -391,6 +391,10 @@ function liveStatus(printer) {
     total_duration_sec: pr.totalSec,
     filament_used_mm: Math.round(progress * 14500),
     progress,
+    // Признаки «за состоянием стоит настоящая печать» — по ним карточка
+    // отличает живую паузу от защёлкнутой прошивкой (см. parse_status).
+    is_paused: !!pr.pausedAt && !pr.cancelled,
+    sd_active: !pr.cancelled,
     nozzle_temp: 219 + Math.sin(elapsed / 30) * 1.5,
     nozzle_target: 220,
     bed_temp: 55 + Math.sin(elapsed / 45) * 0.6,
@@ -1174,6 +1178,12 @@ function printersRoute(M, parts, query, body) {
   if (sub === "status" && M === "GET") { moonrakerOnly(); return liveStatus(printer); }
   // Превью модели: в демо gcode-файлов нет, поэтому картинки не будет.
   if (sub === "thumbnail" && M === "GET") { moonrakerOnly(); return { thumbnail: null }; }
+  if (sub === "reset-error" && M === "POST") {
+    moonrakerOnly();
+    // SDCARD_RESET_FILE: прошивка забывает задание и уходит в «Ожидание».
+    printer._print = null;
+    save(); return { ok: true, status: liveStatus(printer) };
+  }
   if (sub === "print-control" && M === "POST") {
     moonrakerOnly();
     const pr = printer._print;

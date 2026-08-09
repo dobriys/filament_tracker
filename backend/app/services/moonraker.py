@@ -69,6 +69,7 @@ def parse_status(payload: dict) -> dict:
     gm = status.get("gcode_move", {}) or {}
     box_fan = status.get("fan_generic box_fan", {}) or {}
     air_fan = status.get("fan_generic air_filter_fan", {}) or {}
+    pr = status.get("pause_resume", {}) or {}
     info = ps.get("info", {}) or {}
     return {
         "state": ps.get("state"),
@@ -91,6 +92,11 @@ def parse_status(payload: dict) -> dict:
         # Anycubic заполняет их только на экране старта задания, а с началом
         # печати обнуляет — расход считаем по истории при списании.
         "filament_type": vsd.get("filament_type") or None,
+        # Реально ли за состоянием стоит печать. print_stats.state умеет
+        # защёлкиваться («пауза» без задания после ручных операций), и тогда
+        # ни продолжить, ни отменить нечего — эти два флага такое различают.
+        "sd_active": vsd.get("is_active"),
+        "is_paused": pr.get("is_paused"),
         "nozzle_temp": ext.get("temperature"),
         "nozzle_target": ext.get("target"),
         "bed_temp": bed.get("temperature"),
@@ -617,7 +623,7 @@ class MoonrakerClient:
     def get_status(self) -> dict:
         path = (
             "/printer/objects/query?print_stats&display_status&virtual_sdcard&heater_bed&extruder"
-            "&fan&gcode_move&fan_generic%20box_fan&fan_generic%20air_filter_fan"
+            "&fan&gcode_move&pause_resume&fan_generic%20box_fan&fan_generic%20air_filter_fan"
         )
         return parse_status(self._get(path))
 
