@@ -10,6 +10,9 @@ class PrinterBase(BaseModel):
     brand: str | None = None
     model: str | None = None
     capabilities: dict | None = None
+    # Тарифы этого принтера для расчёта себестоимости; пустое поле — «как в
+    # общих настройках» (см. cost_service.resolve_rates).
+    cost_params: dict | None = None
     moonraker_url: str | None = None
     is_active: bool = True
     notes: str | None = None
@@ -29,6 +32,7 @@ class PrinterUpdate(BaseModel):
     brand: str | None = None
     model: str | None = None
     capabilities: dict | None = None
+    cost_params: dict | None = None
     moonraker_url: str | None = None
     moonraker_api_key: str | None = None
     is_active: bool | None = None

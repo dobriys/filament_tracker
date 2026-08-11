@@ -25,7 +25,13 @@ from app.schemas.printer import (
     TestConnectionResult,
 )
 from app.schemas.slot import SlotCreate, SlotOut
-from app.services import feed_mode, printer_presets, settings_service, slot_service
+from app.services import (
+    cost_service,
+    feed_mode,
+    printer_presets,
+    settings_service,
+    slot_service,
+)
 
 router = APIRouter(prefix="/printers", tags=["printers"])
 
@@ -52,6 +58,8 @@ def _to_out(printer: Printer, db: Session | None = None) -> dict:
         "brand": printer.brand,
         "model": printer.model,
         "capabilities": printer.capabilities or {},
+        # None здесь значимо: «своих тарифов нет, берутся общие».
+        "cost_params": printer.cost_params,
         "moonraker_url": printer.moonraker_url,
         "is_active": printer.is_active,
         "notes": printer.notes,
@@ -104,6 +112,11 @@ def create_printer(
         brand=brand,
         model=model,
         capabilities=capabilities or {},
+        cost_params=(
+            cost_service.validate_params(data.cost_params)
+            if data.cost_params
+            else None
+        ),
         moonraker_url=data.moonraker_url,
         moonraker_api_key_encrypted=(
             encrypt_secret(data.moonraker_api_key) if data.moonraker_api_key else None
@@ -143,6 +156,9 @@ def update_printer(
     if "moonraker_api_key" in payload:
         key = payload.pop("moonraker_api_key")
         printer.moonraker_api_key_encrypted = encrypt_secret(key) if key else None
+    if payload.get("cost_params") is not None:
+        # Пустые поля остаются None — это «значение по умолчанию», а не ноль.
+        payload["cost_params"] = cost_service.validate_params(payload["cost_params"])
     for k, v in payload.items():
         setattr(printer, k, v)
     db.commit()
@@ -163,6 +179,7 @@ def delete_printer(
     from sqlalchemy import update as sa_update
 
     from app.models import (
+        CostEstimate,
         Printer as PrinterModel,
         PrinterSlot,
         PrintJob,
@@ -188,6 +205,13 @@ def delete_printer(
     # Печати оставляем в истории, только отвязываем от принтера.
     db.execute(
         sa_update(PrintJob).where(PrintJob.printer_id == printer.id).values(printer_id=None)
+    )
+    # Расчёты тоже переживают принтер: тарифы в них заморожены, так что цифры
+    # остаются верными, теряется только ссылка на железо.
+    db.execute(
+        sa_update(CostEstimate)
+        .where(CostEstimate.printer_id == printer.id)
+        .values(printer_id=None)
     )
     db.execute(sa_delete(PrinterModel).where(PrinterModel.id == printer.id))
     db.commit()

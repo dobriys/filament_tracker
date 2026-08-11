@@ -94,6 +94,19 @@ and "Reset demo" puts everything back.
 - **Chamber light** — if the printer exposes its lamp as a power device, you switch it
   on and off from the card.
 
+### Money
+
+- **Print cost calculator** — the full cost of a product: filament, electricity,
+  printer wear, your time, components and packaging. Plus the price that leaves
+  the margin you want.
+- **Rates live on the printer** — power draw, price, service life and utilisation are
+  set on the printer's own card, which also shows what an hour of printing costs.
+  There is no separate settings screen: the numbers sit with what they describe.
+- **Estimate from a finished print** — grams and time are filled in from history,
+  and the filament price is derived from what was actually written off the spools.
+- **Your own currency** — roubles, dollars, euros and five more. Field labels and
+  amounts follow your choice, and a saved estimate keeps the currency it was priced in.
+
 ### Your data
 
 - **Spoolman import** — pull your inventory over the network from
@@ -177,6 +190,12 @@ No printer connected — no problem. Upload a gcode file, the app breaks usage d
 tool, and you match each one to a spool.
 
 ![Gcode upload](docs/screenshots/en/gcode.png)
+
+### Cost calculator
+
+What it really costs to print a thing, and what to charge for it. The cost is broken
+down into materials, your labour, printer wear and packaging; a saved estimate freezes
+its rates, so a price you already quoted never changes behind your back.
 
 ### Settings
 

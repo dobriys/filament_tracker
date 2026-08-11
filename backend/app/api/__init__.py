@@ -11,6 +11,7 @@ from app.api import (
     gcode,
     print_jobs,
     backup,
+    cost_estimates,
     settings,
     dashboard,
     catalog,
@@ -29,6 +30,7 @@ api_router.include_router(slots.router)
 api_router.include_router(gcode.router)
 api_router.include_router(print_jobs.router)
 api_router.include_router(backup.router)
+api_router.include_router(cost_estimates.router)
 api_router.include_router(settings.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(catalog.router)

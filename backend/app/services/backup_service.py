@@ -14,6 +14,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.models import (
+    CostEstimate,
     FilamentProfile,
     Location,
     Printer,
@@ -126,7 +127,10 @@ SETTINGS_PLAIN_KEYS = [
 # Токены интеграций: в БД лежат шифрованными, в бэкап кладём расшифрованными под
 # тем же ключом (как moonraker_api_key), при восстановлении шифруем заново.
 SETTINGS_TOKEN_KEYS = ["telegram_bot_token_encrypted", "ha_token_encrypted"]
-PRINTER_COLS = ["name", "integration_type", "brand", "model", "capabilities", "moonraker_url", "is_active", "notes"]
+PRINTER_COLS = ["name", "integration_type", "brand", "model", "capabilities", "cost_params", "moonraker_url", "is_active", "notes"]
+COST_ESTIMATE_COLS = [
+    "name", "revision", "notes", "currency", "inputs", "totals", "landed_cost", "created_at",
+]
 SLOT_COLS = ["slot_index", "name", "current_spool_id", "is_active"]
 EVENT_COLS = [
     "spool_id", "event_type", "weight_before_g", "weight_after_g", "delta_g",
@@ -176,6 +180,9 @@ def full_backup(db: Session, user: User) -> dict:
     spool_usage = list(
         db.scalars(select(PrintJobSpoolUsage).where(PrintJobSpoolUsage.print_job_id.in_(job_ids)))
     ) if job_ids else []
+    estimates = list(
+        db.scalars(select(CostEstimate).where(CostEstimate.owner_user_id == user.id))
+    )
 
     return {
         "version": EXPORT_VERSION,
@@ -220,6 +227,15 @@ def full_backup(db: Session, user: User) -> dict:
         "print_job_spool_usage": [
             dict(_row_to_dict(x, SPOOL_USAGE_COLS), print_job_id=str(x.print_job_id)) for x in spool_usage
         ],
+        "cost_estimates": [
+            dict(
+                _row_to_dict(x, COST_ESTIMATE_COLS),
+                id=str(x.id),
+                printer_id=_json_safe(x.printer_id),
+                print_job_id=_json_safe(x.print_job_id),
+            )
+            for x in estimates
+        ],
         "settings": _export_settings(db),
     }
 
@@ -239,6 +255,8 @@ def wipe_user_data(db: Session, user: User) -> None:
     my_slots = select(PrinterSlot.id).where(PrinterSlot.printer_id.in_(my_printers))
     my_spools = select(Spool.id).where(Spool.owner_user_id == user.id)
 
+    # Расчёты ссылаются и на принтеры, и на печати — сносим их первыми.
+    db.execute(delete(CostEstimate).where(CostEstimate.owner_user_id == user.id))
     db.execute(
         delete(PrintJobSpoolUsage).where(
             PrintJobSpoolUsage.print_job_id.in_(my_jobs)
@@ -482,6 +500,28 @@ def restore_backup(db: Session, user: User, data: dict) -> dict:
             )
         )
 
+    # Расчёты стоимости. Итоги и тарифы в них заморожены, поэтому переносим как
+    # есть, ничего не пересчитывая: цифры должны совпасть с исходной копией.
+    estimates_restored = 0
+    for item in data.get("cost_estimates", []):
+        est = CostEstimate(
+            owner_user_id=user.id,
+            name=item.get("name") or "—",
+            revision=item.get("revision"),
+            notes=item.get("notes"),
+            printer_id=printer_map.get(item.get("printer_id")),
+            print_job_id=job_map.get(item.get("print_job_id")),
+            currency=item.get("currency") or "RUB",
+            inputs=item.get("inputs") or {},
+            totals=item.get("totals") or {},
+            landed_cost=item.get("landed_cost") or 0,
+        )
+        created = _parse_dt(item.get("created_at"))
+        if created:
+            est.created_at = created
+        db.add(est)
+        estimates_restored += 1
+
     # Настройки приложения (значение пишем как есть; get_bool/get_value приводят
     # тип при чтении). Токены в бэкапе открытые — шифруем перед сохранением.
     settings = data.get("settings") or {}
@@ -504,6 +544,7 @@ def restore_backup(db: Session, user: User, data: dict) -> dict:
         "spools": len(spool_map),
         "printers": len(printer_map),
         "print_jobs": len(job_map),
+        "cost_estimates": estimates_restored,
     }
 
 

@@ -1736,3 +1736,36 @@ tr.slot-off > td { opacity: 0.55; }
   background: var(--panel-2); border: 1px solid var(--border-soft);
   font-size: var(--fs-2);
 }
+
+/* --- Подсказка «?» рядом с подписью поля ---------------------------------
+   Панель всплывает по клику (см. components/Hint.jsx): на телефоне наведения
+   нет, а объяснить нужно как раз самые неочевидные поля — множители и доли. */
+/* Высота — ровно строка текста: иначе кнопка раздвинула бы строку подписи, и
+   поля с «?» съехали бы вниз относительно соседей без него. Сама кнопка крупнее
+   и спокойно выходит за эти границы — обрезать её нечему. */
+.hint {
+  position: relative; display: inline-flex; align-items: center;
+  height: 1em; vertical-align: middle; margin-left: 4px;
+}
+.hint-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; padding: 0;
+  border: none; border-radius: 50%;
+  background: transparent; color: var(--muted);
+  cursor: help; line-height: 0;
+}
+.hint-btn:hover,
+.hint-btn.active { background: var(--panel-2); color: var(--accent); }
+.hint-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hint-pop {
+  position: absolute; top: calc(100% + 6px); left: -4px; z-index: 40;
+  width: max-content; max-width: min(280px, calc(100vw - 32px));
+  padding: 9px 12px; border-radius: var(--radius-sm);
+  background: var(--panel); border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--text-soft); font-size: var(--fs-2); font-weight: 400;
+  line-height: 1.45; text-transform: none; letter-spacing: 0;
+  white-space: normal;
+}
+/* Панель не вылезает за край экрана: сдвиг считает Hint.jsx и кладёт в
+   marginLeft — сколько именно, зависит от ширины экрана и места кнопки. */

@@ -1,4 +1,7 @@
 import { DEMO_PREVIEW } from "./demoPreview.js";
+// Тот же модуль, что и у страницы расчёта, — формулы разъехаться не могут.
+// На бэке им соответствует app/services/cost_service.py::compute.
+import { compute as computeCost, DEFAULTS as COST_DEFAULTS } from "../cost.js";
 // Демо-режим: полностью клиентский мок API. Когда включён (VITE_DEMO=1 при
 // сборке или window.__FT_CONFIG__.demo), client.js направляет все вызовы сюда
 // вместо fetch — бэкенд не нужен. Данные живут в памяти и localStorage, правки
@@ -13,7 +16,10 @@ export const DEMO =
   import.meta.env.VITE_DEMO === "1" ||
   import.meta.env.VITE_DEMO === true;
 
-const STORE_KEY = "ft_demo_db_v2";
+// Версия в ключе — единственная защита от старой формы данных: load() просто
+// разбирает JSON, ничего не домигрируя. Добавили расчёты стоимости — подняли v3,
+// иначе у вернувшегося посетителя не было бы ни db.costEstimates, ни cost_params.
+const STORE_KEY = "ft_demo_db_v3";
 const TOKEN_KEY = "ft_token";
 
 // Плотности (г/см³) для оценки веса по длине — совпадают с фронтом/бэком.
@@ -220,6 +226,9 @@ function seed() {
     id: "pr-ace", owner_user_id: USER.id, name: "Kobra S1 (мастерская)", integration_type: "moonraker",
     brand: "Anycubic", model: "Kobra S1 Combo",
     capabilities: { has_mmu: true, mmu_slots: 4, mmu_name: "ACE Pro", has_dryer: true, has_chamber: true, tool_count: 4, controls: ["dryer_start_stop"] },
+    // Свои тарифы: этот принтер экономичнее и загружен плотнее общих настроек —
+    // видно, что переопределение работает, а остальные поля берутся из общих.
+    cost_params: { power_w: 120, uptime_pct: 45 },
     moonraker_url: "http://192.168.1.50:7125", moonraker_api_key_encrypted: null, is_active: true, notes: null,
     has_moonraker_key: false, created_at: daysAgo(120), updated_at: nowIso(),
     // демо-состояние живого принтера
@@ -285,9 +294,51 @@ function seed() {
     },
   ];
 
+  // Сохранённые расчёты стоимости. Итоги здесь не пишем — их считает
+  // buildEstimate тем же кодом, что и страница (и что бэкенд).
+  const costEstimates = [
+    buildEstimate(
+      { id: "ce-4001", created_at: daysAgo(3) },
+      {
+        name: "Кронштейн для камеры", revision: "V2", notes: "Печать на 0.2, 3 периметра",
+        printer_id: "pr-ace", print_job_id: "pj-3001", currency: "RUB",
+        inputs: {
+          part_name: "Кронштейн для камеры", material: "PLA", date: daysAgo(3).slice(0, 10),
+          qty: 1, filament_price_per_kg: 1490, filament_g: 45.4, print_time_h: 1.5, labor_min: 10,
+          hardware: [
+            { name: "Винт M3×12", qty: 4, unit_cost: 3.5 },
+            { name: "Гайка M3", qty: 4, unit_cost: 2 },
+          ],
+          packaging: [
+            { name: "Коробка", qty: 1, unit_cost: 25 },
+            { name: "Пузырчатая плёнка", qty: 1, unit_cost: 8 },
+            { name: "Доставка", qty: 1, unit_cost: 350 },
+          ],
+          margins: [50, 60, 70], currency: "RUB",
+          // Тарифы заморожены при сохранении: у принтера свои мощность и загрузка.
+          rates: { ...COST_DEFAULTS, power_w: 120, uptime_pct: 45 },
+        },
+      },
+    ),
+    buildEstimate(
+      { id: "ce-4002", created_at: daysAgo(9) },
+      {
+        name: "Gridfinity бокс 2×2", revision: "V1", notes: null,
+        printer_id: null, print_job_id: null, currency: "RUB",
+        inputs: {
+          part_name: "Gridfinity бокс 2×2", material: "PLA", date: daysAgo(9).slice(0, 10),
+          qty: 6, filament_price_per_kg: 1490, filament_g: 32, print_time_h: 5.5, labor_min: 15,
+          hardware: [], packaging: [],
+          margins: [50, 60, 70], currency: "RUB",
+          rates: { ...COST_DEFAULTS },
+        },
+      },
+    ),
+  ];
+
   return {
     user: USER, locations, profiles, spools, events, printers, slots, slotHistory,
-    mrJobs, printJobs,
+    mrJobs, printJobs, costEstimates,
     settings: {
       allow_negative_consumption: false, moonraker_auto_import: true, moonraker_auto_consume: false, error_logging: false,
       timezone: "",
@@ -868,6 +919,31 @@ function dispatch(method, rawPath, { body, form, fileName } = {}) {
     }
   }
 
+  // --- cost-estimates ---
+  if (r === "cost-estimates") {
+    if (!db.costEstimates) db.costEstimates = [];
+    if (M === "GET" && parts.length === 1) return db.costEstimates.map(estimateItem);
+    if (M === "GET") {
+      const e = db.costEstimates.find((x) => x.id === parts[1]);
+      if (!e) throw notFound("Расчёт не найден");
+      return e;
+    }
+    if (M === "POST") {
+      const e = buildEstimate({ id: uid(), created_at: nowIso() }, body || {});
+      db.costEstimates.unshift(e); save(); return e;
+    }
+    if (M === "PATCH") {
+      const e = db.costEstimates.find((x) => x.id === parts[1]);
+      if (!e) throw notFound("Расчёт не найден");
+      Object.assign(e, buildEstimate({ id: e.id, created_at: e.created_at }, { ...e, ...body }));
+      save(); return e;
+    }
+    if (M === "DELETE") {
+      db.costEstimates = db.costEstimates.filter((x) => x.id !== parts[1]);
+      save(); return null;
+    }
+  }
+
   // --- filament-profiles ---
   if (r === "filament-profiles") {
     if (M === "GET" && parts.length === 1) {
@@ -1082,10 +1158,40 @@ function slotsRoute(M, parts, body) {
   throw notFound("Слот не найден");
 }
 
+// Расчёт стоимости: итоги считаем здесь, а не берём с формы, — так же, как это
+// делает бэкенд (app/api/cost_estimates.py::_apply).
+function buildEstimate(base, body) {
+  const currency = body.currency || body.inputs?.currency || "RUB";
+  // Валюта расчёта одна: и подпись сумм, и то, в чём заданы тарифы
+  // (бэк: app/api/cost_estimates.py::_apply).
+  const inputs = { ...(body.inputs || {}), currency };
+  const totals = computeCost(inputs);
+  return {
+    ...base,
+    name: body.name || "Без названия",
+    revision: body.revision ?? null,
+    notes: body.notes ?? null,
+    printer_id: body.printer_id ?? null,
+    print_job_id: body.print_job_id ?? null,
+    currency,
+    inputs,
+    totals,
+    landed_cost: Math.round(totals.landed_total * 100) / 100,
+    updated_at: nowIso(),
+  };
+}
+
+// Строка списка — без inputs, как CostEstimateListItem на бэке.
+function estimateItem(e) {
+  const { inputs, totals, notes, ...rest } = e;
+  return rest;
+}
+
 function printerOut(p) {
   return {
     id: p.id, owner_user_id: p.owner_user_id, name: p.name, integration_type: p.integration_type,
-    brand: p.brand, model: p.model, capabilities: p.capabilities || {}, moonraker_url: p.moonraker_url,
+    brand: p.brand, model: p.model, capabilities: p.capabilities || {},
+    cost_params: p.cost_params || null, moonraker_url: p.moonraker_url,
     is_active: p.is_active, notes: p.notes, has_moonraker_key: !!p.moonraker_api_key_encrypted,
     feed_state: p._feed || null,
     created_at: p.created_at, updated_at: p.updated_at,

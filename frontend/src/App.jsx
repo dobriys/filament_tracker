@@ -11,6 +11,7 @@ import Locations from "./pages/Locations.jsx";
 import Printers from "./pages/Printers.jsx";
 import GcodeUpload from "./pages/GcodeUpload.jsx";
 import PrintJobs from "./pages/PrintJobs.jsx";
+import CostEstimate from "./pages/CostEstimate.jsx";
 import ConsumeJob from "./pages/ConsumeJob.jsx";
 import SpoolByQr from "./pages/SpoolByQr.jsx";
 import Settings from "./pages/Settings.jsx";
@@ -114,6 +115,7 @@ function NavMore() {
       </button>
       {open && (
         <div className="nav-more-menu">
+          <NavLink to="/cost" onClick={() => setOpen(false)}>{t("Расчёт стоимости")}</NavLink>
           <NavLink to="/profiles" onClick={() => setOpen(false)}>{t("Профили пластика")}</NavLink>
           <NavLink to="/locations" onClick={() => setOpen(false)}>{t("Места хранения")}</NavLink>
           <NavLink to="/gcode" onClick={() => setOpen(false)}>{t("Загрузка gcode")}</NavLink>
@@ -183,6 +185,7 @@ function Layout({ children }) {
             <div className="sheet-handle" />
             <div className="sheet-links">
               <NavLink to="/settings" onClick={closeMore}><Icon name="settings" size={18} />{t("Настройки")}</NavLink>
+              <NavLink to="/cost" onClick={closeMore}><Icon name="tag" size={18} />{t("Расчёт стоимости")}</NavLink>
               <NavLink to="/profiles" onClick={closeMore}><Icon name="layers" size={18} />{t("Профили пластика")}</NavLink>
               <NavLink to="/locations" onClick={closeMore}><Icon name="box" size={18} />{t("Места хранения")}</NavLink>
               <NavLink to="/gcode" onClick={closeMore}><Icon name="file" size={18} />{t("Загрузка gcode")}</NavLink>
@@ -236,6 +239,8 @@ export default function App() {
         <Route path="/gcode" element={<GcodeUpload />} />
         <Route path="/print-jobs" element={<PrintJobs />} />
         <Route path="/print-jobs/:id/consume" element={<ConsumeJob />} />
+        <Route path="/cost" element={<CostEstimate />} />
+        <Route path="/cost/:id" element={<CostEstimate />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

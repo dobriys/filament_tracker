@@ -6,11 +6,16 @@ import { t, dateLocale, tServer } from "../i18n.js";
 import { GateCard } from "../components/HubGates.jsx";
 import { PrinterArt, CapabilityChips, brandAccent } from "../components/PrinterArt.jsx";
 import Icon from "../components/Icon.jsx";
+import Hint from "../components/Hint.jsx";
 import SpoolPicker from "../components/SpoolPicker.jsx";
 import FeedChangeBanner from "../components/FeedChangeBanner.jsx";
 import LightToggle from "../components/LightToggle.jsx";
 import { enrichSpool } from "../utils/spools.js";
 import { HOLDER_INDEX, slotLabel } from "../utils/slots.js";
+import { DEFAULTS, machineRate, resolveRates } from "../cost.js";
+
+// Суммы без знака валюты: у тарифов принтера валюты нет, её выбирают в расчёте.
+const round2 = (n) => (Math.round(n * 100) / 100).toString();
 
 // Лейбл системы мультиподачи по возможностям: «Слоты ACE Pro» / «Слоты мультиподачи».
 function mmuLabel(caps) {
@@ -24,6 +29,7 @@ export default function Printers() {
   const [printers, setPrinters] = useState([]);
   const [selected, setSelected] = useState(null);
   const [mrPrinter, setMrPrinter] = useState(null);
+  const [costPrinter, setCostPrinter] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [presets, setPresets] = useState([]);
   const [searchParams] = useSearchParams();
@@ -110,6 +116,7 @@ export default function Printers() {
     await api.del(`/api/printers/${p.id}`);
     if (selected?.id === p.id) setSelected(null);
     if (mrPrinter?.id === p.id) setMrPrinter(null);
+    if (costPrinter?.id === p.id) setCostPrinter(null);
     load();
   }
 
@@ -185,6 +192,7 @@ export default function Printers() {
                   {p.integration_type === "moonraker" && (
                     <button className="secondary" onClick={() => setMrPrinter(p)}>Moonraker</button>
                   )}{" "}
+                  <button className="secondary" onClick={() => setCostPrinter(p)}>{t("Себестоимость")}</button>{" "}
                   <button className="danger" onClick={() => remove(p)}>{t("Удалить")}</button>
                 </td>
               </tr>
@@ -206,6 +214,129 @@ export default function Printers() {
         />
       )}
       {mrPrinter && <MoonrakerPanel printer={mrPrinter} onClose={() => setMrPrinter(null)} />}
+      {costPrinter && (
+        <CostParamsPanel
+          printer={costPrinter}
+          onClose={() => setCostPrinter(null)}
+          onSaved={(p) => {
+            setCostPrinter(p);
+            setPrinters((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Во сколько обходится час работы этого принтера — единственное место, где
+// задаются тарифы железа. Общих настроек у расчёта нет: пустое поле означает
+// значение по умолчанию, и оно же стоит в подсказке.
+//
+// Валюты здесь нет намеренно. Она выбирается в самом расчёте, а числа не
+// пересчитываются, поэтому подписать поля одной валютой значило бы соврать
+// тем, кто считает в другой.
+function CostParamsPanel({ printer, onClose, onSaved }) {
+  const [draft, setDraft] = useState(printer.cost_params || {});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    setDraft(printer.cost_params || {});
+    setErr(null);
+  }, [printer.id]);
+
+  const rate = machineRate(resolveRates(draft));
+
+  const FIELDS = [
+    {
+      key: "printer_price", label: t("Цена принтера"),
+      hint: t("Сколько принтер стоил вам целиком — с доставкой и налогами. Эта сумма размазывается по всем часам, которые он отработает за срок службы."),
+    },
+    {
+      key: "extra_upfront", label: t("Апгрейды"),
+      hint: t("Всё, что докупили к принтеру перед работой: корпус, сушилка, закалённое сопло, стол. Считается вместе с ценой принтера."),
+    },
+    {
+      key: "maintenance_per_year", label: t("Обслуживание в год"),
+      hint: t("Расходники и ремонт за год: сопла, ремни, трубка PTFE, плёнки на стол. Обычно около 10 % от цены принтера."),
+    },
+    {
+      key: "life_years", label: t("Срок службы, лет"), step: "0.5",
+      hint: t("Сколько лет вы рассчитываете на нём печатать. Бытовой принтер — 3–5 лет, у фермы меньше: он изнашивается быстрее."),
+    },
+    {
+      key: "uptime_pct", label: t("Загрузка, %"), hint:
+        t("Какую долю времени принтер реально печатает. 100 % — круглосуточно без пауз; 30 % — это уже 2600 часов в год, много для дома. Чем ниже загрузка, тем дороже час: те же вложения делятся на меньшее число часов."),
+    },
+    {
+      key: "power_w", label: t("Мощность, Вт"),
+      hint: t("Средняя мощность за печать, а не пиковая: на прогреве принтер берёт 300–350 Вт, дальше около 100. Обычно 150 Вт — хорошая оценка."),
+    },
+    {
+      key: "electricity_per_kwh", label: t("Электричество за кВт·ч"),
+      hint: t("Ваш тариф из квитанции. Из него и мощности получается цена электричества за час печати."),
+    },
+    {
+      key: "buffer_factor", label: t("Запас, ×"), step: "0.1", hint:
+        t("Множитель на непредвиденное: брак и перепечатки, внеплановый ремонт, подорожание. 1.3 значит «прибавить 30 % сверху»; 1 — считать без запаса."),
+    },
+    {
+      key: "printer_per_hour", label: t("Своя ставка за час"),
+      hint: t("Если вы уже знаете, во сколько обходится час, впишите его сюда — и расчёт по цене, сроку и загрузке применяться не будет."),
+    },
+  ];
+
+  async function save() {
+    setBusy(true); setErr(null);
+    // Пустое поле уходит как null: так бэкенд поймёт «значение по умолчанию».
+    const params = Object.fromEntries(
+      FIELDS.map(({ key }) => [key, draft[key] === "" || draft[key] == null ? null : Number(draft[key])]),
+    );
+    try {
+      onSaved(await api.patch(`/api/printers/${printer.id}`, { cost_params: params }));
+    } catch (e) { setErr(tServer(e.message)); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="card">
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <h3 className="card-title" style={{ margin: 0 }}>
+          {t("Себестоимость")}: {printer.name}
+        </h3>
+        <button className="secondary" onClick={onClose}>{t("Закрыть")}</button>
+      </div>
+      <p className="muted" style={{ fontSize: 12 }}>
+        {t("Отсюда берётся стоимость машиночаса в расчёте стоимости печати. Пустое поле — значение по умолчанию, оно стоит в подсказке. Валюта выбирается в самом расчёте, здесь важно, чтобы все цифры были в одной.")}
+      </p>
+      <div className="row">
+        {FIELDS.map(({ key, label, step, hint }) => (
+          <label key={key}>
+            {label}
+            {hint && <Hint text={hint} />}
+            <input
+              type="number"
+              min="0"
+              step={step || "any"}
+              value={draft[key] ?? ""}
+              placeholder={String(DEFAULTS[key] ?? "—")}
+              onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
+            />
+          </label>
+        ))}
+      </div>
+      <div className="low-explain" style={{ marginTop: 10 }}>
+        {t("Час печати обходится в")}{" "}
+        <b className="mono">{round2(rate.total_per_hour)}</b>
+        {" — "}
+        {t("износ")}{" "}
+        <b className="mono">{round2(rate.capital_per_hour)}</b>
+        {" + "}
+        {t("электричество")}{" "}
+        <b className="mono">{round2(rate.electric_per_hour)}</b>
+      </div>
+      {err && <div className="error">{err}</div>}
+      <button onClick={save} disabled={busy} style={{ marginTop: 12 }}>{t("Сохранить")}</button>
     </div>
   );
 }

@@ -35,6 +35,11 @@ class Printer(Base, TimestampMixin):
     brand: Mapped[str | None] = mapped_column(String)
     model: Mapped[str | None] = mapped_column(String)
     capabilities: Mapped[dict | None] = mapped_column(JSONB)
+    # Деньги на час работы: мощность, цена, срок службы, загрузка (см.
+    # cost_service.PRINTER_KEYS). Отдельно от capabilities намеренно — тот
+    # словарь рисует карточку принтера, и тарифы протекли бы в чипы.
+    # Пустое поле означает «как в общих настройках», поэтому колонка nullable.
+    cost_params: Mapped[dict | None] = mapped_column(JSONB)
     moonraker_url: Mapped[str | None] = mapped_column(String)
     moonraker_api_key_encrypted: Mapped[str | None] = mapped_column(String)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
