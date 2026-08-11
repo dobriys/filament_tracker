@@ -1,9 +1,23 @@
+import logging
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from sqlalchemy.orm import Session
 
 from app.models import AppSetting
 
+log = logging.getLogger("settings")
+
 # Разрешить списание катушки «в минус», если остатка не хватает.
 ALLOW_NEGATIVE_KEY = "allow_negative_consumption"
+
+# Часовой пояс пользователя (имя из базы IANA, например Europe/Moscow).
+#
+# В базе всё лежит в UTC, а браузер сам приводит время к поясу устройства —
+# проблема только у сообщений в Telegram: их собирает сервер, и без этой
+# настройки он берёт пояс контейнера (обычно UTC), из-за чего в уведомлении
+# о завершении печати стояло время на несколько часов раньше реального.
+TIMEZONE_KEY = "timezone"
 
 # «Катушка заканчивается»: порог считается от ёмкости самой катушки.
 #
@@ -107,3 +121,47 @@ def set_value(db: Session, key: str, value) -> None:
     else:
         row.value = {"value": value}
     db.commit()
+
+
+# --- часовой пояс ------------------------------------------------------------
+
+def valid_timezone(name: str) -> bool:
+    """Есть ли такой пояс в базе IANA этой системы."""
+    try:
+        ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        return False
+    return True
+
+
+def get_timezone_name(db: Session) -> str | None:
+    """Имя выбранного пояса или None, если настройка не задана."""
+    value = get_value(db, TIMEZONE_KEY)
+    return str(value).strip() or None if value else None
+
+
+def get_timezone(db: Session):
+    """Пояс для показа времени пользователю.
+
+    Пояс не задан или базы IANA в образе нет — остаётся пояс контейнера
+    (переменная TZ), то есть прежнее поведение.
+    """
+    name = get_timezone_name(db)
+    if not name:
+        return None
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        log.warning("неизвестный часовой пояс в настройках: %s", name)
+        return None
+
+
+def to_local(db: Session, dt: datetime) -> datetime:
+    """UTC-время из базы → время в поясе пользователя.
+
+    Наивное время считаем UTC: так его пишет приложение, и без этого
+    astimezone() молча приписал бы ему пояс контейнера.
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(get_timezone(db))

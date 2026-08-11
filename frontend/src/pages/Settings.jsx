@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { useAuth } from "../api/auth.jsx";
-import { t } from "../i18n.js";
+import { dateLocale, t } from "../i18n.js";
 import { lowThresholdFor, setLowConfig } from "../utils/spools.js";
 import Icon from "../components/Icon.jsx";
 
@@ -34,6 +34,31 @@ const SECTION_IDS = GROUPS.flatMap((g) => g.ids);
 // Готовые ответы на вопрос «когда предупреждать, что катушка кончается».
 // Рядовому пользователю не нужно знать про доли и границы — ему нужно выбрать,
 // узнавать ли заранее. Точные числа остаются под «Настроить точнее».
+// Часовой пояс для времени в уведомлениях. Список берём у браузера: держать
+// свой список из четырёх сотен имён и следить за его актуальностью незачем.
+// В старых движках метода нет — тогда остаются пояс устройства и сохранённый.
+const TZ_BROWSER = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+const TZ_ALL = (() => {
+  try {
+    return Intl.supportedValuesOf("timeZone");
+  } catch {
+    return [];
+  }
+})();
+
+// Который час в этом поясе прямо сейчас — проверка выбора без отправки теста.
+function timeIn(zone) {
+  try {
+    return new Date().toLocaleTimeString(dateLocale(), {
+      timeZone: zone,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return null;
+  }
+}
+
 const LOW_PRESETS = [
   { key: "early",  label: "Заранее",           hint: "успеть заказать замену", pct: 15, min_g: 80, max_g: 400 },
   { key: "normal", label: "Обычно",            hint: "рекомендуется",          pct: 10, min_g: 50, max_g: 200 },
@@ -45,6 +70,7 @@ export default function Settings() {
   const isAdmin = user?.role === "admin";
   const [s, setS] = useState({
     allow_negative_consumption: false,
+    timezone: "",
     moonraker_auto_import: true,
     moonraker_auto_consume: false,
     error_logging: false,
@@ -757,6 +783,40 @@ export default function Settings() {
                   {tgMsg.text}
                 </div>
               )}
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <div className="card-sub" style={{ marginBottom: 8 }}>{t("Часовой пояс")}</div>
+              <div className="settings-fields">
+                <label>
+                  {t("Время в сообщениях")}
+                  <select
+                    value={s.timezone || ""}
+                    onChange={(e) => saveTelegram({ timezone: e.target.value })}
+                  >
+                    <option value="">{t("Как на сервере")}</option>
+                    <optgroup label={t("Это устройство")}>
+                      <option value={TZ_BROWSER}>{TZ_BROWSER}</option>
+                    </optgroup>
+                    {TZ_ALL.length > 0 && (
+                      <optgroup label={t("Все пояса")}>
+                        {TZ_ALL.filter((z) => z !== TZ_BROWSER).map((z) => (
+                          <option key={z} value={z}>{z}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {/* Сохранённого пояса может не быть в списке браузера —
+                        без этой строки поле показало бы пустоту. */}
+                    {s.timezone && s.timezone !== TZ_BROWSER && !TZ_ALL.includes(s.timezone) && (
+                      <option value={s.timezone}>{s.timezone}</option>
+                    )}
+                  </select>
+                </label>
+                <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+                  {s.timezone
+                    ? `${t("Сейчас в этом поясе:")} ${timeIn(s.timezone) || "—"}`
+                    : t("Сервер обычно живёт по UTC — тогда время в сообщениях будет отличаться от вашего.")}
+                </div>
+              </div>
             </div>
             <div style={{ marginTop: 16 }}>
               <div className="card-sub" style={{ marginBottom: 8 }}>{t("Что отправлять")}</div>

@@ -290,6 +290,7 @@ function seed() {
     mrJobs, printJobs,
     settings: {
       allow_negative_consumption: false, moonraker_auto_import: true, moonraker_auto_consume: false, error_logging: false,
+      timezone: "",
       spool_low_pct: LOW_DEFAULTS.pct, spool_low_min_g: LOW_DEFAULTS.min_g, spool_low_max_g: LOW_DEFAULTS.max_g,
       // Датчики Home Assistant: в демо «подключены», чтобы показания было видно
       // на панели и в местах хранения — значения генерируются локально.

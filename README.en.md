@@ -283,6 +283,12 @@ send a test message and pick what you want:
 | Spool running low, threshold configurable | On |
 | Humidity above the threshold | On |
 
+Next to the event list you pick a **time zone**. Only messages need it: the browser
+converts times to the device's zone on its own, while notification text is composed
+by the server, which would otherwise use the container's zone — usually UTC. If the
+“finished at” time in a message is hours behind yours, set the zone (your device's
+zone is already offered in the list).
+
 A background poller watches the printer, so messages arrive even with the app closed.
 The token is stored encrypted and never handed back out. While the master switch is
 off, printers aren't polled for notifications at all.

@@ -18,6 +18,8 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 class SettingsOut(BaseModel):
     allow_negative_consumption: bool
+    # Пояс для времени в уведомлениях; пусто — пояс сервера.
+    timezone: str | None
     moonraker_auto_import: bool
     moonraker_auto_consume: bool
     error_logging: bool
@@ -39,6 +41,8 @@ class SettingsOut(BaseModel):
 
 class SettingsUpdate(BaseModel):
     allow_negative_consumption: bool | None = None
+    # Пустая строка — вернуться к поясу сервера.
+    timezone: str | None = None
     moonraker_auto_import: bool | None = None
     moonraker_auto_consume: bool | None = None
     error_logging: bool | None = None
@@ -64,6 +68,7 @@ def _current(db: Session) -> SettingsOut:
         allow_negative_consumption=settings_service.get_bool(
             db, settings_service.ALLOW_NEGATIVE_KEY
         ),
+        timezone=settings_service.get_timezone_name(db),
         moonraker_auto_import=settings_service.get_bool(db, AUTO_IMPORT_KEY, default=True),
         moonraker_auto_consume=settings_service.get_bool(db, AUTO_CONSUME_KEY, default=False),
         error_logging=settings_service.get_bool(db, diagnostics.ERROR_LOGGING_KEY, default=False),
@@ -117,6 +122,14 @@ def update_settings(
         settings_service.set_value(
             db, settings_service.ALLOW_NEGATIVE_KEY, data.allow_negative_consumption
         )
+    if data.timezone is not None:
+        tz = data.timezone.strip()
+        if tz and not settings_service.valid_timezone(tz):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Неизвестный часовой пояс: {tz}. Ожидается имя вида Europe/Moscow.",
+            )
+        settings_service.set_value(db, settings_service.TIMEZONE_KEY, tz or None)
     if data.moonraker_auto_import is not None:
         settings_service.set_value(db, AUTO_IMPORT_KEY, data.moonraker_auto_import)
     if data.moonraker_auto_consume is not None:

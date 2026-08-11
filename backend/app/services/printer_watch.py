@@ -64,8 +64,8 @@ def _finished_extra(db: Session, printer: Printer, filename: str | None) -> str:
         job = jobs[0] if jobs else None
 
     ts = job.completed_at if (job and job.completed_at) else datetime.now(timezone.utc)
-    # Локальное время сервера (часовой пояс контейнера, переменная TZ).
-    lines = [f"Завершена: {ts.astimezone():%d.%m.%Y %H:%M}"]
+    # Часовой пояс из настроек (в базе всё в UTC, а контейнер обычно живёт по UTC).
+    lines = [f"Завершена: {settings_service.to_local(db, ts):%d.%m.%Y %H:%M}"]
 
     if job is not None:
         info = print_job_service.jobs_cost(db, [job.id]).get(job.id)
