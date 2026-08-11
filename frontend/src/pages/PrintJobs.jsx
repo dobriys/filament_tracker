@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import { fmtMoney } from "../format.js";
 import { t, dateLocale } from "../i18n.js";
+
+// Статусы, из которых печать ещё можно списать. Совпадают с проверкой на
+// бэкенде (print_job_service.confirm_usage) — иначе кнопка вела бы в отказ.
+const CONSUMABLE = new Set(["draft", "ready_to_consume"]);
 
 const STATUS = {
   draft: t("черновик"),
@@ -20,11 +24,35 @@ function fmtWhen(iso) {
     " " + d.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit" });
 }
 
+// Расход печати одной ячейкой. Граммов может не быть вовсе: у временных
+// .3mf-файлов Anycubic слайсерских метаданных нет, а у оборванной печати итог
+// слайсера намеренно не берётся — от принтера приходит только длина. Поэтому
+// три источника по убыванию точности: факт списания → итог слайсера → длина.
+function Usage({ job }) {
+  const consumed = Number(job.consumed_g) || 0;
+  if (consumed > 0) {
+    return <span title={t("Фактически списано с катушек")}>{consumed.toFixed(2)}{" "}{t("г")}</span>;
+  }
+  if (job.total_filament_used_g != null) {
+    return <>{Number(job.total_filament_used_g).toFixed(2)}{" "}{t("г")}</>;
+  }
+  const mm = Number(job.total_filament_used_mm) || 0;
+  if (mm > 0) {
+    return (
+      <span className="muted" title={t("Слайсер не дал вес — граммы посчитаются по выбранной катушке при списании")}>
+        {(mm / 1000).toFixed(2)}{" "}{t("м")}
+      </span>
+    );
+  }
+  return "—";
+}
+
 const Swatch = ({ hex }) => (
   <span style={{ display: "inline-block", width: 13, height: 13, borderRadius: 3, background: hex || "#666", border: "1px solid var(--border)", verticalAlign: "middle", marginRight: 6 }} />
 );
 
 export default function PrintJobs() {
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState([]);
   const [detail, setDetail] = useState(null);
   const [spoolMap, setSpoolMap] = useState({});
@@ -55,7 +83,7 @@ export default function PrintJobs() {
       <h2>{t("История печати")}</h2>
       <div className="card">
         <table className="cards-mobile">
-          <thead><tr><th>{t("Дата")}</th><th>{t("Файл")}</th><th>{t("Расход, г")}</th><th>{t("Цена")}</th><th>{t("Статус")}</th><th></th></tr></thead>
+          <thead><tr><th>{t("Дата")}</th><th>{t("Файл")}</th><th>{t("Расход")}</th><th>{t("Цена")}</th><th>{t("Статус")}</th><th></th></tr></thead>
           <tbody>
             {jobs.map((j) => (
               <tr key={j.id}>
@@ -64,7 +92,7 @@ export default function PrintJobs() {
                   {(j.file_name || "—").split("/").pop()}
                   {j.slicer_name && <span className="muted" style={{ fontSize: 12 }}> · {j.slicer_name}</span>}
                 </td>
-                <td data-label={t("Расход, г")}>{j.total_filament_used_g != null ? Number(j.total_filament_used_g).toFixed(2) : "—"}</td>
+                <td data-label={t("Расход")}><Usage job={j} /></td>
                 <td data-label={t("Цена")} title={j.cost_partial ? t("Часть катушек без цены — итог занижен") : undefined}>
                   {j.cost != null ? <>{fmtMoney(j.cost, j.cost_currency)}{j.cost_partial ? <span className="muted">*</span> : null}</> : "—"}
                 </td>
@@ -72,7 +100,16 @@ export default function PrintJobs() {
                   <span className="badge">{STATUS[j.status] || j.status}</span>
                   {j.failed && <span className="badge empty" style={{ marginLeft: 6 }}>{t("брак")}</span>}
                 </td>
-                <td data-label=""><button className="secondary" onClick={() => open(j.id)}>{t("Открыть")}</button></td>
+                <td data-label="">
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    {CONSUMABLE.has(j.status) && (
+                      <button onClick={() => navigate(`/print-jobs/${j.id}/consume`)} title={t("Списать материал по этой печати")}>
+                        {t("Списать")}
+                      </button>
+                    )}
+                    <button className="secondary" onClick={() => open(j.id)}>{t("Открыть")}</button>
+                  </div>
+                </td>
               </tr>
             ))}
             {jobs.length === 0 && <tr><td colSpan={6} className="muted">{t("Печатей пока нет")}</td></tr>}
@@ -126,7 +163,12 @@ export default function PrintJobs() {
             </button>
           )}
           {detail.status !== "consumed" && detail.status !== "cancelled" && (
-            <button className="danger" style={{ marginTop: 12 }} onClick={() => cancel(detail.id)}>{t("Отменить печать")}</button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+              {CONSUMABLE.has(detail.status) && (
+                <button onClick={() => navigate(`/print-jobs/${detail.id}/consume`)}>{t("Списать")}</button>
+              )}
+              <button className="danger" onClick={() => cancel(detail.id)}>{t("Отменить печать")}</button>
+            </div>
           )}
         </div>
       )}

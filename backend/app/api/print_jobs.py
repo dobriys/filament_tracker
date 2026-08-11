@@ -33,8 +33,11 @@ def _own(db: Session, user: User, job_id: uuid.UUID) -> PrintJob:
     return job
 
 
-def _apply_extras(out: PrintJobOut, job: PrintJob, costs: dict) -> PrintJobOut:
+def _apply_extras(
+    out: PrintJobOut, job: PrintJob, costs: dict, consumed: dict | None = None
+) -> PrintJobOut:
     out.failed = bool((job.parsed_metadata or {}).get("failed"))
+    out.consumed_g = (consumed or {}).get(out.id)
     c = costs.get(out.id)
     if c:
         out.cost = round(c["cost"], 2)
@@ -56,7 +59,12 @@ def _detail(db: Session, job: PrintJob) -> PrintJobDetailOut:
         tools=[ToolUsageOut.model_validate(t) for t in tools],
         spool_usage=[SpoolUsageOut.model_validate(u) for u in usage],
     )
-    return _apply_extras(detail, job, print_job_service.jobs_cost(db, [job.id]))
+    return _apply_extras(
+        detail,
+        job,
+        print_job_service.jobs_cost(db, [job.id]),
+        print_job_service.jobs_consumed_g(db, [job.id]),
+    )
 
 
 @router.get("", response_model=list[PrintJobOut])
@@ -68,8 +76,10 @@ def list_jobs(db: Session = Depends(get_db), user: User = Depends(get_current_us
             .order_by(PrintJob.created_at.desc())
         )
     )
-    costs = print_job_service.jobs_cost(db, [j.id for j in jobs])
-    return [_apply_extras(PrintJobOut.model_validate(j), j, costs) for j in jobs]
+    ids = [j.id for j in jobs]
+    costs = print_job_service.jobs_cost(db, ids)
+    consumed = print_job_service.jobs_consumed_g(db, ids)
+    return [_apply_extras(PrintJobOut.model_validate(j), j, costs, consumed) for j in jobs]
 
 
 @router.post("", response_model=PrintJobDetailOut, status_code=status.HTTP_201_CREATED)

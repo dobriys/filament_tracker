@@ -1354,6 +1354,7 @@ function jobOut(pj) {
     slicer_version: pj.slicer_version, estimated_print_time_sec: pj.estimated_print_time_sec, filament_change_count: pj.filament_change_count,
     total_filament_used_g: pj.total_filament_used_g, total_filament_used_mm: pj.total_filament_used_mm, status: pj.status,
     created_at: pj.created_at, completed_at: pj.completed_at,
+    consumed_g: (pj.spool_usage || []).reduce((sum, u) => sum + Number(u.used_g || 0), 0) || null,
     cost: c ? Math.round(c.cost * 100) / 100 : null, cost_currency: c?.currency || null, cost_partial: c?.partial || false,
     failed: !!pj.parsed_metadata?.failed,
   };

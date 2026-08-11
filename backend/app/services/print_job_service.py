@@ -9,7 +9,7 @@ import math
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -95,6 +95,25 @@ def create_from_parsed(
     db.commit()
     db.refresh(job)
     return job
+
+
+def jobs_consumed_g(db: Session, job_ids: list) -> dict:
+    """Фактически списанный вес по печатям: {job_id: граммы}.
+
+    Отдельно от jobs_cost: там записи без цены отбрасываются целиком, а вес
+    известен всегда — он и есть самый точный ответ на вопрос «сколько ушло».
+    """
+    if not job_ids:
+        return {}
+    rows = db.execute(
+        select(
+            PrintJobSpoolUsage.print_job_id,
+            func.sum(PrintJobSpoolUsage.used_g),
+        )
+        .where(PrintJobSpoolUsage.print_job_id.in_(job_ids))
+        .group_by(PrintJobSpoolUsage.print_job_id)
+    ).all()
+    return {jid: float(total) for jid, total in rows if total is not None}
 
 
 def jobs_cost(db: Session, job_ids: list) -> dict:

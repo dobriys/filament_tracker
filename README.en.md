@@ -149,7 +149,9 @@ how many printers you add.
 
 ### History
 
-Every deduction and correction: when, for which print, and off which spool.
+Every deduction and correction: when, for which print, and off which spool. Prints
+that aren't deducted yet (drafts) are deducted right here, from the button in the
+row — even when the job has long scrolled out of the printer's own history.
 
 ![History](docs/screenshots/en/print-jobs.png)
 

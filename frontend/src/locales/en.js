@@ -417,6 +417,9 @@ export const EN = {
   "не используется": "not used",
   "м": "m",
   "Слайсер не дал вес — оценка по длине и выбранной катушке": "Slicer gave no weight — estimated from length and selected spool",
+  "Слайсер не дал вес — граммы посчитаются по выбранной катушке при списании":
+    "Slicer gave no weight — grams are worked out from the spool you pick when deducting",
+  "Фактически списано с катушек": "Actually deducted from spools",
   "необязательно": "optional",
   "нет": "no",
   "нет данных": "no data",

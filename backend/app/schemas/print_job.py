@@ -71,6 +71,9 @@ class PrintJobOut(BaseModel):
     filament_change_count: int | None
     total_filament_used_g: Decimal | None
     total_filament_used_mm: Decimal | None
+    # Фактически списано с катушек. У слайсерского итога граммов может не быть
+    # (временные .3mf, оборванная печать) — тогда это единственный точный вес.
+    consumed_g: float | None = None
     status: str
     created_at: datetime
     completed_at: datetime | None
