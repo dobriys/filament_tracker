@@ -300,7 +300,9 @@ function CostParamsPanel({ printer, onClose, onSaved }) {
 
   return (
     <div className="card">
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+      {/* Обычный flex, а не .row: там у детей flex:1, и кнопка растянулась бы
+          во всю ширину. Так же устроены шапки соседних панелей. */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <h3 className="card-title" style={{ margin: 0 }}>
           {t("Себестоимость")}: {printer.name}
         </h3>

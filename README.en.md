@@ -195,7 +195,17 @@ tool, and you match each one to a spool.
 
 What it really costs to print a thing, and what to charge for it. The cost is broken
 down into materials, your labour, printer wear and packaging; a saved estimate freezes
-its rates, so a price you already quoted never changes behind your back.
+its rates, so a price you already quoted never changes behind your back. Grams and time
+can be pulled from a finished print, and the filament price is then derived from the
+spools actually written off. Fields that need explaining carry a question mark.
+
+![Print cost calculator](docs/screenshots/en/cost.png)
+
+What an hour of printing costs is set on the printer itself: price, upgrades,
+maintenance, service life, utilisation, power draw and the electricity tariff. An empty
+field means the default, shown as the placeholder.
+
+![Printer rates](docs/screenshots/en/printer-cost.png)
 
 ### Settings
 
