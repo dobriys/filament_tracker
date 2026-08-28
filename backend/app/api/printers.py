@@ -1,5 +1,6 @@
 import time
 import uuid
+from base64 import b64encode
 
 import httpx
 from pydantic import BaseModel
@@ -18,6 +19,7 @@ from app.services.moonraker import (
     dryer_unit,
 )
 from app.schemas.printer import (
+    CameraTestResult,
     PrinterCreate,
     PrinterOut,
     PrinterPreset,
@@ -26,6 +28,7 @@ from app.schemas.printer import (
 )
 from app.schemas.slot import SlotCreate, SlotOut
 from app.services import (
+    camera,
     cost_service,
     feed_mode,
     printer_presets,
@@ -61,6 +64,7 @@ def _to_out(printer: Printer, db: Session | None = None) -> dict:
         # None здесь значимо: «своих тарифов нет, берутся общие».
         "cost_params": printer.cost_params,
         "moonraker_url": printer.moonraker_url,
+        "camera_url": printer.camera_url,
         "is_active": printer.is_active,
         "notes": printer.notes,
         "has_moonraker_key": bool(printer.moonraker_api_key_encrypted),
@@ -118,6 +122,7 @@ def create_printer(
             else None
         ),
         moonraker_url=data.moonraker_url,
+        camera_url=(data.camera_url or "").strip() or None,
         moonraker_api_key_encrypted=(
             encrypt_secret(data.moonraker_api_key) if data.moonraker_api_key else None
         ),
@@ -156,6 +161,9 @@ def update_printer(
     if "moonraker_api_key" in payload:
         key = payload.pop("moonraker_api_key")
         printer.moonraker_api_key_encrypted = encrypt_secret(key) if key else None
+    if "camera_url" in payload:
+        # Пустая строка — «снова определять автоматически».
+        payload["camera_url"] = (payload["camera_url"] or "").strip() or None
     if payload.get("cost_params") is not None:
         # Пустые поля остаются None — это «значение по умолчанию», а не ноль.
         payload["cost_params"] = cost_service.validate_params(payload["cost_params"])
@@ -288,6 +296,36 @@ def printer_thumbnail(
         _THUMB_CACHE.pop(min(_THUMB_CACHE, key=lambda k: _THUMB_CACHE[k][0]), None)
     _THUMB_CACHE[key] = (now, thumb)
     return {"thumbnail": thumb}
+
+
+@router.post("/{printer_id}/camera/test", response_model=CameraTestResult)
+def test_camera(
+    printer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Снять кадр с камеры принтера — проверка перед уведомлениями.
+
+    Кадр возвращаем data-URL'ом: по картинке сразу видно, та ли это камера, а
+    при автоопределении ещё и по какому адресу она нашлась.
+    """
+    printer = _own(db, user, printer_id)
+    url, data = camera.snapshot_with_url(db, printer)
+    if not data:
+        detail = (
+            f"Камера не ответила: {url}"
+            if printer.camera_url and url
+            else "Камера не найдена. Укажите адрес снимка вручную — обычно это "
+                 "http://адрес-принтера/webcam/?action=snapshot"
+        )
+        return CameraTestResult(ok=False, detail=detail, url=url)
+    ctype = "image/png" if data.startswith(camera.PNG_MAGIC) else "image/jpeg"
+    return CameraTestResult(
+        ok=True,
+        detail=f"Кадр получен, {len(data) // 1024} КБ",
+        data_url=f"data:{ctype};base64,{b64encode(data).decode()}",
+        url=url,
+    )
 
 
 def _annotate_consumption(db: Session, user: User, jobs: list[dict]) -> list[dict]:

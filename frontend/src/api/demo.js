@@ -342,6 +342,7 @@ function seed() {
     settings: {
       allow_negative_consumption: false, moonraker_auto_import: true, moonraker_auto_consume: false, error_logging: false,
       timezone: "",
+      telegram_photo_enabled: false, telegram_photo_events: {},
       spool_low_pct: LOW_DEFAULTS.pct, spool_low_min_g: LOW_DEFAULTS.min_g, spool_low_max_g: LOW_DEFAULTS.max_g,
       // Датчики Home Assistant: в демо «подключены», чтобы показания было видно
       // на панели и в местах хранения — значения генерируются локально.
@@ -1191,7 +1192,7 @@ function printerOut(p) {
   return {
     id: p.id, owner_user_id: p.owner_user_id, name: p.name, integration_type: p.integration_type,
     brand: p.brand, model: p.model, capabilities: p.capabilities || {},
-    cost_params: p.cost_params || null, moonraker_url: p.moonraker_url,
+    cost_params: p.cost_params || null, moonraker_url: p.moonraker_url, camera_url: p.camera_url || null,
     is_active: p.is_active, notes: p.notes, has_moonraker_key: !!p.moonraker_api_key_encrypted,
     feed_state: p._feed || null,
     created_at: p.created_at, updated_at: p.updated_at,
@@ -1246,6 +1247,7 @@ function printersRoute(M, parts, query, body) {
         id: uid(), owner_user_id: db.user.id, name: body.name, integration_type: body.integration_type || preset?.integration_type || "manual",
         brand: body.brand || preset?.brand || null, model: body.model || preset?.model || null, capabilities: caps,
         moonraker_url: body.moonraker_url || null, moonraker_api_key_encrypted: body.moonraker_api_key ? "enc" : null,
+        camera_url: body.camera_url || null,
         is_active: body.is_active !== false, notes: body.notes || null, created_at: nowIso(), updated_at: nowIso(),
       };
       db.printers.push(p);
@@ -1290,6 +1292,17 @@ function printersRoute(M, parts, query, body) {
     moonrakerOnly();
     const printing = printer._print && !printer._print.cancelled;
     return { thumbnail: printing ? { data_url: DEMO_PREVIEW, width: 230, height: 110 } : null };
+  }
+  // Камера: живого кадра в демо взять негде — показываем ту же заглушку, что и
+  // для превью модели, чтобы был виден сам сценарий проверки.
+  if (sub === "camera" && parts[3] === "test" && M === "POST") {
+    moonrakerOnly();
+    return {
+      ok: true,
+      detail: "Демо-режим: показан пример кадра",
+      data_url: DEMO_PREVIEW,
+      url: printer.camera_url || `${printer.moonraker_url}/webcam/?action=snapshot`,
+    };
   }
   if (sub === "reset-error" && M === "POST") {
     moonrakerOnly();

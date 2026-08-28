@@ -11,6 +11,11 @@
   - print_job_service — «катушка заканчивается» после списания;
   - environment_watch — «влажность выше порога» по датчикам Home Assistant.
 
+К событиям печати можно прикладывать кадр с камеры принтера (см.
+services/camera.py): свой выключатель PHOTO_ENABLED_KEY и свой набор событий
+PHOTO_EVENTS — «что отправлять» и «к чему прикладывать снимок» это разные
+вопросы. Камера не отвечает — уходит обычное текстовое сообщение.
+
 Отправка никогда не должна ронять вызывающий код: любая ошибка сети или
 конфига гасится и уходит в диагностический журнал.
 """
@@ -21,7 +26,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.security import decrypt_secret, encrypt_secret
-from app.services import diagnostics, settings_service
+from app.services import camera, diagnostics, settings_service
 
 log = logging.getLogger("notifications")
 
@@ -29,6 +34,8 @@ ENABLED_KEY = "telegram_enabled"
 TOKEN_KEY = "telegram_bot_token_encrypted"
 CHAT_ID_KEY = "telegram_chat_id"
 EVENTS_KEY = "telegram_events"
+PHOTO_ENABLED_KEY = "telegram_photo_enabled"
+PHOTO_EVENTS_KEY = "telegram_photo_events"
 
 # Типы событий и значения по умолчанию. Шумные (старт печати, пауза, отмена)
 # выключены по умолчанию — включаются осознанно.
@@ -46,6 +53,21 @@ EVENTS: dict[str, bool] = {
     "spool_low": True,
     "humidity_high": True,
 }
+
+# К каким событиям прикладывается кадр с камеры. Только печать: сушка, склад и
+# датчики к камере отношения не имеют. Пока PHOTO_ENABLED_KEY выключен, флаги
+# ни на что не влияют.
+PHOTO_EVENTS: dict[str, bool] = {
+    "print_started": True,
+    "print_finished": True,
+    "print_error": True,
+    "print_cancelled": True,
+    "print_paused": True,
+}
+
+# Предел подписи к фото у Telegram. Текст уведомления в него укладывается, но
+# ошибка от прошивки бывает длинной — тогда шлём кадр и текст порознь.
+CAPTION_LIMIT = 1024
 
 TELEGRAM_API = "https://api.telegram.org"
 TIMEOUT_SEC = 10
@@ -85,6 +107,31 @@ def set_events(db: Session, events: dict[str, bool]) -> None:
     settings_service.set_value(db, EVENTS_KEY, current)
 
 
+def get_photo_events(db: Session) -> dict[str, bool]:
+    """Флаги «прикладывать снимок» с подстановкой значений по умолчанию."""
+    saved = settings_service.get_value(db, PHOTO_EVENTS_KEY) or {}
+    if not isinstance(saved, dict):
+        saved = {}
+    return {key: bool(saved.get(key, default)) for key, default in PHOTO_EVENTS.items()}
+
+
+def set_photo_events(db: Session, events: dict[str, bool]) -> None:
+    current = get_photo_events(db)
+    for key, value in events.items():
+        if key in PHOTO_EVENTS:
+            current[key] = bool(value)
+    settings_service.set_value(db, PHOTO_EVENTS_KEY, current)
+
+
+def wants_photo(db: Session, event: str) -> bool:
+    """Нужен ли кадр с камеры к этому событию."""
+    if event not in PHOTO_EVENTS:
+        return False
+    if not settings_service.get_bool(db, PHOTO_ENABLED_KEY, default=False):
+        return False
+    return get_photo_events(db).get(event, False)
+
+
 def is_configured(db: Session) -> bool:
     return bool(get_token(db) and settings_service.get_value(db, CHAT_ID_KEY))
 
@@ -114,8 +161,45 @@ def send_message(token: str, chat_id: str, text: str) -> dict:
     return payload
 
 
-def notify(db: Session, event: str, text: str) -> bool:
+def send_photo(token: str, chat_id: str, photo: bytes, caption: str = "") -> dict:
+    """Кадр с камеры с подписью-уведомлением. Бросает исключение, как и текст.
+
+    Картинка и текст уходят одним сообщением: в Telegram подпись показывается
+    под фото, поэтому отдельное сообщение вслед за кадром было бы лишним.
+    """
+    r = httpx.post(
+        f"{TELEGRAM_API}/bot{token}/sendPhoto",
+        data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
+        files={"photo": ("snapshot.jpg", photo, "image/jpeg")},
+        timeout=TIMEOUT_SEC,
+    )
+    payload = {}
+    try:
+        payload = r.json()
+    except Exception:
+        pass
+    if not payload.get("ok"):
+        detail = payload.get("description") or f"HTTP {r.status_code}"
+        raise RuntimeError(detail)
+    return payload
+
+
+def _snapshot(db: Session, event: str, printer) -> bytes | None:
+    """Кадр к событию — или None, если камера не нужна и не отвечает."""
+    if printer is None or not wants_photo(db, event):
+        return None
+    try:
+        return camera.snapshot(db, printer)
+    except Exception as e:  # камера не должна мешать самому уведомлению
+        log.warning("камера %s: %s", getattr(printer, "name", "?"), e)
+        return None
+
+
+def notify(db: Session, event: str, text: str, printer=None) -> bool:
     """Отправить уведомление, если оно включено. Ошибки не пробрасываются.
+
+    printer — принтер, с камеры которого брать кадр (события печати). Без него
+    и при недоступной камере уходит обычное текстовое сообщение.
 
     Возвращает True, только если сообщение действительно ушло.
     """
@@ -131,6 +215,18 @@ def notify(db: Session, event: str, text: str) -> bool:
     chat_id = settings_service.get_value(db, CHAT_ID_KEY)
     if not token or not chat_id:
         return False
+
+    photo = _snapshot(db, event, printer)
+    if photo:
+        try:
+            if len(text) <= CAPTION_LIMIT:
+                send_photo(token, str(chat_id), photo, text)
+                return True
+            # Длинный текст в подпись не влезет: сначала кадр, следом сообщение.
+            send_photo(token, str(chat_id), photo)
+        except Exception as e:
+            # Кадр не ушёл — уведомление всё равно должно дойти текстом.
+            log.warning("telegram photo %s: %s", event, e)
 
     try:
         send_message(token, str(chat_id), text)

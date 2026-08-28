@@ -42,6 +42,9 @@ class Printer(Base, TimestampMixin):
     cost_params: Mapped[dict | None] = mapped_column(JSONB)
     moonraker_url: Mapped[str | None] = mapped_column(String)
     moonraker_api_key_encrypted: Mapped[str | None] = mapped_column(String)
+    # Адрес кадра с камеры для уведомлений. Пусто — спросим у Moonraker и
+    # угадаем типовой путь mjpg-streamer (см. services/camera.py).
+    camera_url: Mapped[str | None] = mapped_column(String)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     notes: Mapped[str | None] = mapped_column(Text)
 

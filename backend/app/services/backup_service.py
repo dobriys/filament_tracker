@@ -120,6 +120,7 @@ SPOOL_USAGE_COLS = [
 SETTINGS_PLAIN_KEYS = [
     "allow_negative_consumption", "moonraker_auto_import", "moonraker_auto_consume",
     "error_logging", "telegram_enabled", "telegram_chat_id", "telegram_events",
+    "telegram_photo_enabled", "telegram_photo_events",
     "spool_low_threshold_g", "spool_low_pct", "spool_low_min_g", "spool_low_max_g",
     "humidity_alert_max_pct",
     "ha_enabled", "ha_base_url", "ha_sensors",
@@ -127,7 +128,7 @@ SETTINGS_PLAIN_KEYS = [
 # Токены интеграций: в БД лежат шифрованными, в бэкап кладём расшифрованными под
 # тем же ключом (как moonraker_api_key), при восстановлении шифруем заново.
 SETTINGS_TOKEN_KEYS = ["telegram_bot_token_encrypted", "ha_token_encrypted"]
-PRINTER_COLS = ["name", "integration_type", "brand", "model", "capabilities", "cost_params", "moonraker_url", "is_active", "notes"]
+PRINTER_COLS = ["name", "integration_type", "brand", "model", "capabilities", "cost_params", "moonraker_url", "camera_url", "is_active", "notes"]
 COST_ESTIMATE_COLS = [
     "name", "revision", "notes", "currency", "inputs", "totals", "landed_cost", "created_at",
 ]
@@ -392,6 +393,7 @@ def restore_backup(db: Session, user: User, data: dict) -> dict:
             model=item.get("model"),
             capabilities=item.get("capabilities") or {},
             moonraker_url=item.get("moonraker_url"),
+            camera_url=item.get("camera_url"),
             moonraker_api_key_encrypted=(
                 encrypt_secret(item["moonraker_api_key"])
                 if item.get("moonraker_api_key")

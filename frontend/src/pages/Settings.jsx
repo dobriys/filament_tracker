@@ -78,6 +78,8 @@ export default function Settings() {
     telegram_chat_id: "",
     telegram_token_set: false,
     telegram_events: {},
+    telegram_photo_enabled: false,
+    telegram_photo_events: {},
     spool_low_pct: 10,
     spool_low_min_g: 50,
     spool_low_max_g: 200,
@@ -296,6 +298,11 @@ export default function Settings() {
     ["humidity_high", t("Влажность выше порога")],
   ];
 
+  // К каким событиям можно приложить кадр с камеры — то же, что
+  // notifications.PHOTO_EVENTS на бэкенде. Подписи берём из TG_EVENTS.
+  const TG_PHOTO_KEYS = ["print_started", "print_finished", "print_error", "print_cancelled", "print_paused"];
+  const TG_PHOTO_EVENTS = TG_EVENTS.filter(([key]) => TG_PHOTO_KEYS.includes(key));
+
   async function saveTelegram(patch) {
     setMsg(null);
     setTgMsg(null);
@@ -317,6 +324,10 @@ export default function Settings() {
 
   function toggleEvent(key) {
     return (e) => saveTelegram({ telegram_events: { [key]: e.target.checked } });
+  }
+
+  function togglePhotoEvent(key) {
+    return (e) => saveTelegram({ telegram_photo_events: { [key]: e.target.checked } });
   }
 
   async function saveLow(values) {
@@ -829,6 +840,28 @@ export default function Settings() {
                       checked={!!s.telegram_events?.[key]}
                       onChange={toggleEvent(key)}
                       disabled={!s.telegram_enabled}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <div className="card-sub" style={{ marginBottom: 8 }}>{t("Снимок с камеры")}</div>
+              <Toggle
+                k="telegram_photo_enabled"
+                label={t("Прикладывать кадр с камеры принтера")}
+                hint={t("Кадр уходит вместе с сообщением: сначала картинка, под ней текст. Камера не ответила — придёт обычное сообщение. Адрес камеры берётся у Moonraker, а задать свой можно в карточке принтера («Принтеры» → Moonraker).")}
+              />
+              <div className="settings-checks">
+                {TG_PHOTO_EVENTS.map(([key, label]) => (
+                  <label key={key}>
+                    <input
+                      type="checkbox"
+                      style={{ width: "auto" }}
+                      checked={!!s.telegram_photo_events?.[key]}
+                      onChange={togglePhotoEvent(key)}
+                      disabled={!s.telegram_enabled || !s.telegram_photo_enabled}
                     />
                     {label}
                   </label>

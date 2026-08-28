@@ -86,7 +86,8 @@ and "Reset demo" puts everything back.
 ### Around the printer
 
 - **Telegram notifications** — print finished, error, paused, drying, spool running
-  low. Every event is toggled separately.
+  low. Every event is toggled separately, and print events can carry a frame from
+  the printer's camera.
 - **Home Assistant sensors** — temperature and humidity from your dryer and shelves,
   shown where they matter. Above the threshold, they light up and message you.
 - **Drying control** — on compatible hubs such as the Anycubic ACE, drying starts
@@ -323,6 +324,24 @@ zone is already offered in the list).
 A background poller watches the printer, so messages arrive even with the app closed.
 The token is stored encrypted and never handed back out. While the master switch is
 off, printers aren't polled for notifications at all.
+
+### Camera snapshot
+
+Print events can carry a frame from the printer's camera: the picture first, the
+notification text below it. A separate switch, **Attach a frame from the printer's
+camera**, turns it on, and the checkboxes next to it pick the events — started,
+finished, error, cancelled, paused.
+
+The app works out the snapshot address on its own: it asks Moonraker for its camera
+list (`/server/webcams/list`) and, if that comes back empty, tries the usual
+`/webcam/?action=snapshot` — both on Moonraker's port and on port 80, where nginx
+normally serves the camera. The address that works is remembered, so the search
+doesn't repeat every time. Your own address goes into "Printers" → **Moonraker** →
+**Printer camera**, where **Save and check** shows you what the camera sees. An
+`?action=stream` URL works too — the first frame is taken from it.
+
+If the camera doesn't answer, the notification still arrives, just without the
+picture.
 
 ---
 

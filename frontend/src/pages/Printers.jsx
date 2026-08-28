@@ -213,7 +213,17 @@ export default function Printers() {
           }}
         />
       )}
-      {mrPrinter && <MoonrakerPanel printer={mrPrinter} onClose={() => setMrPrinter(null)} />}
+      {mrPrinter && (
+        <MoonrakerPanel
+          printer={mrPrinter}
+          onClose={() => setMrPrinter(null)}
+          onSaved={(p) => {
+            setMrPrinter(p);
+            setPrinters((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+            if (selected?.id === p.id) setSelected(p);
+          }}
+        />
+      )}
       {costPrinter && (
         <CostParamsPanel
           printer={costPrinter}
@@ -343,7 +353,70 @@ function CostParamsPanel({ printer, onClose, onSaved }) {
   );
 }
 
-function MoonrakerPanel({ printer, onClose }) {
+// Камера принтера: адрес кадра для уведомлений в Telegram и проверка «та ли
+// это камера». Пустое поле — адрес определяется автоматически (у Moonraker
+// спрашивается список камер, дальше пробуется типовой путь mjpg-streamer).
+function CameraCard({ printer, onSaved }) {
+  const [url, setUrl] = useState(printer.camera_url || "");
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    setUrl(printer.camera_url || "");
+    setRes(null); setErr(null);
+  }, [printer.id]);
+
+  // Проверяем всегда сохранённый адрес — иначе кадр придёт не с той камеры,
+  // которую потом снимет уведомление.
+  async function checkCamera() {
+    setBusy(true); setErr(null); setRes(null);
+    try {
+      const saved = await api.patch(`/api/printers/${printer.id}`, { camera_url: url.trim() });
+      onSaved?.(saved);
+      setRes(await api.post(`/api/printers/${printer.id}/camera/test`));
+    } catch (e) { setErr(tServer(e.message)); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <h4 style={{ margin: "0 0 6px" }} className="inline-ico">
+        <Icon name="camera" /> {t("Камера принтера")}
+      </h4>
+      <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+        {t("Кадр с камеры прикладывается к уведомлениям в Telegram (включается в настройках). Оставьте поле пустым — адрес определится сам.")}
+      </div>
+      <label>{t("Адрес снимка")}</label>
+      <input
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="http://192.168.1.50/webcam/?action=snapshot"
+      />
+      <button className="secondary" onClick={checkCamera} disabled={busy} style={{ marginTop: 8 }}>
+        {busy ? t("Проверяем…") : t("Сохранить и проверить")}
+      </button>
+      {err && <div className="error">{err}</div>}
+      {res && (
+        <div style={{ marginTop: 10 }}>
+          <div className={res.ok ? "muted" : "error"} style={{ fontSize: 13 }}>
+            <Icon name={res.ok ? "check" : "alert"} size={14} /> {tServer(res.detail)}
+            {res.ok && res.url && !printer.camera_url ? ` · ${res.url}` : ""}
+          </div>
+          {res.data_url && (
+            <img
+              src={res.data_url}
+              alt={t("Кадр с камеры")}
+              style={{ marginTop: 8, maxWidth: "100%", borderRadius: 8, display: "block" }}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MoonrakerPanel({ printer, onClose, onSaved }) {
   const [conn, setConn] = useState(null);
   const [ov, setOv] = useState(null);
   const [jobs, setJobs] = useState(null);
@@ -458,6 +531,8 @@ function MoonrakerPanel({ printer, onClose }) {
       {ov?.dryer && (
         <DryerCard printer={printer} dryer={ov.dryer} onChanged={loadOverview} />
       )}
+
+      <CameraCard printer={printer} onSaved={onSaved} />
 
       {st && (
         <div className="card" style={{ marginTop: 12 }}>

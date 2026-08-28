@@ -319,6 +319,20 @@ def parse_light(devices: list | None) -> dict | None:
     return None
 
 
+def parse_webcams(payload: dict) -> list[dict]:
+    """Камеры из /server/webcams/list.
+
+    Moonraker знает о камерах только то, что ему прописали в конфиге; на старых
+    сборках (и на части прошивок вроде Rinkhals) эндпоинта нет вовсе — тогда
+    список пуст, и адрес снимка приходится угадывать (см. services/camera.py).
+    """
+    result = payload.get("result", payload) or {}
+    cams = result.get("webcams")
+    if not isinstance(cams, list):
+        return []
+    return [c for c in cams if isinstance(c, dict)]
+
+
 def detect_capabilities(gates: list | None, dryer: dict | None, *, online: bool = False) -> dict:
     """Возможности принтера, выведенные из живой телеметрии Moonraker.
 
@@ -718,6 +732,13 @@ class MoonrakerClient:
             return parse_light((r.get("result", r) or {}).get("devices"))
         except Exception:
             return None
+
+    def get_webcams(self) -> list[dict]:
+        """Камеры, о которых знает Moonraker; пустой список, если не знает."""
+        try:
+            return parse_webcams(self._get("/server/webcams/list"))
+        except Exception:
+            return []
 
     def _post(self, path: str, json_body: dict) -> dict:
         with httpx.Client(

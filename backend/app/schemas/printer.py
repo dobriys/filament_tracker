@@ -14,6 +14,8 @@ class PrinterBase(BaseModel):
     # общих настройках» (см. cost_service.resolve_rates).
     cost_params: dict | None = None
     moonraker_url: str | None = None
+    # Адрес кадра с камеры; пусто — определяется автоматически (services/camera.py).
+    camera_url: str | None = None
     is_active: bool = True
     notes: str | None = None
 
@@ -35,6 +37,8 @@ class PrinterUpdate(BaseModel):
     cost_params: dict | None = None
     moonraker_url: str | None = None
     moonraker_api_key: str | None = None
+    # Пустая строка — вернуться к автоопределению камеры.
+    camera_url: str | None = None
     is_active: bool | None = None
     notes: str | None = None
 
@@ -64,3 +68,12 @@ class PrinterPreset(BaseModel):
 class TestConnectionResult(BaseModel):
     ok: bool
     detail: str
+
+
+class CameraTestResult(BaseModel):
+    ok: bool
+    detail: str
+    # Кадр как data-URL — чтобы в форме сразу было видно, та ли это камера.
+    data_url: str | None = None
+    # Адрес, по которому кадр нашёлся (при автоопределении он не очевиден).
+    url: str | None = None

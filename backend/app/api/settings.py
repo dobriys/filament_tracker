@@ -28,6 +28,9 @@ class SettingsOut(BaseModel):
     # Сам токен наружу не отдаём — только признак, что он сохранён.
     telegram_token_set: bool
     telegram_events: dict[str, bool]
+    # Кадр с камеры к событиям печати: общий выключатель и набор событий.
+    telegram_photo_enabled: bool
+    telegram_photo_events: dict[str, bool]
     spool_low_pct: float
     spool_low_min_g: float
     spool_low_max_g: float
@@ -51,6 +54,8 @@ class SettingsUpdate(BaseModel):
     # Пустая строка — стереть сохранённый токен.
     telegram_bot_token: str | None = None
     telegram_events: dict[str, bool] | None = None
+    telegram_photo_enabled: bool | None = None
+    telegram_photo_events: dict[str, bool] | None = None
     spool_low_pct: float | None = None
     spool_low_min_g: float | None = None
     spool_low_max_g: float | None = None
@@ -76,6 +81,10 @@ def _current(db: Session) -> SettingsOut:
         telegram_chat_id=settings_service.get_value(db, notifications.CHAT_ID_KEY),
         telegram_token_set=bool(settings_service.get_value(db, notifications.TOKEN_KEY)),
         telegram_events=notifications.get_events(db),
+        telegram_photo_enabled=settings_service.get_bool(
+            db, notifications.PHOTO_ENABLED_KEY, default=False
+        ),
+        telegram_photo_events=notifications.get_photo_events(db),
         spool_low_pct=low["pct"],
         spool_low_min_g=low["min_g"],
         spool_low_max_g=low["max_g"],
@@ -147,6 +156,12 @@ def update_settings(
         notifications.set_token(db, data.telegram_bot_token.strip() or None)
     if data.telegram_events is not None:
         notifications.set_events(db, data.telegram_events)
+    if data.telegram_photo_enabled is not None:
+        settings_service.set_value(
+            db, notifications.PHOTO_ENABLED_KEY, data.telegram_photo_enabled
+        )
+    if data.telegram_photo_events is not None:
+        notifications.set_photo_events(db, data.telegram_photo_events)
     low_changed = False
     if data.spool_low_pct is not None:
         if not (0 <= data.spool_low_pct <= 100):

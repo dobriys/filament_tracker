@@ -185,7 +185,8 @@ def watch_printer(db: Session, printer: Printer) -> list[str]:
                 text += _finished_extra(db, printer, cur.get("filename"))
             except Exception as e:  # обогащение не должно мешать самому уведомлению
                 log.warning("finished extra %s failed: %s", printer.name, e)
-        if notifications.notify(db, event, text):
+        # printer — чтобы к событию печати приложился кадр с его камеры.
+        if notifications.notify(db, event, text, printer=printer):
             sent.append(event)
     settings_service.set_value(db, key, cur)
     return sent
