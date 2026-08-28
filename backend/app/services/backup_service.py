@@ -28,7 +28,7 @@ from app.models import (
     User,
 )
 from app.core.security import decrypt_secret, encrypt_secret
-from app.services import settings_service
+from app.services import cost_service, settings_service
 from app.services.spool_service import generate_qr_token
 
 EXPORT_VERSION = 2
@@ -392,6 +392,13 @@ def restore_backup(db: Session, user: User, data: dict) -> dict:
             brand=item.get("brand"),
             model=item.get("model"),
             capabilities=item.get("capabilities") or {},
+            # Тарифы принтера проверяем так же, как при создании через API:
+            # чужие ключи в JSONB не попадут, а числа останутся числами.
+            cost_params=(
+                cost_service.validate_params(item["cost_params"])
+                if item.get("cost_params")
+                else None
+            ),
             moonraker_url=item.get("moonraker_url"),
             camera_url=item.get("camera_url"),
             moonraker_api_key_encrypted=(
@@ -490,17 +497,19 @@ def restore_backup(db: Session, user: User, data: dict) -> dict:
         sid = spool_map.get(item.get("spool_id"))
         if jid is None or sid is None:
             continue
-        db.add(
-            PrintJobSpoolUsage(
-                print_job_id=jid,
-                spool_id=sid,
-                tool_index=item.get("tool_index"),
-                used_g=item.get("used_g") or 0,
-                used_mm=item.get("used_mm"),
-                confirmed_by_user_id=user.id,
-                confirmed_at=_parse_dt(item.get("confirmed_at")),
-            )
+        usage = PrintJobSpoolUsage(
+            print_job_id=jid,
+            spool_id=sid,
+            tool_index=item.get("tool_index"),
+            used_g=item.get("used_g") or 0,
+            used_mm=item.get("used_mm"),
+            confirmed_by_user_id=user.id,
+            confirmed_at=_parse_dt(item.get("confirmed_at")),
         )
+        created = _parse_dt(item.get("created_at"))
+        if created:
+            usage.created_at = created
+        db.add(usage)
 
     # Расчёты стоимости. Итоги и тарифы в них заморожены, поэтому переносим как
     # есть, ничего не пересчитывая: цифры должны совпасть с исходной копией.
