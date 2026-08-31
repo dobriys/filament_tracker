@@ -93,6 +93,7 @@ export default function Settings() {
   const [logFilter, setLogFilter] = useState({ level: "", source: "", q: "" });
   const [msg, setMsg] = useState(null);
   const [serverVersion, setServerVersion] = useState(null);
+  const [updateInfo, setUpdateInfo] = useState(null);
   const [spoolmanUrl, setSpoolmanUrl] = useState("");
   const [spoolmanBusy, setSpoolmanBusy] = useState(false);
   const [catalogInfo, setCatalogInfo] = useState(null);
@@ -152,6 +153,7 @@ export default function Settings() {
       setHaSensors(v.ha_sensors || []);
     }).catch(() => {});
     api.get("/health").then((h) => setServerVersion(h.version)).catch(() => {});
+    api.get("/api/updates/latest").then(setUpdateInfo).catch(() => {});
     api.get("/api/filament-catalog/info").then(setCatalogInfo).catch(() => {});
     // Для выпадающих списков привязки датчика.
     api.get("/api/printers").then(setPrinters).catch(() => {});
@@ -1256,6 +1258,11 @@ export default function Settings() {
           <div className="muted settings-version">
             Filament Tracker · {t("интерфейс")} <span className="mono">{window.__FT_CONFIG__?.version || "dev"}</span>
             {serverVersion && <> · {t("сервер")} <span className="mono">{serverVersion}</span></>}
+            {updateInfo?.update_available && (
+              <> · <a className="update-badge" href={updateInfo.release_url} target="_blank" rel="noreferrer">
+                {t("доступна новая версия")} <span className="mono">{updateInfo.latest_version}</span>
+              </a></>
+            )}
           </div>
         </div>
       </div>

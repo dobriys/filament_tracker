@@ -1577,6 +1577,27 @@ tr.slot-off > td { opacity: 0.55; }
 }
 .demo-banner-reset:hover { background: var(--panel); border-color: var(--muted-2); }
 
+.update-toast {
+  position: fixed; top: 16px; right: 16px; z-index: 60;
+  display: flex; align-items: center; gap: 12px;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 10px 12px; border-radius: var(--radius);
+  background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow);
+  font-size: var(--fs-3);
+}
+.update-toast-text { flex: 1 1 auto; }
+.update-toast-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.update-toast-link { color: var(--accent); text-decoration: underline; white-space: nowrap; font-size: var(--fs-3); }
+.update-toast-link:hover { color: var(--text); }
+.update-toast-close {
+  min-height: 0; padding: 0 6px; line-height: 1; font-size: var(--fs-5);
+  background: transparent; border: none; color: var(--muted); cursor: pointer;
+}
+.update-toast-close:hover { color: var(--text); }
+
+.update-badge { color: var(--accent); text-decoration: underline; }
+.update-badge:hover { color: var(--text); }
+
 
 /* Датчики температуры и влажности (Home Assistant). Плашка живёт в трёх местах
    — на панели, под карточкой принтера и в таблице мест хранения, — поэтому

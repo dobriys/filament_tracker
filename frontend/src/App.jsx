@@ -20,6 +20,7 @@ import { getTheme, setTheme } from "./theme.js";
 import { api } from "./api/client.js";
 import { useEffect, useRef, useState } from "react";
 import Icon from "./components/Icon.jsx";
+import UpdateToast from "./components/UpdateToast.jsx";
 import { setLowConfig } from "./utils/spools.js";
 
 // Логотип сайта — иконка катушки (бывший SpoolThumb): кольцо с отверстием.
@@ -133,6 +134,7 @@ function Layout({ children }) {
   const closeMore = () => setMoreOpen(false);
   return (
     <div className="app-shell">
+      <UpdateToast />
       {/* Десктопная шапка */}
       <header className="topnav">
         <div className="topnav-inner">
