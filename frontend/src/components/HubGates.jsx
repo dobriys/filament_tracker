@@ -99,6 +99,9 @@ export function GateChips({ gates, selected = null, onSelect }) {
             <span className={`gate-verdict ${v.cls}`}>{v.icon}</span>
             <div className="gate-tile-swatch" style={{ background: g.occupied ? g.color_hex : "var(--panel-2)" }} />
             <div className="gate-tile-cap">{g.slot_index}: {g.occupied ? (g.material || "—") : t("пусто")}</div>
+            {g.spool?.current_weight_g != null && (
+              <div className="gate-tile-g mono">{Math.round(g.spool.current_weight_g)} {t("г")}</div>
+            )}
           </div>
         );
       })}
@@ -182,7 +185,7 @@ export function GateEditor({ printer, gate: g, onChanged, onClose }) {
 
   const v = VERDICT[g.verdict] || VERDICT.empty;
   const bound = g.spool;
-  const grams = bound ? spools?.find((x) => x.id === bound.id)?.current_weight_g : null;
+  const grams = bound?.current_weight_g;
   // Забыли снять катушку из пустого слота — это единственное, что тут надо сделать.
   const forgotten = g.verdict === "mismatch" && !g.occupied;
 

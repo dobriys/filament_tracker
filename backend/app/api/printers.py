@@ -426,6 +426,9 @@ def printer_overview(
                 "material": spool.material,
                 "color_hex": spool.color_hex,
                 "color_name": spool.color_name,
+                "current_weight_g": float(spool.current_weight_g)
+                if spool.current_weight_g is not None
+                else None,
             }
             if spool
             else None

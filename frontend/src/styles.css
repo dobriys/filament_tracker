@@ -1110,6 +1110,8 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
   border: 1px solid var(--border);
 }
 .gate-tile-cap { font-size: var(--fs-1); font-weight: 600; white-space: nowrap; }
+/* Остаток привязанной катушки — под подписью слота. */
+.gate-tile-g { font-size: var(--fs-1); color: var(--muted); margin-top: 2px; white-space: nowrap; }
 .gate-tile .gate-verdict { position: absolute; top: 4px; right: 6px; font-size: var(--fs-1); }
 .gate-tile.pickable { cursor: pointer; transition: border-color 0.12s, background 0.12s; }
 .gate-tile.pickable:hover { border-color: var(--muted-2); }

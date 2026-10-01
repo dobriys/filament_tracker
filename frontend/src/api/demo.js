@@ -490,7 +490,7 @@ function gatesFor(printer) {
     gates.push({
       gate: i, slot_index: i + 1, slot_id: slot?.id || null, occupied,
       material: phys?.material || null, color_hex: phys?.color_hex || null, temp: occupied ? 26 : null,
-      spool: sp ? { id: sp.id, label: sp.label, material: sp.material, color_hex: sp.color_hex, color_name: sp.color_name } : null,
+      spool: sp ? { id: sp.id, label: sp.label, material: sp.material, color_hex: sp.color_hex, color_name: sp.color_name, current_weight_g: sp.current_weight_g } : null,
       verdict,
     });
   }

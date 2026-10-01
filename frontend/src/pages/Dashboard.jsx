@@ -406,7 +406,15 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
 
   const loadJob = () =>
     api.get(`/api/printers/${printer.id}/moonraker-jobs?limit=1`)
-      .then((j) => { jobRef.current = j[0] || null; setJob(jobRef.current); })
+      .then((j) => {
+        const was = jobRef.current;
+        jobRef.current = j[0] || null;
+        setJob(jobRef.current);
+        // Печать только что списалась (авто-списание отработало в фоне) — остатки
+        // катушек в слотах уже другие, не ждём минутного тика.
+        const nowConsumed = jobRef.current?.consumed;
+        if (was && nowConsumed && !(was.job_id === jobRef.current.job_id && was.consumed)) loadOverview();
+      })
       .catch(() => {});
 
   useEffect(() => {
