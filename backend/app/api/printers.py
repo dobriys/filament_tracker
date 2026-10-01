@@ -415,6 +415,10 @@ def printer_overview(
     for g in hub["gates"]:
         slot = slots.get(g["slot_index"])
         spool = db.get(Spool, slot.current_spool_id) if slot and slot.current_spool_id else None
+        # id слота нужен панели, чтобы привязать/снять катушку, не заходя в
+        # «Принтеры». Записи может и не быть (хаб больше, чем заведено слотов) —
+        # тогда панель сначала создаст её.
+        g["slot_id"] = str(slot.id) if slot else None
         g["spool"] = (
             {
                 "id": str(spool.id),

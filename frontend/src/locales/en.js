@@ -951,4 +951,10 @@ export const EN = {
   "Ваш тариф из квитанции. Из него и мощности получается цена электричества за час печати.": "Your tariff from the utility bill. Together with the power draw it gives the electricity cost per hour of printing.",
   "Множитель на непредвиденное: брак и перепечатки, внеплановый ремонт, подорожание. 1.3 значит «прибавить 30 % сверху»; 1 — считать без запаса.": "A multiplier for the unexpected: failed prints and reprints, unplanned repairs, rising prices. 1.3 means “add 30% on top”; 1 means no buffer at all.",
   "Если вы уже знаете, во сколько обходится час, впишите его сюда — и расчёт по цене, сроку и загрузке применяться не будет.": "If you already know what an hour costs you, enter it here — the calculation from price, service life and utilisation will then be skipped.",
+  "Слот пуст, а катушка всё ещё привязана": "The slot is empty, but a spool is still assigned",
+  "нажмите, чтобы привязать или снять катушку": "click to assign or remove a spool",
+  "Принтер видит": "Printer sees",
+  "Привязана": "Assigned",
+  "— заменить катушку —": "— replace spool —",
+  "— привязать катушку —": "— assign a spool —",
 };

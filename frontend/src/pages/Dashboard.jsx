@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { api } from "../api/client.js";
 import { fmtMoney } from "../format.js";
 import { t, tReason } from "../i18n.js";
-import { GateChips } from "../components/HubGates.jsx";
+import { GateChips, GateEditor } from "../components/HubGates.jsx";
 import { PrinterArt, brandAccent } from "../components/PrinterArt.jsx";
 import EnvSensor, { useEnvSensors } from "../components/EnvSensor.jsx";
 import FeedChangeBanner from "../components/FeedChangeBanner.jsx";
@@ -368,6 +368,7 @@ function DryerControls({ printer, dryer, onChanged, row = false }) {
 function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax }) {
   const [status, setStatus] = useState(null);
   const [gates, setGates] = useState([]);
+  const [gateSel, setGateSel] = useState(null); // номер гейта, у которого открыта привязка катушки
   const [directSlot, setDirectSlot] = useState(null); // слот прямой подачи (без MMU)
   const [feedChange, setFeedChange] = useState(null); // подача сменилась, катушки не подтверждены
   const [dryer, setDryer] = useState(null);
@@ -563,6 +564,8 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
   const mmuTitle = caps.mmu_name ? `${t("Слоты")} ${caps.mmu_name}` : t("Слоты мультиподачи");
   // Прямая подача: вместо гейтов показываем единственную катушку с держателя.
   const showDirect = !hasMmu && !!directSlot;
+  // Гейт мог исчезнуть из сводки (хаб сняли), пока был открыт — тогда редактор просто не рисуем.
+  const selGate = gates.find((g) => g.gate === gateSel);
   const accent = brandAccent(printer.brand);
 
   return (
@@ -719,7 +722,19 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
                 {hasMmu && (
                   <>
                     <div className="zone-title">{mmuTitle}</div>
-                    <GateChips gates={gates} />
+                    <GateChips
+                      gates={gates}
+                      selected={gateSel}
+                      onSelect={(n) => setGateSel((cur) => (cur === n ? null : n))}
+                    />
+                    {selGate && (
+                      <GateEditor
+                        printer={printer}
+                        gate={selGate}
+                        onChanged={loadOverview}
+                        onClose={() => setGateSel(null)}
+                      />
+                    )}
                   </>
                 )}
                 {showDirect && (

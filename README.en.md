@@ -155,9 +155,10 @@ Klipper/Moonraker printer works, Anycubic on Rinkhals included: you only see wha
 printer actually has.
 
 The printer panel reconciles what sits in the slots against what's assigned in the
-app, shows telemetry and lifetime stats, and deducts finished jobs with the button
-next to them. Deducted jobs are marked and won't be counted twice. There's no limit on
-how many printers you add.
+app — and lets you assign or remove a spool right there: click a slot tile, no need to
+visit My spools. It also shows telemetry and lifetime stats, and deducts finished jobs
+with the button next to them. Deducted jobs are marked and won't be counted twice.
+There's no limit on how many printers you add.
 
 ![Printers and Moonraker](docs/screenshots/en/printers.png)
 

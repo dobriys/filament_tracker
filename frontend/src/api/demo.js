@@ -234,6 +234,15 @@ function seed() {
     // демо-состояние живого принтера
     _print: { startedAt: Date.now() - 22 * 60000, totalSec: 95 * 60, file: "bracket_v3_PLA_0.2mm.gcode" },
     _dryer: { unit: 0, status: "stop", temp: 24, target_temp: 0, remaining_min: 0, duration_min: 0, humidity: 18 },
+    // Что принтер видит в гейтах ACE — отдельно от привязки катушек в приложении,
+    // как у настоящего хаба. В четвёртом филамент заправлен, а катушка не
+    // привязана: на плитке виден значок «+», и её можно привязать прямо там.
+    _gates: [
+      { material: "PLA", color_hex: "#1a1a1a" },
+      { material: "PLA", color_hex: "#f4f4f4" },
+      { material: "PETG", color_hex: "#1d5fd6" },
+      { material: "PLA", color_hex: "#f6811f" },
+    ],
   };
   const pManual = {
     id: "pr-prusa", owner_user_id: USER.id, name: "Prusa MK4", integration_type: "manual",
@@ -460,6 +469,9 @@ function liveStatus(printer) {
 // Режимы подачи филамента — как на бэке (app/services/feed_mode.py).
 const FEED_MODES = ["auto", "mmu", "direct"];
 
+// Базовый материал: «PLA+», «PLA-CF» и «PLA» для сверки — один и тот же.
+const baseMaterial = (m) => (m || "").toUpperCase().split(/[^A-Z0-9]/)[0];
+
 function gatesFor(printer) {
   const slots = db.slots.filter((s) => s.printer_id === printer.id);
   const byIndex = Object.fromEntries(slots.map((s) => [s.slot_index, s]));
@@ -468,12 +480,18 @@ function gatesFor(printer) {
   for (let i = 0; i < n; i++) {
     const slot = byIndex[i + 1];
     const sp = slot?.current_spool_id ? db.spools.find((x) => x.id === slot.current_spool_id) : null;
-    const occupied = !!sp;
+    // Старое сохранённое демо не знает про _gates — тогда железо повторяет привязку.
+    const phys = printer._gates ? printer._gates[i] || null : sp ? { material: sp.material, color_hex: sp.color_hex } : null;
+    const occupied = !!phys;
+    // Вердикт — как match_gate на бэке (без разбора оттенков).
+    const verdict = !occupied ? (sp ? "mismatch" : "empty")
+      : !sp ? "unassigned"
+      : baseMaterial(phys.material) === baseMaterial(sp.material) ? "match" : "mismatch";
     gates.push({
-      gate: i, slot_index: i + 1, occupied,
-      material: sp?.material || null, color_hex: sp?.color_hex || null, temp: occupied ? 26 : null,
+      gate: i, slot_index: i + 1, slot_id: slot?.id || null, occupied,
+      material: phys?.material || null, color_hex: phys?.color_hex || null, temp: occupied ? 26 : null,
       spool: sp ? { id: sp.id, label: sp.label, material: sp.material, color_hex: sp.color_hex, color_name: sp.color_name } : null,
-      verdict: occupied ? "match" : "empty",
+      verdict,
     });
   }
   return gates;

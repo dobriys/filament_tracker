@@ -14,6 +14,7 @@ export default function SpoolPicker({
   profiles = [],
   locations = [],
   occupied = {}, // spool_id -> «Принтер / Slot 2»
+  preferMaterial = "", // материал, который принтер видит в слоте, — такие катушки выше
   value = null,
   disabled = false,
   placeholder = t("— выбрать катушку —"),
@@ -30,18 +31,27 @@ export default function SpoolPicker({
   const menuRef = useRef(null);
 
   const items = useMemo(() => {
+    // «PLA+», «PLA-CF» и «PLA» — один материал: сравниваем по первому слову.
+    const base = (m) => (m || "").toUpperCase().split(/[^A-Z0-9]/)[0];
+    const want = base(preferMaterial);
     return spools
       .filter((s) => s.status !== "archived")
       .map((s) => ({ s, e: enrichSpool(s, { profiles, locations }) }))
-      // Свободные катушки выше занятых, дальше по материалу и названию.
+      // Свободные катушки выше занятых, подходящие слоту — выше прочих,
+      // дальше по материалу и названию.
       .sort((a, b) => {
         const oa = occupied[a.s.id] ? 1 : 0;
         const ob = occupied[b.s.id] ? 1 : 0;
         if (oa !== ob) return oa - ob;
+        if (want) {
+          const ma = base(a.e.material) === want ? 0 : 1;
+          const mb = base(b.e.material) === want ? 0 : 1;
+          if (ma !== mb) return ma - mb;
+        }
         return (a.e.material || "").localeCompare(b.e.material || "") ||
           a.e.title.localeCompare(b.e.title);
       });
-  }, [spools, profiles, locations, occupied]);
+  }, [spools, profiles, locations, occupied, preferMaterial]);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();

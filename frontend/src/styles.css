@@ -1111,6 +1111,30 @@ label { display: block; font-size: var(--fs-2); font-weight: 600; color: var(--m
 }
 .gate-tile-cap { font-size: var(--fs-1); font-weight: 600; white-space: nowrap; }
 .gate-tile .gate-verdict { position: absolute; top: 4px; right: 6px; font-size: var(--fs-1); }
+.gate-tile.pickable { cursor: pointer; transition: border-color 0.12s, background 0.12s; }
+.gate-tile.pickable:hover { border-color: var(--muted-2); }
+.gate-tile.pickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gate-tile.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel-2)); }
+
+/* Привязка катушки под плитками слотов: что видит принтер, что привязано, чем заменить. */
+.gate-editor {
+  margin-top: 12px; padding: 12px 14px; min-width: 0;
+  border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--panel-2);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.gate-editor-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.gate-editor-note { flex: 1; min-width: 0; font-size: var(--fs-2); }
+.gate-editor-note.warn { color: var(--danger); }
+.gate-editor-close { margin-left: auto; padding: 2px 9px; min-height: 0; line-height: 1.2; }
+.gate-editor-rows {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 14px; align-items: center; font-size: var(--fs-2);
+}
+.gate-editor-val { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; min-width: 0; }
+/* Название катушки переносится, а не обрезается: в узкой колонке «Белый · P…» ни о чём не говорит. */
+.gate-editor-spool { flex: 1 1 110px; min-width: 0; overflow-wrap: anywhere; }
+.gate-editor-val > button { margin-left: auto; padding: 4px 12px; min-height: 0; }
+.gate-editor .spool-picker-btn { min-width: 0; }
 
 /* --- Режим подачи филамента и выключенные слоты --- */
 .feed-mode {
