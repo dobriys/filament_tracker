@@ -6,7 +6,9 @@ import { AuthProvider } from "./api/auth.jsx";
 import { api } from "./api/client.js";
 import { DEMO } from "./api/demo.js";
 import DemoBanner from "./components/DemoBanner.jsx";
-import "./styles.css";
+import { RouteProvider } from "./providers/router-provider.jsx";
+import "@fontsource-variable/inter";
+import "./index.css";
 
 // Глобальный перехват ошибок браузера → диагностический журнал (если включён).
 // Бэкенд решает, сохранять ли; клиент просто сообщает.
@@ -35,10 +37,12 @@ const Router = DEMO ? HashRouter : BrowserRouter;
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <Router>
-      <AuthProvider>
-        <DemoBanner />
-        <App />
-      </AuthProvider>
+      <RouteProvider>
+        <AuthProvider>
+          <DemoBanner />
+          <App />
+        </AuthProvider>
+      </RouteProvider>
     </Router>
   </React.StrictMode>
 );

@@ -1,3 +1,5 @@
+import { Link as AriaLink } from "react-aria-components";
+import { Button } from "@/components/base/buttons/button";
 import { DEMO, resetDemo } from "../api/demo.js";
 import { t } from "../i18n.js";
 
@@ -5,24 +7,24 @@ import { t } from "../i18n.js";
 export default function DemoBanner() {
   if (!DEMO) return null;
   return (
-    <div className="demo-banner">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b-2 border-utility-orange-500 bg-tertiary px-4 py-1.5 text-sm text-primary">
       {/* Точка внутри текстового блока: иначе на узком экране она переносится
           на отдельную строку и висит сама по себе. */}
-      <span className="demo-banner-text">
-        <span className="demo-banner-dot" aria-hidden="true">●</span>
-        <b>{t("Демо")}</b> — {t("данные живут только в этом браузере и не сохраняются на сервере.")}
+      <span className="min-w-52 flex-1">
+        <span className="mr-1.5 animate-pulse text-xs text-utility-orange-500" aria-hidden="true">●</span>
+        <b className="font-bold">{t("Демо")}</b> — {t("данные живут только в этом браузере и не сохраняются на сервере.")}
       </span>
-      <a
-        className="demo-banner-link"
+      <AriaLink
         href="https://github.com/dobriys/filament_tracker"
         target="_blank"
         rel="noreferrer"
+        className="cursor-pointer rounded-sm text-xs whitespace-nowrap text-tertiary underline outline-focus-ring hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         GitHub ↗
-      </a>
-      <button className="demo-banner-reset" onClick={() => resetDemo()}>
+      </AriaLink>
+      <Button size="sm" color="secondary" onClick={() => resetDemo()}>
         {t("Сбросить демо")}
-      </button>
+      </Button>
     </div>
   );
 }

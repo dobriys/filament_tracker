@@ -1,0 +1,21 @@
+/* Тема трекера поверх Untitled UI: бирюзовый вместо фиолетового, шрифт Inter.
+   Бирюза взята из прежнего акцента (#00615c): единственный цвет интерфейса,
+   всё остальное нейтральное, поэтому цвет катушки видно с одного взгляда. */
+:root {
+    --font-inter: "Inter Variable";
+}
+
+@theme {
+    --color-brand-25: rgb(244 251 250);
+    --color-brand-50: rgb(234 246 245);
+    --color-brand-100: rgb(211 236 234);
+    --color-brand-200: rgb(169 217 213);
+    --color-brand-300: rgb(117 192 186);
+    --color-brand-400: rgb(62 163 156);
+    --color-brand-500: rgb(11 122 115);
+    --color-brand-600: rgb(0 97 92);
+    --color-brand-700: rgb(0 80 75);
+    --color-brand-800: rgb(0 68 63);
+    --color-brand-900: rgb(0 51 48);
+    --color-brand-950: rgb(0 34 32);
+}

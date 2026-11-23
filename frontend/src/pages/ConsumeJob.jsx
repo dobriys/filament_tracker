@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { Link as AriaLink } from "react-aria-components";
+import { Table, TableCard } from "@/components/application/table/table";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { Checkbox } from "@/components/base/checkbox/checkbox";
+import { Card, CardHeader, PageHeader, PageLoading, SpoolSwatch } from "../components/ft/ui.jsx";
+import { NONE, Pick } from "../components/ft/form.jsx";
+import { Notice } from "../components/ft/printer.jsx";
 import { api } from "../api/client.js";
 import { t, tServer } from "../i18n.js";
 import { slotLabel } from "../utils/slots.js";
-
-const Swatch = ({ hex, size = 13 }) => (
-  <span style={{ display: "inline-block", width: size, height: size, borderRadius: 3, background: hex || "#666", border: "1px solid var(--border)", verticalAlign: "middle" }} />
-);
 
 // Плотность (г/см³) для оценки веса по длине — должна совпадать с backend.
 const DENSITY = { PLA: 1.24, "PLA+": 1.24, PETG: 1.27, PET: 1.27, ABS: 1.04, ASA: 1.07, TPU: 1.21, TPE: 1.21, PC: 1.20, NYLON: 1.14, PA: 1.14, HIPS: 1.04, PVA: 1.23, PP: 0.90 };
@@ -17,6 +21,9 @@ function estimateGrams(mm, spool) {
   const dens = DENSITY[mat] || DENSITY[mat.replace(/\+$/, "")] || 1.24;
   return Math.PI * (d / 2) ** 2 * Number(mm) / 1000 * dens;
 }
+
+const linkClass =
+  "inline-flex cursor-pointer items-center gap-2 rounded-sm text-sm font-medium text-primary outline-focus-ring hover:text-brand-secondary focus-visible:outline-2 focus-visible:outline-offset-2";
 
 // Списание печати: сопоставление Tool → катушка из инвентаря и подтверждение.
 export default function ConsumeJob() {
@@ -75,113 +82,149 @@ export default function ConsumeJob() {
     setBusy(false);
   }
 
-  if (!job) return <div>{t("Загрузка…")}</div>;
+  if (!job) return <PageLoading />;
+
+  const crumbs = (last) => [{ label: t("История печати"), href: "/print-jobs" }, { label: last }];
 
   if (result) {
     return (
       <div>
-        <Link to="/print-jobs">{t("← История печати")}</Link>
-        <div className="card" style={{ borderColor: "var(--ok)", marginTop: 8 }}>
-          <h3>{t("✓ Списано —")}{" "}{result.file_name}</h3>
-          <table>
-            <thead><tr><th>{t("Катушка")}</th><th>{t("Списано, г")}</th></tr></thead>
-            <tbody>
-              {result.spool_usage.map((u) => {
+        <PageHeader breadcrumbs={crumbs(t("Списание печати"))} title={`${t("✓ Списано —")} ${result.file_name}`} />
+        <TableCard.Root>
+          <Table size="sm" aria-label={t("Фактическое списание")}>
+            <Table.Header>
+              <Table.Head id="spool" isRowHeader label={t("Катушка")} className="w-full" />
+              <Table.Head id="used" label={t("Списано, г")} className="px-3" />
+            </Table.Header>
+            <Table.Body items={result.spool_usage}>
+              {(u) => {
                 const sp = spoolById(u.spool_id);
-                return <tr key={u.id}><td>{sp ? <Link to={`/spools/${u.spool_id}`}><Swatch hex={sp.color_hex} /> {sp.label || t("Без метки")}</Link> : u.spool_id?.slice(0, 8)}</td><td>{Number(u.used_g).toFixed(2)}</td></tr>;
-              })}
-            </tbody>
-          </table>
-        </div>
+                return (
+                  <Table.Row id={u.id}>
+                    <Table.Cell>
+                      {sp ? (
+                        <AriaLink href={`/spools/${u.spool_id}`} className={linkClass}>
+                          <SpoolSwatch color={sp.color_hex} size="sm" />
+                          {sp.label || t("Без метки")}
+                        </AriaLink>
+                      ) : (
+                        <span className="text-sm text-tertiary">{u.spool_id?.slice(0, 8)}</span>
+                      )}
+                    </Table.Cell>
+                    <Table.Cell className="px-3 tabular-nums">{Number(u.used_g).toFixed(2)}</Table.Cell>
+                  </Table.Row>
+                );
+              }}
+            </Table.Body>
+          </Table>
+        </TableCard.Root>
       </div>
     );
   }
 
+  const total = job.total_filament_used_g != null
+    ? `${Number(job.total_filament_used_g).toFixed(2)} ${t("г")}`
+    : job.total_filament_used_mm > 0
+      ? `${(Number(job.total_filament_used_mm) / 1000).toFixed(2)} ${t("м")}`
+      : "—";
+
+  const spoolItems = [
+    { id: NONE, label: "—" },
+    ...spools.map((s) => ({
+      id: s.id,
+      label: `${s.label || t("Без метки")}${s.material ? ` · ${s.material}` : ""}${s.color_name ? ` · ${s.color_name}` : ""} · ${Number(s.current_weight_g).toFixed(0)} ${t("г")}${slotMap[s.id] ? ` · [${slotMap[s.id]}]` : ""}`,
+    })),
+  ];
+
   return (
     <div>
-      <Link to="/print-jobs">{t("← История печати")}</Link>
-      <h2 style={{ margin: "6px 0 4px" }}>{t("Списание печати")}</h2>
-      <div className="muted" style={{ marginBottom: 16 }}>
-        {job.file_name} · {job.slicer_name || "?"}{" "}{t("· всего")}{" "}
-        {job.total_filament_used_g != null
-          ? `${Number(job.total_filament_used_g).toFixed(2)} ${t("г")}`
-          : job.total_filament_used_mm > 0
-            ? `${(Number(job.total_filament_used_mm) / 1000).toFixed(2)} ${t("м")}`
-            : "—"}
-      </div>
-      {error && <div className="error" style={{ marginBottom: 12 }}>{error}</div>}
+      <PageHeader
+        breadcrumbs={crumbs(t("Списание печати"))}
+        title={t("Списание печати")}
+        subtitle={`${job.file_name} · ${job.slicer_name || "?"} ${t("· всего")} ${total}`}
+      />
+      {error && <Notice tone="error" className="mb-6" onClose={() => setError(null)}>{error}</Notice>}
 
-      <div className="card">
-        <h3 className="card-title">{t("Какой катушкой печатался каждый инструмент")}</h3>
-        <div className="card-sub">{t("Слева — что в печати, справа — катушка из инвентаря.")}</div>
-        <table style={{ marginTop: 10 }}>
-          <thead><tr><th>{t("Инструмент")}</th><th>{t("Расход")}</th><th style={{ width: 30, textAlign: "center" }}>→</th><th>{t("Катушка из инвентаря")}</th></tr></thead>
-          <tbody>
-            {job.tools.map((tool) => {
-              const grams = Number(tool.used_g) || 0;
-              const mm = Number(tool.used_mm) || 0;
-              const unused = grams <= 0 && mm <= 0;
-              const byLength = grams <= 0 && mm > 0;
-              const sp = spoolById(mapping[tool.tool_index]);
-              const est = byLength ? estimateGrams(mm, sp) : null;
-              return (
-                <tr key={tool.id}>
-                  <td>
-                    <strong>Tool {tool.tool_index}</strong>
-                    <div className="muted" style={{ fontSize: 13 }}><Swatch hex={tool.color_hex} /> {tool.material || "—"} {tool.color_hex || ""}</div>
-                  </td>
-                  <td>{unused ? <span className="muted">{t("не используется")}</span>
+      <Card>
+        <CardHeader
+          title={t("Какой катушкой печатался каждый инструмент")}
+          description={t("Слева — что в печати, справа — катушка из инвентаря.")}
+        />
+        <div className="hidden grid-cols-[200px_160px_minmax(0,1fr)] gap-4 border-b border-secondary px-5 py-2.5 text-xs font-medium text-tertiary md:grid">
+          <span>{t("Инструмент")}</span>
+          <span>{t("Расход")}</span>
+          <span>{t("Катушка из инвентаря")}</span>
+        </div>
+        <div className="divide-y divide-secondary">
+          {job.tools.map((tool) => {
+            const grams = Number(tool.used_g) || 0;
+            const mm = Number(tool.used_mm) || 0;
+            const unused = grams <= 0 && mm <= 0;
+            const byLength = grams <= 0 && mm > 0;
+            const sp = spoolById(mapping[tool.tool_index]);
+            const est = byLength ? estimateGrams(mm, sp) : null;
+            return (
+              <div key={tool.id} className="grid grid-cols-1 gap-3 p-5 md:grid-cols-[200px_160px_minmax(0,1fr)] md:gap-4">
+                <div className="min-w-0">
+                  <p className="m-0 text-sm font-semibold text-primary">Tool {tool.tool_index}</p>
+                  <p className="m-0 mt-1 flex items-center gap-2 text-sm text-tertiary">
+                    <SpoolSwatch color={tool.color_hex} size="sm" />
+                    <span className="truncate">{tool.material || "—"} {tool.color_hex || ""}</span>
+                  </p>
+                </div>
+                <div className="text-sm text-primary tabular-nums md:pt-0.5">
+                  {unused ? <span className="text-tertiary">{t("не используется")}</span>
                     : byLength
                       ? <span title={t("Слайсер не дал вес — оценка по длине и выбранной катушке")}>
                           {est != null ? `≈ ${est.toFixed(1)} ${t("г")}` : "≈ ?"}{" "}
-                          <span className="muted">({(mm / 1000).toFixed(2)} {t("м")})</span>
+                          <span className="text-tertiary">({(mm / 1000).toFixed(2)} {t("м")})</span>
                         </span>
-                      : `${grams.toFixed(2)} ${t("г")}`}</td>
-                  <td style={{ textAlign: "center", color: "var(--muted)" }}>→</td>
-                  <td>
-                    <select value={mapping[tool.tool_index] || ""} disabled={unused} style={{ minWidth: 280 }}
-                      onChange={(e) => setMapping({ ...mapping, [tool.tool_index]: e.target.value })}>
-                      <option value="">{unused ? "—" : t("— выбрать катушку —")}</option>
-                      {spools.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {(s.label || t("Без метки"))}{s.material ? ` · ${s.material}` : ""}{s.color_name ? ` · ${s.color_name}` : ""} · {Number(s.current_weight_g).toFixed(0)} {t("г")}{slotMap[s.id] ? ` · [${slotMap[s.id]}]` : ""}
-                        </option>
-                      ))}
-                    </select>
-                    {sp && (
-                      <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-                        <Swatch hex={sp.color_hex} size={16} />
-                        <strong>{sp.label || t("Без метки")}</strong>
-                        <span className="muted">{[sp.material, sp.color_name].filter(Boolean).join(" · ")}</span>
-                        <span className="muted">· {Number(sp.current_weight_g).toFixed(0)}{" "}{t("г")}</span>
-                        {slotMap[sp.id] && <span className="badge in_use">{slotMap[sp.id]}</span>}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-
-        <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14 }}>
-          <input type="checkbox" style={{ width: "auto" }} checked={allowNegative} onChange={(e) => setAllowNegative(e.target.checked)} />
-          {t("Разрешить списание в минус (если не хватает остатка)")}
-        </label>
-        <button style={{ marginTop: 12 }} onClick={confirm} disabled={busy}>{t("Подтвердить списание")}</button>
-
-        {problems && (
-          <div className="card" style={{ marginTop: 12, borderColor: "var(--danger)" }}>
-            <strong>{t("Нельзя списать:")}</strong>
-            {problems.map((p, i) => (
-              <div key={i} className="error">
-                {p.tool_index != null ? `Tool ${p.tool_index}: ` : ""}{tServer(p.detail)}
-                {p.needed_g != null && ` ${t("(нужно")} ${p.needed_g} ${t("г, есть")} ${p.available_g} ${t("г)")}`}
+                      : `${grams.toFixed(2)} ${t("г")}`}
+                </div>
+                <div className="flex min-w-0 flex-col gap-2">
+                  <Pick
+                    label={t("Катушка из инвентаря")}
+                    className="md:**:data-label:hidden"
+                    placeholder={unused ? "—" : t("— выбрать катушку —")}
+                    isDisabled={unused}
+                    value={mapping[tool.tool_index] || NONE}
+                    onChange={(k) => setMapping({ ...mapping, [tool.tool_index]: k === NONE ? "" : k })}
+                    items={spoolItems}
+                  />
+                  {sp && (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                      <SpoolSwatch color={sp.color_hex} size="sm" />
+                      <span className="font-semibold text-primary">{sp.label || t("Без метки")}</span>
+                      <span className="text-tertiary">{[sp.material, sp.color_name].filter(Boolean).join(" · ")}</span>
+                      <span className="text-tertiary">· {Number(sp.current_weight_g).toFixed(0)} {t("г")}</span>
+                      {slotMap[sp.id] && <Badge size="sm" color="brand" type="pill-color">{slotMap[sp.id]}</Badge>}
+                    </div>
+                  )}
+                </div>
               </div>
-            ))}
+            );
+          })}
+        </div>
+
+        <div className="flex flex-col gap-4 border-t border-secondary p-5">
+          <Checkbox size="sm" isSelected={allowNegative} onChange={setAllowNegative} label={t("Разрешить списание в минус (если не хватает остатка)")} />
+          {problems && (
+            <Notice tone="error" title={t("Нельзя списать:")}>
+              <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                {problems.map((p, i) => (
+                  <li key={i}>
+                    {p.tool_index != null ? `Tool ${p.tool_index}: ` : ""}{tServer(p.detail)}
+                    {p.needed_g != null && ` ${t("(нужно")} ${p.needed_g} ${t("г, есть")} ${p.available_g} ${t("г)")}`}
+                  </li>
+                ))}
+              </ul>
+            </Notice>
+          )}
+          <div>
+            <Button size="md" isLoading={busy} onClick={confirm}>{t("Подтвердить списание")}</Button>
           </div>
-        )}
-      </div>
+        </div>
+      </Card>
     </div>
   );
 }

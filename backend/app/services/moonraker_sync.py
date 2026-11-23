@@ -200,6 +200,18 @@ def _watch_feed_mode(db: Session, printer: Printer) -> tuple[dict | None, str | 
     return state, caps["feed_mode"]
 
 
+def _job_thumbnail(printer: Printer, filename: str | None) -> dict | None:
+    """Превью печати сразу при импорте: временные файлы Anycubic скоро
+    удаляются, и потом картинку уже не достать.
+
+    {} — картинки нет; None — принтер не ответил, спросим при первом показе.
+    """
+    try:
+        return _client(printer).fetch_thumbnail(filename or "") or {}
+    except Exception:
+        return None
+
+
 def poll_printer(db: Session, printer: Printer, *, auto_consume: bool) -> dict:
     """Один цикл опроса принтера. Возвращает статистику для лога."""
     wm_key = f"{WATERMARK_PREFIX}{printer.id}"
@@ -229,6 +241,7 @@ def poll_printer(db: Session, printer: Printer, *, auto_consume: bool) -> dict:
     )
     for raw in sorted(new_jobs, key=lambda j: j.get("end_time") or 0):
         parsed = job_to_parsed(raw)
+        parsed["thumbnail"] = _job_thumbnail(printer, raw.get("filename"))
         job = print_job_service.create_from_parsed(
             db, owner=owner, printer_id=printer.id, parsed=parsed, source="moonraker"
         )

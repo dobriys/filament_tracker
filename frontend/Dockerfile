@@ -3,8 +3,9 @@ FROM node:22-alpine AS dev
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+# Ставим ровно те версии, что записаны в package-lock.json (как на машине разработчика).
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 

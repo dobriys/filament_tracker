@@ -103,7 +103,7 @@ PRINTJOB_COLS = [
     "source", "file_name", "file_hash", "slicer_name", "slicer_version",
     "estimated_print_time_sec", "filament_change_count",
     "total_filament_used_g", "total_filament_used_mm", "status",
-    "parsed_metadata", "completed_at", "created_at",
+    "parsed_metadata", "completed_at", "created_at", "thumbnail",
 ]
 TOOL_USAGE_COLS = [
     "tool_index", "slot_index", "material", "color_hex", "used_g", "used_mm",
@@ -467,6 +467,7 @@ def restore_backup(db: Session, user: User, data: dict) -> dict:
             status=item.get("status") or "draft",
             parsed_metadata=item.get("parsed_metadata"),
             completed_at=_parse_dt(item.get("completed_at")),
+            thumbnail=item.get("thumbnail"),
         )
         created = _parse_dt(item.get("created_at"))
         if created:

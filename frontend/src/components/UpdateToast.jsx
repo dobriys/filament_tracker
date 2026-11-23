@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link as AriaLink } from "react-aria-components";
+import { XClose } from "@untitledui/icons";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { api } from "../api/client.js";
 import { t } from "../i18n.js";
 
@@ -22,18 +25,26 @@ export default function UpdateToast() {
   if (!info) return null;
 
   return (
-    <div className="update-toast" role="status">
-      <div className="update-toast-text">
-        <b>{t("Доступна новая версия")}</b>{" "}
-        <span className="mono">{info.latest_version}</span>
+    <div
+      role="status"
+      className="fixed top-4 right-4 z-60 flex max-w-[min(360px,calc(100vw-32px))] items-center gap-3 rounded-xl bg-primary px-3.5 py-2.5 text-sm shadow-lg ring-1 ring-secondary"
+    >
+      <div className="min-w-0 flex-1 text-primary">
+        <b className="font-semibold">{t("Доступна новая версия")}</b>{" "}
+        <span className="font-mono">{info.latest_version}</span>
       </div>
-      <div className="update-toast-actions">
+      <div className="flex shrink-0 items-center gap-2">
         {info.release_url && (
-          <a className="update-toast-link" href={info.release_url} target="_blank" rel="noreferrer">
+          <AriaLink
+            href={info.release_url}
+            target="_blank"
+            rel="noreferrer"
+            className="cursor-pointer rounded-sm font-medium whitespace-nowrap text-brand-secondary underline outline-focus-ring hover:text-brand-secondary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
+          >
             {t("Что нового")} ↗
-          </a>
+          </AriaLink>
         )}
-        <button className="update-toast-close" onClick={() => setInfo(null)} aria-label={t("Закрыть")}>×</button>
+        <ButtonUtility size="xs" color="tertiary" icon={XClose} tooltip={t("Закрыть")} onClick={() => setInfo(null)} />
       </div>
     </div>
   );

@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { Button as AriaButton } from "react-aria-components";
+import { Lightbulb02 } from "@untitledui/icons";
+import { cx } from "@/utils/cx";
 import { api } from "../api/client.js";
 import { t } from "../i18n.js";
-import Icon from "./Icon.jsx";
 
 // Подсветка камеры принтера: два явных действия «вкл» и «выкл».
 //
@@ -34,19 +36,23 @@ export default function LightToggle({ printerId, light, onChanged, onError }) {
     }
   }
 
+  const seg = (active) =>
+    cx(
+      "cursor-pointer rounded-md px-2.5 py-1 text-sm font-semibold outline-focus-ring transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-1 disabled:cursor-not-allowed disabled:opacity-60",
+      active ? "bg-primary text-primary shadow-xs" : "bg-transparent text-tertiary hover:text-secondary",
+    );
+
   return (
     <div
-      className={`light-switch${on ? " on" : ""}`}
+      className="inline-flex items-center gap-2 rounded-lg bg-primary py-1 pr-1 pl-3 shadow-xs ring-1 ring-primary ring-inset"
       title={t("Принтер не сообщает реальное состояние лампы — отмечена последняя отправленная команда")}
     >
-      <Icon name="bulb" size={15} />
-      <span className="light-switch-label">{t("Подсветка")}</span>
-      <button type="button" className={on ? "active" : ""} disabled={busy} onClick={() => send(true)}>
-        {t("вкл")}
-      </button>
-      <button type="button" className={on ? "" : "active"} disabled={busy} onClick={() => send(false)}>
-        {t("выкл")}
-      </button>
+      <Lightbulb02 className={cx("size-4", on ? "text-fg-warning-primary" : "text-fg-quaternary")} aria-hidden="true" />
+      <span className="text-sm font-medium text-secondary">{t("Подсветка")}</span>
+      <div className="inline-flex rounded-md bg-secondary p-0.5">
+        <AriaButton className={seg(on)} isDisabled={busy} onPress={() => send(true)}>{t("вкл")}</AriaButton>
+        <AriaButton className={seg(!on)} isDisabled={busy} onPress={() => send(false)}>{t("выкл")}</AriaButton>
+      </div>
     </div>
   );
 }

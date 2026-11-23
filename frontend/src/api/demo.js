@@ -410,8 +410,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function profileOf(sp) {
   return db.profiles.find((p) => p.id === sp.filament_profile_id) || null;
 }
-function recompute(sp) {
+// before — остаток до изменения: первое списание переводит «новую» в «используется»
+// (как spool_service._record_change на бэкенде).
+function recompute(sp, before) {
   if (sp.status === "archived") return;
+  if (sp.status === "new" && before != null && Number(sp.current_weight_g) < before) sp.status = "in_use";
   const left = Number(sp.current_weight_g);
   if (left <= 0) sp.status = "empty";
   else if (left <= lowThresholdG(sp.initial_filament_weight_g)) sp.status = "almost_empty";
@@ -1052,6 +1055,7 @@ function spoolsRoute(M, parts, query, body) {
         price: body.price ?? null, currency: body.currency || "RUB", notes: body.notes || null,
         status: "new", qr_token: uid().replace(/-/g, "").slice(0, 12), created_at: nowIso(), updated_at: nowIso(),
       };
+      recompute(sp);   // початая катушка с малым остатком — сразу «заканчивается»
       db.spools.unshift(sp);
       addEvent(sp.id, { type: "created", after: sp.current_weight_g, reason: "Новая катушка" });
       save(); return sp;
@@ -1075,6 +1079,12 @@ function spoolsRoute(M, parts, query, body) {
     };
   }
   if (parts[1] === "import-spoolman") return { imported: 6, skipped: 2, total: 8 };
+  // Страница, на которую ведёт QR с этикетки: катушка по qr_token.
+  if (parts[1] === "by-qr" && M === "GET") {
+    const byToken = db.spools.find((s) => s.qr_token === parts[2]);
+    if (!byToken) throw notFound("Катушка не найдена");
+    return buildCard(byToken);
+  }
 
   // элемент
   const id = parts[1];
@@ -1115,7 +1125,7 @@ function spoolsRoute(M, parts, query, body) {
     const before = Number(sp.current_weight_g);
     const empty = Number(sp.empty_spool_weight_g) || 0;
     const after = Math.max(0, Number(body.total_weight_g) - empty);
-    sp.current_weight_g = after; recompute(sp);
+    sp.current_weight_g = after; recompute(sp, before);
     addEvent(sp.id, { type: "weighed", before, after, delta: after - before, reason: body.reason || "Взвешивание" });
     save(); return sp;
   }
@@ -1125,7 +1135,7 @@ function spoolsRoute(M, parts, query, body) {
     if (body.new_weight_g != null) after = Number(body.new_weight_g);
     else if (body.delta_g != null) after = before + Number(body.delta_g);
     after = Math.max(0, after);
-    sp.current_weight_g = after; recompute(sp);
+    sp.current_weight_g = after; recompute(sp, before);
     addEvent(sp.id, { type: "manual_adjustment", before, after, delta: after - before, reason: body.reason || "Корректировка" });
     save(); return sp;
   }
@@ -1494,7 +1504,15 @@ function jobOut(pj) {
     consumed_g: (pj.spool_usage || []).reduce((sum, u) => sum + Number(u.used_g || 0), 0) || null,
     cost: c ? Math.round(c.cost * 100) / 100 : null, cost_currency: c?.currency || null, cost_partial: c?.partial || false,
     failed: !!pj.parsed_metadata?.failed,
+    thumbnail_available: !!jobThumb(pj),
   };
+}
+// Миниатюра печати: у загруженного gcode — вшитая слайсером, у печатей
+// «с принтера» в демо — общая картинка-превью (настоящего принтера нет).
+function jobThumb(pj) {
+  if (pj.thumbnail?.data_url) return pj.thumbnail;
+  if (pj.source === "moonraker") return { data_url: DEMO_PREVIEW, width: 230, height: 110 };
+  return null;
 }
 function jobDetail(pj) {
   return { ...jobOut(pj), tools: pj.tools || [], spool_usage: pj.spool_usage || [] };
@@ -1510,6 +1528,7 @@ function printJobsRoute(M, parts, body) {
         estimated_print_time_sec: parsed.estimated_print_time_sec || null, filament_change_count: parsed.filament_change_count ?? null,
         total_filament_used_g: parsed.total_filament_used_g ?? null, total_filament_used_mm: parsed.total_filament_used_mm ?? null,
         status: "draft", created_at: nowIso(), completed_at: null, parsed_metadata: {},
+        thumbnail: parsed.thumbnail || null,
         tools: (parsed.tools || []).map((t) => ({ id: uid(), tool_index: t.tool_index, slot_index: null, material: t.material || null, color_hex: t.color_hex || null, used_g: t.used_g ?? null, used_mm: t.used_mm ?? null })),
         spool_usage: [],
       };
@@ -1520,6 +1539,7 @@ function printJobsRoute(M, parts, body) {
   if (!pj) throw notFound("Печать не найдена");
   const sub = parts[2];
   if (!sub && M === "GET") return jobDetail(pj);
+  if (sub === "thumbnail" && M === "GET") return { thumbnail: jobThumb(pj) };
 
   if (sub === "confirm-usage" && M === "POST") {
     const problems = [];
@@ -1546,7 +1566,7 @@ function printJobsRoute(M, parts, body) {
     for (const { tool, sp, grams } of plan) {
       const before = Number(sp.current_weight_g);
       sp.current_weight_g = Math.max(allowNeg ? -1e9 : 0, before - grams);
-      recompute(sp);
+      recompute(sp, before);
       addEvent(sp.id, { type: "print_usage", before, after: sp.current_weight_g, delta: -grams, reason: `Печать ${pj.file_name}` });
       pj.spool_usage.push({ id: uid(), spool_id: sp.id, printer_slot_id: null, tool_index: tool.tool_index, used_g: Math.round(grams * 100) / 100, confirmed_at: nowIso() });
     }

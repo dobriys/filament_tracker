@@ -1,9 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Button as AriaButton } from "react-aria-components";
+import { ChevronRight, Copy01, Edit01, Plus, SearchLg, Trash01, Upload01 } from "@untitledui/icons";
+import { Table, TableCard } from "@/components/application/table/table";
+import { Tab, TabList, TabPanel, Tabs } from "@/components/application/tabs/tabs";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { Input } from "@/components/base/input/input";
+import { Card, EmptyNote, PageHeader, SpoolSwatch } from "../components/ft/ui.jsx";
+import { Notice } from "../components/ft/printer.jsx";
+import { cx } from "@/utils/cx";
 import { api } from "../api/client.js";
 import { useAuth } from "../api/auth.jsx";
 import { t } from "../i18n.js";
-import Icon from "../components/Icon.jsx";
+
+const colorCell = (p) => (
+  <span className="inline-flex items-center gap-2">
+    <SpoolSwatch color={p.color_hex || "#666"} size="sm" />
+    <span className="text-sm text-secondary">{p.color_name || "—"}</span>
+  </span>
+);
 
 export default function Profiles() {
   const { user } = useAuth();
@@ -72,93 +89,113 @@ export default function Profiles() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <h2 style={{ marginBottom: 2 }}>{t("Профили филамента")}</h2>
-          <div className="muted">{t("Свои настройки печати на каждый бренд/материал/цвет.")}</div>
-        </div>
-        {tab === "mine" && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="secondary" title={t("Профиль слайсера Bambu Studio / OrcaSlicer (.json)")} onClick={() => fileRef.current.click()}>{t("Импорт из слайсера (JSON)")}</button>
-            <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={importSlicer} />
-            <button onClick={() => navigate("/profiles/new")}>{t("+ Добавить")}</button>
-          </div>
+      <PageHeader
+        title={t("Профили филамента")}
+        subtitle={t("Свои настройки печати на каждый бренд/материал/цвет.")}
+        actions={tab === "mine" && (
+          <>
+            <Button size="md" color="secondary" iconLeading={Upload01} onClick={() => fileRef.current?.click()}>
+              {t("Импорт из слайсера (JSON)")}
+            </Button>
+            <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={importSlicer} />
+            <Button size="md" iconLeading={Plus} onClick={() => navigate("/profiles/new")}>{t("Добавить")}</Button>
+          </>
         )}
-      </div>
-      {msg && <div className="muted" style={{ marginTop: 8 }}>{msg}</div>}
+      />
+      {msg && <Notice tone="error" className="mb-6" onClose={() => setMsg(null)}>{msg}</Notice>}
 
-      <div className="seg-toggle" role="tablist" style={{ marginTop: 14, maxWidth: 420 }}>
-        <button type="button" className={`seg-item ${tab === "mine" ? "active" : ""}`} onClick={() => setTab("mine")}>{t("Мои профили")}</button>
-        <button type="button" className={`seg-item ${tab === "catalog" ? "active" : ""}`} onClick={() => setTab("catalog")}>{t("Каталог SpoolmanDB")}</button>
-      </div>
+      <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))} className="w-full">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <TabList type="button-border" size="sm" aria-label={t("Профили филамента")}>
+            <Tab id="mine" label={t("Мои профили")} />
+            <Tab id="catalog" label={t("Каталог SpoolmanDB")} />
+          </TabList>
+          <Input
+            size="sm"
+            icon={SearchLg}
+            placeholder={tab === "mine" ? t("Поиск по бренду, материалу, цвету…") : t("Поиск по бренду…")}
+            value={q}
+            onChange={setQ}
+            className="w-full sm:ml-auto sm:w-80"
+          />
+        </div>
 
-      <div className="inv-toolbar" style={{ marginTop: 12 }}>
-        <input className="inv-search" placeholder={tab === "mine" ? t("Поиск по бренду, материалу, цвету…") : t("Поиск по бренду…")} value={q} onChange={(e) => setQ(e.target.value)} />
-      </div>
+        <TabPanel id="mine">
+          <TableCard.Root>
+            <Table size="sm" aria-label={t("Мои профили")} onRowAction={(key) => navigate(`/profiles/${key}/edit`)}>
+              <Table.Header>
+                <Table.Head id="brand" isRowHeader label={t("Бренд")} />
+                <Table.Head id="name" label={t("Название")} className="w-full" />
+                <Table.Head id="material" label={t("Материал")} className="px-3" />
+                <Table.Head id="color" label={t("Цвет")} className="px-3" />
+                <Table.Head id="temps" label={t("Сопло / Стол")} className="px-3" />
+                <Table.Head id="actions" className="px-3" />
+              </Table.Header>
+              <Table.Body items={rows} renderEmptyState={() => <EmptyNote>{t("Ничего не найдено")}</EmptyNote>}>
+                {(p) => (
+                  <Table.Row id={p.id}>
+                    <Table.Cell className="whitespace-nowrap">{p.brand || "—"}</Table.Cell>
+                    <Table.Cell><span className="font-medium text-primary">{p.name}</span></Table.Cell>
+                    <Table.Cell className="px-3"><Badge size="sm" color="gray" type="pill-color">{p.material}</Badge></Table.Cell>
+                    <Table.Cell className="px-3 whitespace-nowrap">{colorCell(p)}</Table.Cell>
+                    <Table.Cell className="px-3 whitespace-nowrap tabular-nums">{temps(p)}</Table.Cell>
+                    <Table.Cell className="px-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button size="sm" color="secondary" iconLeading={Plus} onClick={() => navigate(`/spools/new?profile=${p.id}`)}>
+                          {t("В Мои катушки")}
+                        </Button>
+                        <ButtonUtility size="sm" color="tertiary" icon={Edit01} tooltip={t("Изменить")} onClick={() => navigate(`/profiles/${p.id}/edit`)} />
+                        <ButtonUtility size="sm" color="tertiary" icon={Copy01} tooltip={t("Дублировать (новый цвет)")} onClick={() => duplicate(p.id, true)} />
+                        <ButtonUtility size="sm" color="tertiary" icon={Trash01} tooltip={t("Удалить")} onClick={() => remove(p.id)} />
+                      </div>
+                    </Table.Cell>
+                  </Table.Row>
+                )}
+              </Table.Body>
+            </Table>
+          </TableCard.Root>
+        </TabPanel>
 
-      {tab === "mine" ? (
-        <div className="card" style={{ padding: 0 }}>
-          <table className="cards-mobile">
-            <thead>
-              <tr><th style={{ paddingLeft: 16 }}>{t("Бренд")}</th><th>{t("Название")}</th><th>{t("Материал")}</th><th>{t("Цвет")}</th><th>{t("Сопло / Стол")}</th><th>{t("Действия")}</th></tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => (
-                <tr key={p.id}>
-                  <td data-label={t("Бренд")} style={{ paddingLeft: 16 }}>{p.brand || "—"}</td>
-                  <td data-label={t("Название")}>{p.name}</td>
-                  <td data-label={t("Материал")}>{p.material}</td>
-                  <td data-label={t("Цвет")}><span className="swatch" style={{ background: p.color_hex || "#666", marginRight: 6 }} />{p.color_name || "—"}</td>
-                  <td data-label={t("Сопло / Стол")} className="muted" style={{ fontSize: 13 }}>{temps(p)}</td>
-                  <td data-label="">
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <button className="secondary" title={t("Создать катушку из этого профиля")} onClick={() => navigate(`/spools/new?profile=${p.id}`)}>{t("＋ В Мои катушки")}</button>
-                      <button className="icon-btn" title={t("Изменить")} onClick={() => navigate(`/profiles/${p.id}/edit`)}><Icon name="pencil" /></button>
-                      <button className="icon-btn" title={t("Дублировать (новый цвет)")} onClick={() => duplicate(p.id, true)}>⧉</button>
-                      <button className="icon-btn danger" title={t("Удалить")} onClick={() => remove(p.id)}><Icon name="trash" /></button>
+        <TabPanel id="catalog">
+          <Card className="overflow-hidden">
+            {brandRows.map((b) => {
+              const isOpen = !!open[b.brand];
+              const entries = byBrand[b.brand];
+              return (
+                <div key={b.brand} className="border-b border-secondary last:border-b-0">
+                  <AriaButton
+                    onPress={() => toggleBrand(b.brand)}
+                    aria-expanded={isOpen}
+                    className="flex w-full cursor-pointer items-center gap-3 bg-transparent px-5 py-3 text-left outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2"
+                  >
+                    <ChevronRight className={cx("size-4 shrink-0 text-fg-quaternary transition duration-100 ease-linear", isOpen && "rotate-90")} aria-hidden="true" />
+                    <span className="text-sm font-semibold text-primary">{b.brand}</span>
+                    <Badge size="sm" color="gray" type="pill-color">{b.count}</Badge>
+                  </AriaButton>
+                  {isOpen && (
+                    <div className="border-t border-secondary">
+                      {(entries || []).map((p) => (
+                        <div key={p.catalog_id} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-secondary px-5 py-2.5 pl-12 last:border-b-0">
+                          <span className="min-w-40 flex-1 text-sm font-medium text-primary">{p.name}</span>
+                          <Badge size="sm" color="gray" type="pill-color">{p.material}</Badge>
+                          <span className="w-40">{colorCell(p)}</span>
+                          <span className="min-w-28 text-sm whitespace-nowrap text-tertiary tabular-nums">{temps(p)}</span>
+                          <Button size="sm" color="secondary" iconLeading={Plus} onClick={() => navigate("/spools/new", { state: { catalog: p } })}>
+                            {t("В Мои катушки")}
+                          </Button>
+                        </div>
+                      ))}
+                      {entries && entries.length === 0 && <p className="px-5 py-3.5 pl-12 text-sm text-tertiary">{t("Нет данных")}</p>}
                     </div>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && <tr><td colSpan={6} className="muted" style={{ padding: 20 }}>{t("Ничего не найдено")}</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="card" style={{ padding: 0 }}>
-          {brandRows.map((b) => (
-            <div key={b.brand} className="cat-brand">
-              <button type="button" className="cat-brand-head" onClick={() => toggleBrand(b.brand)}>
-                <span className="cat-chevron">{open[b.brand] ? "▾" : "▸"}</span>
-                <strong>{b.brand}</strong>
-                <span className="muted" style={{ fontSize: 13 }}>{b.count}</span>
-              </button>
-              {open[b.brand] && (
-                <table>
-                  <tbody>
-                    {(byBrand[b.brand] || []).map((p) => (
-                      <tr key={p.catalog_id}>
-                        <td style={{ paddingLeft: 40, width: "34%" }}>{p.name}</td>
-                        <td style={{ width: "14%" }}>{p.material}</td>
-                        <td style={{ width: "26%" }}><span className="swatch" style={{ background: p.color_hex || "#666", marginRight: 6 }} />{p.color_name || "—"}</td>
-                        <td className="muted" style={{ fontSize: 13 }}>{temps(p)}</td>
-                        <td style={{ textAlign: "right", paddingRight: 16 }}>
-                          <button className="secondary" title={t("Создать катушку из этой записи")} onClick={() => navigate("/spools/new", { state: { catalog: p } })}>{t("＋ В Мои катушки")}</button>
-                        </td>
-                      </tr>
-                    ))}
-                    {byBrand[b.brand] && byBrand[b.brand].length === 0 && (
-                      <tr><td colSpan={5} className="muted" style={{ padding: 14, paddingLeft: 40 }}>{t("Нет данных")}</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          ))}
-          {brands.length === 0 && <div className="muted" style={{ padding: 20 }}>{t("Загрузка…")}</div>}
-          {brands.length > 0 && brandRows.length === 0 && <div className="muted" style={{ padding: 20 }}>{t("Ничего не найдено")}</div>}
-        </div>
-      )}
+                  )}
+                </div>
+              );
+            })}
+            {brands.length === 0 && <EmptyNote>{t("Загрузка…")}</EmptyNote>}
+            {brands.length > 0 && brandRows.length === 0 && <EmptyNote>{t("Ничего не найдено")}</EmptyNote>}
+          </Card>
+        </TabPanel>
+      </Tabs>
     </div>
   );
 }

@@ -1,8 +1,9 @@
+import time
 import uuid
 
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -21,7 +22,7 @@ from app.schemas.print_job import (
     SpoolUsageOut,
     ToolUsageOut,
 )
-from app.services import print_job_service
+from app.services import moonraker_sync, print_job_service
 
 router = APIRouter(prefix="/print-jobs", tags=["print-jobs"])
 
@@ -33,10 +34,37 @@ def _own(db: Session, user: User, job_id: uuid.UUID) -> PrintJob:
     return job
 
 
+def _thumbnail_available(db: Session, ids: list) -> set:
+    """Печати, у которых миниатюра есть или может найтись на принтере.
+
+    Саму картинку (десятки КБ) список не тянет — колонка отложенная, а здесь
+    только условие: есть data_url, либо печать с принтера ещё не проверяли.
+    """
+    if not ids:
+        return set()
+    return set(
+        db.scalars(
+            select(PrintJob.id).where(
+                PrintJob.id.in_(ids),
+                or_(
+                    PrintJob.thumbnail.has_key("data_url"),
+                    and_(
+                        PrintJob.thumbnail.is_(None),
+                        PrintJob.source == "moonraker",
+                        PrintJob.printer_id.is_not(None),
+                    ),
+                ),
+            )
+        )
+    )
+
+
 def _apply_extras(
-    out: PrintJobOut, job: PrintJob, costs: dict, consumed: dict | None = None
+    out: PrintJobOut, job: PrintJob, costs: dict, consumed: dict | None = None,
+    thumbs: set | None = None,
 ) -> PrintJobOut:
     out.failed = bool((job.parsed_metadata or {}).get("failed"))
+    out.thumbnail_available = job.id in (thumbs or set())
     out.consumed_g = (consumed or {}).get(out.id)
     c = costs.get(out.id)
     if c:
@@ -64,6 +92,7 @@ def _detail(db: Session, job: PrintJob) -> PrintJobDetailOut:
         job,
         print_job_service.jobs_cost(db, [job.id]),
         print_job_service.jobs_consumed_g(db, [job.id]),
+        _thumbnail_available(db, [job.id]),
     )
 
 
@@ -79,7 +108,43 @@ def list_jobs(db: Session = Depends(get_db), user: User = Depends(get_current_us
     ids = [j.id for j in jobs]
     costs = print_job_service.jobs_cost(db, ids)
     consumed = print_job_service.jobs_consumed_g(db, ids)
-    return [_apply_extras(PrintJobOut.model_validate(j), j, costs, consumed) for j in jobs]
+    thumbs = _thumbnail_available(db, ids)
+    return [_apply_extras(PrintJobOut.model_validate(j), j, costs, consumed, thumbs) for j in jobs]
+
+
+# Принтер не ответил — несколько минут не спрашиваем его снова: иначе каждая
+# строка истории ждала бы свой таймаут. {printer_id: monotonic-время}.
+_PRINTER_OFFLINE: dict = {}
+_OFFLINE_RETRY_SEC = 120.0
+
+
+@router.get("/{job_id}/thumbnail")
+def job_thumbnail(
+    job_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Миниатюра модели {"thumbnail": {data_url, width, height} | null}.
+
+    У печатей, импортированных до появления миниатюр (или пока принтер был
+    недоступен), картинку дозапрашиваем у принтера один раз и запоминаем —
+    и найденную, и её отсутствие. Не ответил принтер — спросим в другой раз.
+    """
+    job = _own(db, user, job_id)
+    th = job.thumbnail
+    if th is None and job.source == "moonraker" and job.printer_id and job.file_name:
+        printer = db.get(Printer, job.printer_id)
+        if printer is not None and printer.integration_type == "moonraker" and printer.moonraker_url:
+            if time.monotonic() < _PRINTER_OFFLINE.get(printer.id, 0):
+                return {"thumbnail": None}
+            try:
+                th = moonraker_sync.client_for(printer).fetch_thumbnail(job.file_name) or {}
+            except Exception:
+                _PRINTER_OFFLINE[printer.id] = time.monotonic() + _OFFLINE_RETRY_SEC
+                return {"thumbnail": None}
+            job.thumbnail = th
+            db.commit()
+    return {"thumbnail": th if th and th.get("data_url") else None}
 
 
 @router.post("", response_model=PrintJobDetailOut, status_code=status.HTTP_201_CREATED)

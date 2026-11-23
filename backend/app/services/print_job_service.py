@@ -75,6 +75,8 @@ def create_from_parsed(
             k: parsed.get(k)
             for k in ("slicer_name", "diameter_mm", "tool_count", "moonraker_job_id")
         },
+        # None — не искали (с принтера дозапросим при показе), {} — картинки нет.
+        thumbnail=parsed.get("thumbnail"),
     )
     db.add(job)
     db.flush()
