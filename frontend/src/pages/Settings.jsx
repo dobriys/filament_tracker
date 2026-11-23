@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Button as AriaButton, Link as AriaLink } from "react-aria-components";
+import { cloneElement, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Button as AriaButton, Link as AriaLink, Radio, RadioGroup } from "react-aria-components";
 import { ChevronDown, ChevronRight } from "@untitledui/icons";
+import { Tab, TabList, TabPanel, Tabs } from "@/components/application/tabs/tabs";
 import { Badge } from "@/components/base/badges/badges";
-import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
 import { Button } from "@/components/base/buttons/button";
 import { Checkbox } from "@/components/base/checkbox/checkbox";
 import { Input } from "@/components/base/input/input";
+import { RadioButtonBase } from "@/components/base/radio-buttons/radio-buttons";
 import { Toggle } from "@/components/base/toggle/toggle";
-import { Card, CardHeader, PageHeader } from "../components/ft/ui.jsx";
+import { PageHeader } from "../components/ft/ui.jsx";
 import { NONE, Pick, SectionLabel } from "../components/ft/form.jsx";
 import { Notice, Stat } from "../components/ft/printer.jsx";
 import { cx } from "@/utils/cx";
@@ -19,28 +21,15 @@ import { lowThresholdFor, setLowConfig } from "../utils/spools.js";
 // ------------------------------------------------------------------
 // Разделы настроек
 //
-// Порядок и группировка живут в одном месте: и боковое оглавление, и колонка
-// с содержимым рисуются из GROUPS, поэтому разъехаться они не могут.
-// Группы отвечают на разные вопросы: что приложение делает само, с чем оно
-// связано снаружи и откуда берутся данные.
+// Группы — вкладки страницы. Они отвечают на разные вопросы: что приложение
+// делает само, с чем оно связано снаружи и откуда берутся данные. Выбранная
+// вкладка живёт в адресе (?tab=…), чтобы пережить перезагрузку и ссылку.
 // ------------------------------------------------------------------
-const SECTION_TITLES = {
-  prints: t("Завершённые печати"),
-  consumption: t("Списание"),
-  low: t("Остаток филамента"),
-  telegram: t("Уведомления в Telegram"),
-  sensors: t("Датчики температуры и влажности"),
-  catalog: t("Каталог филамента"),
-  spoolman: t("Импорт из Spoolman"),
-  backup: t("Бэкап"),
-  journal: t("Диагностический журнал"),
-};
 const GROUPS = [
-  { title: t("Автоматика"), ids: ["prints", "consumption", "low"] },
-  { title: t("Подключения"), ids: ["telegram", "sensors"] },
-  { title: t("Данные"), ids: ["catalog", "spoolman", "backup", "journal"] },
+  { id: "automation", title: t("Автоматизация"), ids: ["prints", "consumption", "low"] },
+  { id: "connections", title: t("Подключения"), ids: ["telegram", "sensors"] },
+  { id: "data", title: t("Данные"), ids: ["catalog", "spoolman", "backup", "journal"] },
 ];
-const SECTION_IDS = GROUPS.flatMap((g) => g.ids);
 
 // Часовой пояс для времени в уведомлениях. Список берём у браузера: держать
 // свой список из четырёх сотен имён и следить за его актуальностью незачем.
@@ -78,13 +67,63 @@ const LOW_PRESETS = [
 
 const LEVEL_COLOR = { error: "error", warning: "warning" };
 
-/** Раздел настроек: карточка с заголовком, пояснением и содержимым. */
-function Section({ id, title, description, children }) {
+/** Раздел настроек — строка: слева заголовок, пояснение и состояние, справа поля.
+ *  На узком экране колонки встают друг под друга. */
+function Section({ id, title, description, state, children }) {
   return (
-    <Card id={id} className="scroll-mt-20 lg:scroll-mt-8">
-      <CardHeader title={title} description={description} />
-      <div className="flex flex-col gap-5 p-5">{children}</div>
-    </Card>
+    <section
+      id={id}
+      className="grid grid-cols-1 gap-x-8 gap-y-4 border-t border-secondary py-6 first:border-t-0 first:pt-2 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]"
+    >
+      <div className="min-w-0">
+        <h3 className="m-0 text-sm font-semibold text-secondary">{title}</h3>
+        {description && <p className="mt-1 text-sm text-tertiary">{description}</p>}
+        {state && (
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-tertiary">
+            <span className={cx("size-2 shrink-0 rounded-full", state.on ? "bg-success-solid" : "bg-quaternary")} aria-hidden="true" />
+            {state.text}
+          </p>
+        )}
+      </div>
+      <div className="flex max-w-2xl min-w-0 flex-col gap-5">{children}</div>
+    </section>
+  );
+}
+
+/** Выбор одного варианта из нескольких — карточками с пояснением. */
+function RadioCards({ label, value, onChange, items, isDisabled, className }) {
+  return (
+    <RadioGroup
+      aria-label={label}
+      value={value}
+      onChange={onChange}
+      isDisabled={isDisabled}
+      className={cx("grid grid-cols-1 gap-3", className)}
+    >
+      {items.map((it) => (
+        <Radio
+          key={it.key}
+          value={it.key}
+          className={({ isSelected, isDisabled: off }) =>
+            cx(
+              "flex cursor-pointer items-start gap-3 rounded-xl p-4 transition duration-100 ease-linear",
+              isSelected ? "bg-brand-primary ring-2 ring-brand ring-inset" : "bg-primary ring-1 ring-primary ring-inset hover:bg-primary_hover",
+              off && "cursor-not-allowed opacity-60",
+            )
+          }
+        >
+          {({ isSelected, isFocusVisible }) => (
+            <>
+              <RadioButtonBase size="sm" isSelected={isSelected} isFocusVisible={isFocusVisible} className="mt-0.5" />
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-sm font-semibold text-primary">{it.label}</span>
+                {it.hint && <span className="text-sm text-tertiary">{it.hint}</span>}
+              </span>
+            </>
+          )}
+        </Radio>
+      ))}
+    </RadioGroup>
   );
 }
 
@@ -156,12 +195,12 @@ export default function Settings() {
   const [printers, setPrinters] = useState([]);
   const [locations, setLocations] = useState([]);
   const fileRef = useRef();
-  // Раздел, на котором сейчас стоит прокрутка, — подсвечивается в оглавлении.
-  const [activeSection, setActiveSection] = useState(SECTION_IDS[0]);
+  // Открытая вкладка — в адресе; неизвестное значение = первая вкладка.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = GROUPS.some((g) => g.id === searchParams.get("tab")) ? searchParams.get("tab") : GROUPS[0].id;
+  const setTab = (id) => setSearchParams(id === GROUPS[0].id ? {} : { tab: id }, { replace: true });
   // Какой датчик раскрыт для правки. Одновременно — только один.
   const [openSensor, setOpenSensor] = useState(null);
-  // Пока не истечёт — расчёт подсветки молчит и не перебивает выбор кликом.
-  const suppressSpy = useRef(0);
 
   useEffect(() => {
     api.get("/api/settings").then((v) => {
@@ -196,57 +235,6 @@ export default function Settings() {
     return () => clearTimeout(timer);
   }, [msg]);
 
-  function goToSection(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    suppressSpy.current = Date.now() + 400;
-    setActiveSection(id);
-    el.scrollIntoView({ block: "start" });
-  }
-
-  // Подсветка раздела в оглавлении. Считаем по положению секций, а не через
-  // IntersectionObserver: высота разделов меняется после подгрузки данных
-  // (список датчиков вырастает в разы), и наблюдатель успевает запомнить
-  // устаревшие пересечения.
-  //
-  // Порог раздела — прокрутка, на которой его верх дойдёт до линии внимания
-  // под шапкой. У последних разделов такого положения не существует: страница
-  // кончается раньше, чем они успевают подняться. Поэтому их пороги делят
-  // остаток прокрутки поровну — иначе подсветка навсегда застревает на
-  // середине списка, а нижние пункты не загораются никогда.
-  useEffect(() => {
-    const LINE = 140;
-    const pick = () => {
-      if (Date.now() < suppressSpy.current) return;   // только что прыгнули по клику
-      const y = window.scrollY;
-      const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-      if (max === 0) { setActiveSection(SECTION_IDS[0]); return; }
-
-      const marks = SECTION_IDS.map((id) => {
-        const el = document.getElementById(id);
-        return el ? el.getBoundingClientRect().top + y - LINE : Infinity;
-      });
-      const tail = marks.filter((m) => m > max).length;
-      if (tail) {
-        const first = marks.length - tail;
-        const start = first > 0 ? Math.min(marks[first - 1], max) : 0;
-        const step = (max - start) / tail;
-        for (let i = 0; i < tail; i++) marks[first + i] = start + step * (i + 1);
-      }
-
-      let current = SECTION_IDS[0];
-      marks.forEach((m, i) => { if (y >= m) current = SECTION_IDS[i]; });
-      setActiveSection(current);   // тот же id — React перерисовку пропустит
-    };
-    pick();
-    window.addEventListener("scroll", pick, { passive: true });
-    window.addEventListener("resize", pick);
-    return () => {
-      window.removeEventListener("scroll", pick);
-      window.removeEventListener("resize", pick);
-    };
-  }, []);
-
   async function refreshCatalog() {
     setMsg(null);
     setCatalogBusy(true);
@@ -272,18 +260,18 @@ export default function Settings() {
   const AUTO_MODES = [
     {
       key: "off",
-      label: t("Выкл"),
-      hint: t("Автоматизация отключена. Завершённые печати импортируете и списываете вручную."),
+      label: t("Выключено"),
+      hint: t("Печати импортируете и списываете вручную."),
     },
     {
       key: "import",
       label: t("Автоимпорт"),
-      hint: t("Фоновый опрос принтеров: новые завершённые печати сами появляются в истории черновиком — остаётся только списать материал."),
+      hint: t("Новые печати сами появляются в истории черновиком — остаётся только списать материал."),
     },
     {
       key: "consume",
       label: t("Автосписание"),
-      hint: t("Импорт и автоматическое списание материала, когда каждый инструмент печати сопоставлен со слотом принтера с катушкой. Если сопоставить не удалось — печать остаётся черновиком."),
+      hint: t("Материал списывается сам, как только печать закончилась. Если катушку в слоте определить не удалось — печать остаётся черновиком."),
     },
   ];
   const autoMode = !s.moonraker_auto_import ? "off" : s.moonraker_auto_consume ? "consume" : "import";
@@ -658,73 +646,61 @@ export default function Settings() {
     journal: { on: s.error_logging, text: s.error_logging ? t("Пишется") : t("Выключен") },
   };
 
-  const mode = AUTO_MODES.find((m) => m.key === autoMode);
   const msgOf = (m) => m && <Notice tone={m.ok ? "success" : "error"}>{m.text}</Notice>;
 
   const SECTION_NODES = {
     prints: (
-      <Section key="prints" id="prints" title={t("Завершённые печати")} description={t("Что приложение делает с завершёнными печатями с принтера.")}>
-        <div>
-          <ButtonGroup
-            size="md"
-            aria-label={SECTION_TITLES.prints}
-            selectionMode="single"
-            disallowEmptySelection
-            isDisabled={!isAdmin}
-            selectedKeys={[autoMode]}
-            onSelectionChange={(keys) => {
-              const k = [...keys][0];
-              if (k && k !== autoMode) setAutoMode(String(k));
-            }}
-          >
-            {AUTO_MODES.map((m) => <ButtonGroupItem key={m.key} id={m.key}>{m.label}</ButtonGroupItem>)}
-          </ButtonGroup>
-        </div>
-        <Hint><b className="font-semibold text-secondary">{mode?.label}.</b> {mode?.hint}</Hint>
+      <Section key="prints" id="prints" title={t("Завершённые печати")} description={t("Что делать с печатями, которые принтер закончил.")}>
+        <RadioCards
+          label={t("Завершённые печати")}
+          value={autoMode}
+          onChange={(k) => { if (k !== autoMode) setAutoMode(k); }}
+          items={AUTO_MODES}
+          isDisabled={!isAdmin}
+        />
         {!isAdmin && <AdminOnly />}
       </Section>
     ),
 
     consumption: (
-      <Section key="consumption" id="consumption" title={t("Списание")}>
-        {setting("allow_negative_consumption", t("Разрешить списание катушки в минус при нехватке остатка"))}
+      <Section key="consumption" id="consumption" title={t("Списание")} description={t("Что делать, если катушки не хватает.")}>
+        {setting(
+          "allow_negative_consumption",
+          t("Разрешить уходить в минус"),
+          t("Остаток может стать отрицательным, если вес печати больше остатка."),
+        )}
         {!isAdmin && <AdminOnly />}
       </Section>
     ),
 
     low: (
       <Section
-        key="low" id="low" title={t("Остаток филамента")}
-        description={t("Когда предупреждать, что катушка заканчивается: остаток краснеет в списках, катушка попадает в «Заканчиваются» на панели и уходит уведомление.")}
+        key="low" id="low" title={t("Когда катушка заканчивается")}
+        description={t("Остаток станет красным, катушка попадёт в «Заканчиваются» на панели, и придёт уведомление.")}
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {LOW_PRESETS.map((preset) => (
-            <AriaButton
-              key={preset.key}
-              onPress={() => applyLowPreset(preset)}
-              isDisabled={!isAdmin || lowBusy}
-              className={cx(
-                "flex cursor-pointer flex-col items-start gap-0.5 rounded-xl p-4 text-left outline-focus-ring ring-inset transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
-                lowPresetKey === preset.key ? "bg-brand-primary ring-2 ring-brand" : "bg-primary ring-1 ring-primary hover:bg-primary_hover",
-              )}
-            >
-              <span className="text-sm font-semibold text-primary">{t(preset.label)}</span>
-              <span className="text-sm text-tertiary">{t(preset.hint)}</span>
-            </AriaButton>
-          ))}
-        </div>
+        <RadioCards
+          label={t("Когда катушка заканчивается")}
+          value={lowPresetKey === "custom" ? null : lowPresetKey}
+          onChange={(k) => {
+            const preset = LOW_PRESETS.find((p) => p.key === k);
+            if (preset) applyLowPreset(preset);
+          }}
+          items={LOW_PRESETS.map((p) => ({ key: p.key, label: t(p.label), hint: t(p.hint) }))}
+          isDisabled={!isAdmin || lowBusy}
+          className="sm:grid-cols-3"
+        />
 
         {/* Главное объяснение — не формула, а два числа: когда именно скажем.
             Порог считается от размера катушки, поэтому и примера два. */}
-        <p className="m-0 text-sm text-secondary">
+        <Notice tone="info">
           {t("Скажем, когда останется")}{" "}
-          <b className="font-semibold text-primary tabular-nums">{Math.round(lowThresholdFor(1000, lowCfgDraft))} {t("г")}</b>{" "}
+          <b className="font-semibold tabular-nums">{Math.round(lowThresholdFor(1000, lowCfgDraft))} {t("г")}</b>{" "}
           {t("на обычной катушке 1 кг")}
           {" — "}
           {t("и")}{" "}
-          <b className="font-semibold text-primary tabular-nums">{Math.round(lowThresholdFor(250, lowCfgDraft))} {t("г")}</b>{" "}
+          <b className="font-semibold tabular-nums">{Math.round(lowThresholdFor(250, lowCfgDraft))} {t("г")}</b>{" "}
           {t("на маленькой 250 г.")}
-        </p>
+        </Notice>
 
         {isAdmin && (
           <div>
@@ -767,7 +743,7 @@ export default function Settings() {
     telegram: (
       <Section
         key="telegram" id="telegram" title={t("Уведомления в Telegram")}
-        description={t("Сообщения об изменениях состояния принтера: печать завершена, ошибка, сушка и т.д. Создайте бота через @BotFather, получите токен, напишите боту и укажите chat id (узнать можно у @userinfobot).")}
+        description={t("Сообщения о печати, ошибках и сушке. Бота можно создать в @BotFather.")}
       >
         {!isAdmin && <AdminOnly />}
         {isAdmin && (
@@ -860,7 +836,7 @@ export default function Settings() {
     sensors: (
       <Section
         key="sensors" id="sensors" title={t("Датчики температуры и влажности")}
-        description={t("Показания zigbee/wifi-датчиков из Home Assistant — на панели, рядом с принтером и в местах хранения. Нужен адрес HA и токен долгосрочного доступа (профиль в HA → «Токены долгосрочного доступа»).")}
+        description={t("Показания датчиков из Home Assistant — на панели, у принтера и в местах хранения. Токен создаётся в профиле HA → «Токены долгосрочного доступа».")}
       >
         {!isAdmin && <AdminOnly />}
         {isAdmin && (
@@ -1052,13 +1028,14 @@ export default function Settings() {
     journal: (
       <Section
         key="journal" id="journal" title={t("Диагностический журнал")}
-        description={t("Для отладки: включите запись, повторите проблемные действия, затем скачайте журнал и приложите его к issue на GitHub. Пишутся действия (запросы к серверу с результатом), автоматизация принтера (импорт, автосписание, сушка) и ошибки — бэкенда и браузера. Хранится в базе (последние 5000 записей).")}
+        description={t("Для отладки: включите запись, повторите проблему, скачайте журнал и приложите его к issue на GitHub.")}
       >
         {setting(
           "error_logging",
           t("Записывать действия и ошибки"),
           t("Личных данных в записях обычно нет, но перед публикацией просмотрите журнал: секреты (пароли, ключи) вырезаются автоматически."),
         )}
+        <Hint>{t("Пишутся запросы к серверу, автоматизация принтера (импорт, автосписание, сушка) и ошибки сервера и браузера. Хранятся последние 5000 записей.")}</Hint>
         {!isAdmin && <AdminOnly />}
         {isAdmin && (
           <>
@@ -1127,86 +1104,41 @@ export default function Settings() {
     ),
   };
 
-  // Кнопка раздела в оглавлении: точка состояния, название и подпись.
-  const railItem = (id) => {
-    const st = SECTION_STATE[id];
-    const active = activeSection === id;
-    return (
-      <AriaButton
-        key={id}
-        onPress={() => goToSection(id)}
-        aria-current={active ? "true" : undefined}
-        className={cx(
-          "flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2 text-left outline-focus-ring transition duration-100 ease-linear focus-visible:outline-2 focus-visible:-outline-offset-2",
-          active ? "bg-secondary_hover" : "bg-transparent hover:bg-primary_hover",
-        )}
-      >
-        <span className={cx("mt-1.5 size-2 shrink-0 rounded-full", st ? (st.on ? "bg-success-solid" : "bg-quaternary") : "bg-transparent")} aria-hidden="true" />
-        <span className="flex min-w-0 flex-col">
-          <span className={cx("text-sm font-medium", active ? "text-primary" : "text-secondary")}>{SECTION_TITLES[id]}</span>
-          {st && <span className="text-xs text-tertiary">{st.text}</span>}
-        </span>
-      </AriaButton>
-    );
-  };
-
   return (
     <div>
-      <PageHeader title={t("Настройки")} />
+      <PageHeader title={t("Настройки")} subtitle={t("Автоматизация, подключения и данные")} />
 
-      {/* Результат действий — плашкой поверх страницы: карточки далеко друг от друга */}
+      {/* Результат действий — плашкой поверх страницы, видна при любой прокрутке */}
       {msg && (
         <div className="fixed inset-x-4 bottom-24 z-40 lg:inset-x-auto lg:right-8 lg:bottom-8 lg:w-96">
           <Notice tone={msg.ok ? "success" : "error"} className="shadow-lg" onClose={() => setMsg(null)}>{msg.text}</Notice>
         </div>
       )}
 
-      {/* На узком экране оглавления слева нет — вместо него полоса разделов */}
-      <nav aria-label={t("Разделы настроек")} className="-mx-4 mb-6 overflow-x-auto px-4 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
-        <div className="flex w-max gap-2">
-          {SECTION_IDS.map((id) => (
-            <AriaButton
-              key={id}
-              onPress={() => goToSection(id)}
-              className={cx(
-                "cursor-pointer rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap outline-focus-ring ring-1 ring-inset focus-visible:outline-2 focus-visible:outline-offset-2",
-                activeSection === id ? "bg-brand-primary text-brand-secondary ring-utility-brand-200" : "bg-primary text-secondary ring-primary",
-              )}
-            >
-              {SECTION_TITLES[id]}
-            </AriaButton>
-          ))}
+      <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))} className="w-full">
+        {/* На телефоне вкладки прокручиваются вбок, а не ломают ширину страницы */}
+        <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+          <TabList type="underline" size="md" aria-label={t("Разделы настроек")} className="w-max min-w-full">
+            {GROUPS.map((g) => <Tab key={g.id} id={g.id} label={g.title} />)}
+          </TabList>
         </div>
-      </nav>
+        {GROUPS.map((g) => (
+          <TabPanel key={g.id} id={g.id} className="pt-4">
+            {g.ids.map((id) => cloneElement(SECTION_NODES[id], { state: SECTION_STATE[id] }))}
+          </TabPanel>
+        ))}
+      </Tabs>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[232px_minmax(0,1fr)]">
-        <nav aria-label={t("Разделы настроек")} className="hidden self-start lg:sticky lg:top-8 lg:flex lg:flex-col lg:gap-6">
-          {GROUPS.map((g) => (
-            <div key={g.title}>
-              <p className="m-0 mb-1.5 px-3 text-xs font-medium text-quaternary">{g.title}</p>
-              <div className="flex flex-col gap-0.5">{g.ids.map(railItem)}</div>
-            </div>
-          ))}
-        </nav>
-
-        <div className="flex min-w-0 flex-col gap-10">
-          {GROUPS.map((g) => (
-            <div key={g.title} className="flex flex-col gap-4">
-              <h2 className="m-0 text-lg font-semibold text-primary">{g.title}</h2>
-              <div className="flex flex-col gap-6">{g.ids.map((id) => SECTION_NODES[id])}</div>
-            </div>
-          ))}
-
-          <p className="m-0 text-sm text-tertiary">
-            Filament Tracker · {t("интерфейс")} <span className="font-mono">{window.__FT_CONFIG__?.version || "dev"}</span>
-            {serverVersion && <> · {t("сервер")} <span className="font-mono">{serverVersion}</span></>}
-            {updateInfo?.update_available && (
-              <> · <AriaLink href={updateInfo.release_url} target="_blank" rel="noreferrer" className="cursor-pointer rounded-sm font-medium text-brand-secondary outline-focus-ring hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
-                {t("доступна новая версия")} <span className="font-mono">{updateInfo.latest_version}</span>
-              </AriaLink></>
-            )}
-          </p>
-        </div>
+      <div className="mt-6 border-t border-secondary pt-6">
+        <p className="m-0 text-sm text-tertiary">
+          Filament Tracker · {t("интерфейс")} <span className="font-mono">{window.__FT_CONFIG__?.version || "dev"}</span>
+          {serverVersion && <> · {t("сервер")} <span className="font-mono">{serverVersion}</span></>}
+          {updateInfo?.update_available && (
+            <> · <AriaLink href={updateInfo.release_url} target="_blank" rel="noreferrer" className="cursor-pointer rounded-sm font-medium text-brand-secondary outline-focus-ring hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
+              {t("доступна новая версия")} <span className="font-mono">{updateInfo.latest_version}</span>
+            </AriaLink></>
+          )}
+        </p>
       </div>
     </div>
   );
