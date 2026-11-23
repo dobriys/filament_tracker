@@ -27,6 +27,8 @@ class GcodeParseResult(BaseModel):
     total_filament_used_g: float | None = None
     total_filament_used_mm: float | None = None
     tools: list[ToolParsed] = []
+    # Превью модели, вшитое слайсером в gcode: {data_url, width, height}.
+    thumbnail: dict | None = None
 
 
 # --- Печати ---
@@ -77,6 +79,9 @@ class PrintJobOut(BaseModel):
     status: str
     created_at: datetime
     completed_at: datetime | None
+    # Есть (или может найтись на принтере) миниатюра — её отдаёт
+    # GET /api/print-jobs/{id}/thumbnail.
+    thumbnail_available: bool = False
     # Себестоимость по списанным катушкам (есть только если у катушки задана цена)
     cost: float | None = None
     cost_currency: str | None = None

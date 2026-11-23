@@ -1504,7 +1504,15 @@ function jobOut(pj) {
     consumed_g: (pj.spool_usage || []).reduce((sum, u) => sum + Number(u.used_g || 0), 0) || null,
     cost: c ? Math.round(c.cost * 100) / 100 : null, cost_currency: c?.currency || null, cost_partial: c?.partial || false,
     failed: !!pj.parsed_metadata?.failed,
+    thumbnail_available: !!jobThumb(pj),
   };
+}
+// Миниатюра печати: у загруженного gcode — вшитая слайсером, у печатей
+// «с принтера» в демо — общая картинка-превью (настоящего принтера нет).
+function jobThumb(pj) {
+  if (pj.thumbnail?.data_url) return pj.thumbnail;
+  if (pj.source === "moonraker") return { data_url: DEMO_PREVIEW, width: 230, height: 110 };
+  return null;
 }
 function jobDetail(pj) {
   return { ...jobOut(pj), tools: pj.tools || [], spool_usage: pj.spool_usage || [] };
@@ -1520,6 +1528,7 @@ function printJobsRoute(M, parts, body) {
         estimated_print_time_sec: parsed.estimated_print_time_sec || null, filament_change_count: parsed.filament_change_count ?? null,
         total_filament_used_g: parsed.total_filament_used_g ?? null, total_filament_used_mm: parsed.total_filament_used_mm ?? null,
         status: "draft", created_at: nowIso(), completed_at: null, parsed_metadata: {},
+        thumbnail: parsed.thumbnail || null,
         tools: (parsed.tools || []).map((t) => ({ id: uid(), tool_index: t.tool_index, slot_index: null, material: t.material || null, color_hex: t.color_hex || null, used_g: t.used_g ?? null, used_mm: t.used_mm ?? null })),
         spool_usage: [],
       };
@@ -1530,6 +1539,7 @@ function printJobsRoute(M, parts, body) {
   if (!pj) throw notFound("Печать не найдена");
   const sub = parts[2];
   if (!sub && M === "GET") return jobDetail(pj);
+  if (sub === "thumbnail" && M === "GET") return { thumbnail: jobThumb(pj) };
 
   if (sub === "confirm-usage" && M === "POST") {
     const problems = [];

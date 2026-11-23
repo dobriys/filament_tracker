@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Link as AriaLink } from "react-aria-components";
-import { XClose } from "@untitledui/icons";
+import { Cube01, XClose } from "@untitledui/icons";
 import { Dialog, Modal, ModalOverlay } from "@/components/application/modals/modal";
 import { Table, TableCard } from "@/components/application/table/table";
 import { Badge, BadgeWithDot } from "@/components/base/badges/badges";
@@ -59,6 +59,69 @@ function Usage({ job }) {
   return "—";
 }
 
+/** Себестоимость; звёздочка — у части катушек нет цены, итог занижен. */
+function Cost({ job }) {
+  return (
+    <span title={job.cost_partial ? t("Часть катушек без цены — итог занижен") : undefined}>
+      {fmtMoney(job.cost, job.cost_currency)}
+      {job.cost_partial ? <span className="text-tertiary">*</span> : null}
+    </span>
+  );
+}
+
+// Миниатюры печатей: картинка — десятки КБ, поэтому список её не везёт, а
+// каждая строка дозапрашивает свою. Запомненные не грузятся повторно ни при
+// возврате на страницу, ни при открытии окна печати.
+const thumbCache = new Map(); // job id → Promise<{data_url,width,height} | null>
+
+function loadThumb(id) {
+  if (!thumbCache.has(id)) {
+    const p = api.get(`/api/print-jobs/${id}/thumbnail`).then((r) => r?.thumbnail || null).catch(() => null);
+    // «Нет картинки» сервер мог ответить из-за выключенного принтера —
+    // такой ответ не запоминаем, при следующем заходе спросим снова.
+    p.then((th) => { if (!th) thumbCache.delete(id); });
+    thumbCache.set(id, p);
+  }
+  return thumbCache.get(id);
+}
+
+function useThumb(job) {
+  const [thumb, setThumb] = useState(null);
+  useEffect(() => {
+    setThumb(null);
+    if (!job?.thumbnail_available) return undefined;
+    let alive = true;
+    loadThumb(job.id).then((th) => { if (alive) setThumb(th); });
+    return () => { alive = false; };
+  }, [job?.id, job?.thumbnail_available]);
+  return thumb;
+}
+
+/** Квадратик с превью модели; без картинки — значок, чтобы строки не прыгали. */
+function JobThumb({ job }) {
+  const thumb = useThumb(job);
+  return (
+    <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-secondary ring-1 ring-secondary ring-inset">
+      {thumb ? (
+        <img src={thumb.data_url} alt="" className="size-full object-contain" loading="lazy" />
+      ) : (
+        <Cube01 className="size-5 text-fg-quaternary" aria-hidden="true" />
+      )}
+    </div>
+  );
+}
+
+/** Крупное превью в окне печати — только если картинка есть. */
+function JobPreview({ job }) {
+  const thumb = useThumb(job);
+  if (!thumb) return null;
+  return (
+    <div className="flex items-center justify-center rounded-xl bg-secondary p-3 ring-1 ring-secondary ring-inset">
+      <img src={thumb.data_url} alt={t("Превью модели")} className="max-h-64 w-auto max-w-full object-contain" />
+    </div>
+  );
+}
+
 function StatusBadge({ status }) {
   return (
     <BadgeWithDot type="pill-color" size="sm" color={STATUS_COLOR[status] || "gray"}>
@@ -101,47 +164,58 @@ export default function PrintJobs() {
         badge={<Badge size="sm" color="brand" type="pill-color">{jobs.length}</Badge>}
       />
 
+      {/* Таблица должна влезать без прокрутки вбок: дата и слайсер — второй
+          строкой под файлом, длинное имя обрезается, «Открыть» не нужна —
+          строка открывается кликом. Уже md расход, цена и статус тоже уходят
+          под имя файла, а их колонки прячутся. */}
       <TableCard.Root>
         <Table size="sm" aria-label={t("История печати")} onRowAction={(key) => open(String(key))}>
           <Table.Header>
-            <Table.Head id="date" isRowHeader label={t("Дата")} />
-            <Table.Head id="file" label={t("Файл")} className="w-full" />
-            <Table.Head id="usage" label={t("Расход")} className="px-3" />
-            <Table.Head id="price" label={t("Цена")} className="px-3" />
-            <Table.Head id="status" label={t("Статус")} className="px-3" />
-            <Table.Head id="actions" className="px-3" />
+            <Table.Head id="file" isRowHeader label={t("Печать")} className="w-full px-4 md:px-5" />
+            <Table.Head id="usage" label={t("Расход")} className="hidden px-3 md:table-cell" />
+            <Table.Head id="price" label={t("Цена")} className="hidden px-3 md:table-cell" />
+            <Table.Head id="status" label={t("Статус")} className="hidden px-3 md:table-cell" />
+            <Table.Head id="actions" className="px-4 md:pr-5 md:pl-3" />
           </Table.Header>
           <Table.Body items={jobs} renderEmptyState={() => <EmptyNote>{t("Печатей пока нет")}</EmptyNote>}>
             {(j) => (
               <Table.Row id={j.id}>
-                <Table.Cell className="whitespace-nowrap text-tertiary">{fmtWhen(j.completed_at || j.created_at)}</Table.Cell>
-                <Table.Cell>
-                  <p className="max-w-md truncate text-sm font-medium text-primary" title={j.file_name || ""}>
-                    {(j.file_name || "—").split("/").pop()}
-                  </p>
-                  {j.slicer_name && <p className="text-sm text-tertiary">{j.slicer_name}</p>}
+                {/* max-w-0 + w-full: ячейка забирает свободное место, но может
+                    и сжиматься — тогда имя файла обрезается многоточием */}
+                <Table.Cell className="w-full max-w-0 px-4 md:px-5">
+                  <div className="flex items-start gap-3">
+                    <JobThumb job={j} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-primary" title={j.file_name || ""}>
+                        {(j.file_name || "—").split("/").pop()}
+                      </p>
+                      <p className="truncate text-sm text-tertiary">
+                        {fmtWhen(j.completed_at || j.created_at)}
+                        {j.slicer_name && <> · {j.slicer_name}</>}
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 md:hidden">
+                        <StatusBadge status={j.status} />
+                        {j.failed && <Badge size="sm" color="error" type="pill-color">{t("брак")}</Badge>}
+                        <span className="text-sm tabular-nums"><Usage job={j} /></span>
+                        {j.cost != null && <span className="text-sm tabular-nums"><Cost job={j} /></span>}
+                      </div>
+                    </div>
+                  </div>
                 </Table.Cell>
-                <Table.Cell className="px-3 whitespace-nowrap tabular-nums"><Usage job={j} /></Table.Cell>
-                <Table.Cell
-                  className="px-3 whitespace-nowrap tabular-nums"
-                >
-                  <span title={j.cost_partial ? t("Часть катушек без цены — итог занижен") : undefined}>
-                    {j.cost != null ? <>{fmtMoney(j.cost, j.cost_currency)}{j.cost_partial ? <span className="text-tertiary">*</span> : null}</> : "—"}
-                  </span>
+                <Table.Cell className="hidden px-3 whitespace-nowrap tabular-nums md:table-cell"><Usage job={j} /></Table.Cell>
+                <Table.Cell className="hidden px-3 whitespace-nowrap tabular-nums md:table-cell">
+                  {j.cost != null ? <Cost job={j} /> : "—"}
                 </Table.Cell>
-                <Table.Cell className="px-3">
-                  <div className="flex flex-wrap items-center gap-1.5">
+                <Table.Cell className="hidden px-3 md:table-cell">
+                  <div className="flex flex-col items-start gap-1.5">
                     <StatusBadge status={j.status} />
                     {j.failed && <Badge size="sm" color="error" type="pill-color">{t("брак")}</Badge>}
                   </div>
                 </Table.Cell>
-                <Table.Cell className="px-3">
-                  <div className="flex items-center justify-end gap-2">
-                    {CONSUMABLE.has(j.status) && (
-                      <Button size="sm" onClick={() => navigate(`/print-jobs/${j.id}/consume`)}>{t("Списать")}</Button>
-                    )}
-                    <Button size="sm" color="secondary" onClick={() => open(j.id)}>{t("Открыть")}</Button>
-                  </div>
+                <Table.Cell className="px-4 md:pr-5 md:pl-3">
+                  {CONSUMABLE.has(j.status) && (
+                    <Button size="sm" onClick={() => navigate(`/print-jobs/${j.id}/consume`)}>{t("Списать")}</Button>
+                  )}
                 </Table.Cell>
               </Table.Row>
             )}
@@ -165,6 +239,8 @@ export default function PrintJobs() {
                   </div>
                   <ButtonUtility size="sm" color="tertiary" icon={XClose} tooltip={t("Закрыть")} onClick={() => setDetail(null)} />
                 </div>
+
+                <JobPreview job={detail} />
 
                 {detail.spool_usage.length > 0 && (
                   <div className="flex flex-col gap-3">

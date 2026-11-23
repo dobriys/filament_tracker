@@ -59,3 +59,42 @@ def test_file_hash_is_stable():
     a = parse_gcode(b"; x = 1\n", "a.gcode")
     b = parse_gcode(b"; x = 1\n", "a.gcode")
     assert a["file_hash"] == b["file_hash"]
+
+
+# --- превью модели, вшитое слайсером ------------------------------------
+
+import base64
+
+_PNG = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"x" * 40).decode()
+
+
+def _thumb_block(w, h, kind="", data=_PNG):
+    tag = f"thumbnail_{kind}" if kind else "thumbnail"
+    lines = [data[i:i + 20] for i in range(0, len(data), 20)]
+    body = "\n".join(f"; {ln}" for ln in lines)
+    return f"; {tag} begin {w}x{h} {len(data)}\n{body}\n; {tag} end\n"
+
+
+def test_embedded_thumbnail_becomes_data_url():
+    text = _thumb_block(300, 300) + PRUSA_SINGLE
+    th = parse_gcode(text, "a.gcode")["thumbnail"]
+    assert (th["width"], th["height"]) == (300, 300)
+    assert th["data_url"] == f"data:image/png;base64,{_PNG}"
+
+
+def test_embedded_thumbnail_prefers_camera_render_and_skips_qoi():
+    """Как и с принтера: неквадратная «камерой» нагляднее вида сверху,
+    а QOI браузер не покажет."""
+    text = (
+        _thumb_block(512, 512)
+        + _thumb_block(230, 110, kind="JPG")
+        + _thumb_block(600, 300, kind="QOI")
+        + PRUSA_SINGLE
+    )
+    th = parse_gcode(text, "a.gcode")["thumbnail"]
+    assert (th["width"], th["height"]) == (230, 110)
+    assert th["data_url"].startswith("data:image/jpeg;base64,")
+
+
+def test_no_thumbnail_in_gcode():
+    assert parse_gcode(PRUSA_SINGLE, "a.gcode")["thumbnail"] is None

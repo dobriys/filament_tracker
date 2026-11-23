@@ -487,3 +487,24 @@ def test_history_parsing():
     assert jobs[0]["slicer"] == "OrcaSlicer"
     assert jobs[0]["filament_total_g"] == 7.5
     assert jobs[1]["status"] == "cancelled"
+
+
+# --- миниатюра для истории печати: «нет картинки» ≠ «принтер не ответил» ---
+
+
+def test_fetch_thumbnail_none_when_file_is_gone():
+    """Файл удалён с принтера — картинки уже не будет, запоминаем это."""
+    assert _client_returning({"error": "not found"}, status_code=404).fetch_thumbnail("a.gcode") is None
+    assert _client_returning({"result": {}}).fetch_thumbnail("a.gcode") is None
+
+
+def test_fetch_thumbnail_raises_when_printer_unreachable():
+    """Принтер выключен — не повод навсегда записать печати «без картинки»."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route to host")
+
+    c = MoonrakerClient("http://printer.local:7125", transport=httpx.MockTransport(handler))
+    with pytest.raises(httpx.HTTPError):
+        c.fetch_thumbnail("a.gcode")
+    assert c.get_thumbnail("a.gcode") is None  # карточке принтера по-прежнему всё равно

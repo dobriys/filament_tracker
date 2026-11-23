@@ -693,12 +693,16 @@ class MoonrakerClient:
                 return None
             return resp.content, resp.headers.get("content-type", "image/png")
 
-    def get_thumbnail(self, filename: str) -> dict | None:
+    def fetch_thumbnail(self, filename: str) -> dict | None:
         """Превью модели по имени gcode-файла — как data-URL.
 
         Картинка лежит на принтере, но забираем её мы: браузеру не нужен ни
         прямой доступ к Moonraker, ни API-ключ. Какую из миниатюр показывать —
         см. pick_thumbnail.
+
+        None — картинки нет и не будет (файл удалён, слайсер её не вшил,
+        слишком большая). Если же принтер не ответил, ошибка уходит наружу:
+        история печати по ней решает, спросить ли ещё раз позже.
         """
         if not filename:
             return None
@@ -707,22 +711,38 @@ class MoonrakerClient:
 
         try:
             meta = self._get(f"/server/files/metadata?filename={quote(filename)}")
-            best = pick_thumbnail(parse_thumbnails(meta))
-            if not best:
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
                 return None
-            path = thumbnail_path(filename, best["relative_path"])
+            raise
+        best = pick_thumbnail(parse_thumbnails(meta))
+        if not best:
+            return None
+        path = thumbnail_path(filename, best["relative_path"])
+        try:
             got = self._get_bytes(f"/server/files/gcodes/{quote(path)}", MAX_THUMBNAIL_BYTES)
-            if not got:
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
                 return None
-            data, ctype = got
-            return {
-                "data_url": f"data:{ctype};base64,{b64encode(data).decode()}",
-                "width": best.get("width"),
-                "height": best.get("height"),
-            }
+            raise
+        if not got:
+            return None
+        data, ctype = got
+        return {
+            "data_url": f"data:{ctype};base64,{b64encode(data).decode()}",
+            "width": best.get("width"),
+            "height": best.get("height"),
+        }
+
+    def get_thumbnail(self, filename: str) -> dict | None:
+        """То же, что fetch_thumbnail, но никогда не бросает.
+
+        Превью — украшение: ни отсутствие файла, ни старый Moonraker без
+        metadata, ни выключенный принтер не должны мешать показывать карточку.
+        """
+        try:
+            return self.fetch_thumbnail(filename)
         except Exception:
-            # Превью — украшение: ни отсутствие файла, ни старый Moonraker без
-            # metadata не должны мешать показывать карточку принтера.
             return None
 
     def get_light(self) -> dict | None:

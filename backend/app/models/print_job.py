@@ -45,6 +45,11 @@ class PrintJob(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String, nullable=False, default="draft")
     parsed_metadata: Mapped[dict | None] = mapped_column(JSONB)
 
+    # Миниатюра модели {data_url, width, height} — из gcode или с принтера.
+    # NULL — ещё не искали (печать с принтера дозапросится при первом показе),
+    # {} — искали, картинки нет. Отложенная загрузка: список печатей её не тянет.
+    thumbnail: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), deferred=True)
+
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

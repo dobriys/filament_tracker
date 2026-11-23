@@ -11,6 +11,19 @@ BambuStudio (общий формат комментариев `; key = value`) �
 import hashlib
 import re
 
+# Превью, которое слайсер вшивает в начало файла:
+#   ; thumbnail begin 300x300 12345      (PNG; у Orca бывают _PNG/_JPG/_QOI)
+#   ; iVBORw0KGgo...
+#   ; thumbnail end
+_THUMB_RE = re.compile(
+    r"^;\s*thumbnail(?:_(PNG|JPG|QOI))?\s+begin\s+(\d+)x(\d+)[^\n]*\n(.*?)^;\s*thumbnail(?:_\w+)?\s+end",
+    re.M | re.S,
+)
+_THUMB_MIME = {"PNG": "image/png", "JPG": "image/jpeg"}
+# Превью лежат в шапке — дальше искать незачем (gcode бывает на сотни МБ).
+_THUMB_SCAN_CHARS = 4 * 1024 * 1024
+_THUMB_MAX_B64 = 700 * 1024
+
 _KV_RE = re.compile(r"^[;\s]*([A-Za-z0-9_ \[\]\(\)/%\.\-]+?)\s*[:=]\s*(.+?)\s*$")
 _TIME_TOKEN_RE = re.compile(r"(\d+(?:\.\d+)?)\s*([dhms])")
 
@@ -65,6 +78,34 @@ def _detect_slicer(head: str):
         if m:
             return name, (m.group(1) or None)
     return None, None
+
+
+def extract_thumbnail(text: str) -> dict | None:
+    """Самое наглядное вшитое превью как {data_url, width, height} или None.
+
+    Выбор — тот же, что у превью с принтера (moonraker.pick_thumbnail).
+    QOI браузер не показывает — такие пропускаем.
+    """
+    from app.services.moonraker import pick_thumbnail
+
+    found = []
+    for m in _THUMB_RE.finditer(text[:_THUMB_SCAN_CHARS]):
+        kind = (m.group(1) or "PNG").upper()
+        mime = _THUMB_MIME.get(kind)
+        if not mime:
+            continue
+        data = "".join(ln.lstrip(";").strip() for ln in m.group(4).splitlines())
+        if not data or len(data) > _THUMB_MAX_B64:
+            continue
+        found.append({"width": int(m.group(2)), "height": int(m.group(3)), "mime": mime, "data": data})
+    best = pick_thumbnail(found)
+    if not best:
+        return None
+    return {
+        "data_url": f"data:{best['mime']};base64,{best['data']}",
+        "width": best["width"],
+        "height": best["height"],
+    }
 
 
 def parse_gcode(content: bytes | str, filename: str) -> dict:
@@ -165,4 +206,5 @@ def parse_gcode(content: bytes | str, filename: str) -> dict:
         "total_filament_used_g": total_g,
         "total_filament_used_mm": total_mm,
         "tools": tools,
+        "thumbnail": extract_thumbnail(text),
     }

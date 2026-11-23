@@ -982,4 +982,5 @@ export const EN = {
   "Показания датчиков из Home Assistant — на панели, у принтера и в местах хранения. Токен создаётся в профиле HA → «Токены долгосрочного доступа».": "Sensor readings from Home Assistant — on the dashboard, next to the printer and in storage locations. Create the token in your HA profile → “Long-lived access tokens”.",
   "Для отладки: включите запись, повторите проблему, скачайте журнал и приложите его к issue на GitHub.": "For debugging: turn on logging, repeat the problem, download the log and attach it to a GitHub issue.",
   "Пишутся запросы к серверу, автоматизация принтера (импорт, автосписание, сушка) и ошибки сервера и браузера. Хранятся последние 5000 записей.": "Server requests, printer automation (import, auto-deduct, drying) and server and browser errors are recorded. The last 5000 entries are kept.",
+  "Превью модели": "Model preview",
 };

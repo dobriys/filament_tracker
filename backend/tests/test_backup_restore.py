@@ -143,3 +143,12 @@ def test_restore_spool_usage_keeps_every_exported_column():
     assert usage.confirmed_at == datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc)
     # Дата расхода — это когда списали, а не когда восстановили бэкап.
     assert usage.created_at == datetime(2026, 6, 30, 9, 0, tzinfo=timezone.utc)
+
+
+def test_restore_print_job_keeps_thumbnail():
+    """Превью с принтера после удаления файла уже не достать — бэкап его хранит."""
+    assert "thumbnail" in backup_service.PRINTJOB_COLS
+    thumb = {"data_url": "data:image/png;base64,AAAA", "width": 230, "height": 110}
+    db = FakeSession()
+    restore_backup(db, _user(), {"print_jobs": [dict(JOB_ITEM, thumbnail=thumb)]})
+    assert _added(db, backup_service.PrintJob)[0].thumbnail == thumb
