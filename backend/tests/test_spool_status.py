@@ -160,3 +160,61 @@ def test_created_spool_gets_status_from_its_remainder(monkeypatch, left, expecte
         data={"initial_filament_weight_g": 1000, "current_weight_g": left},
     )
     assert spool.status == expected
+
+
+# --- «новая» до первого списания ----------------------------------------
+
+
+def _new_spool(grams=1000):
+    return SimpleNamespace(
+        id=None, current_weight_g=grams, status="new", initial_filament_weight_g=1000
+    )
+
+
+@pytest.fixture
+def fixed_threshold(monkeypatch):
+    from app.services import spool_service
+
+    monkeypatch.setattr(spool_service, "low_threshold", lambda db, spool: 100)
+    return spool_service
+
+
+def test_first_print_usage_makes_new_spool_in_use(fixed_threshold):
+    spool = _new_spool()
+    fixed_threshold.consume(_FakeDb(), spool, used_g=25, user=None, commit=False)
+    assert spool.status == "in_use"
+
+
+@pytest.mark.parametrize("call", ["adjust_down", "weigh_lighter"])
+def test_any_decrease_counts_as_first_use(fixed_threshold, call):
+    """Списать вручную или перевесить легче — тоже значит, что катушку начали."""
+    spool = _new_spool()
+    spool.empty_spool_weight_g = 200
+    if call == "adjust_down":
+        fixed_threshold.adjust(_FakeDb(), spool, delta_g=-10, new_weight_g=None, user=None)
+    else:
+        fixed_threshold.weigh(_FakeDb(), spool, total_weight_g=1150, user=None)
+    assert spool.status == "in_use"
+
+
+def test_increase_or_same_weight_keeps_new(fixed_threshold):
+    """Уточнили вес вверх или перевесили без изменений — катушку ещё не трогали."""
+    spool = _new_spool(950)
+    fixed_threshold.adjust(_FakeDb(), spool, delta_g=None, new_weight_g=1000, user=None)
+    assert spool.status == "new"
+    spool.empty_spool_weight_g = 0
+    fixed_threshold.weigh(_FakeDb(), spool, total_weight_g=1000, user=None)
+    assert spool.status == "new"
+
+
+def test_first_use_below_threshold_goes_straight_to_almost_empty(fixed_threshold):
+    spool = _new_spool(120)
+    fixed_threshold.consume(_FakeDb(), spool, used_g=30, user=None, commit=False)
+    assert spool.status == "almost_empty"
+
+
+def test_used_spool_never_returns_to_new(fixed_threshold):
+    spool = _new_spool()
+    fixed_threshold.consume(_FakeDb(), spool, used_g=25, user=None, commit=False)
+    fixed_threshold.adjust(_FakeDb(), spool, delta_g=None, new_weight_g=1000, user=None)
+    assert spool.status == "in_use"

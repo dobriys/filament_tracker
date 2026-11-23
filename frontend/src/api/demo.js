@@ -410,8 +410,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function profileOf(sp) {
   return db.profiles.find((p) => p.id === sp.filament_profile_id) || null;
 }
-function recompute(sp) {
+// before — остаток до изменения: первое списание переводит «новую» в «используется»
+// (как spool_service._record_change на бэкенде).
+function recompute(sp, before) {
   if (sp.status === "archived") return;
+  if (sp.status === "new" && before != null && Number(sp.current_weight_g) < before) sp.status = "in_use";
   const left = Number(sp.current_weight_g);
   if (left <= 0) sp.status = "empty";
   else if (left <= lowThresholdG(sp.initial_filament_weight_g)) sp.status = "almost_empty";
@@ -1052,6 +1055,7 @@ function spoolsRoute(M, parts, query, body) {
         price: body.price ?? null, currency: body.currency || "RUB", notes: body.notes || null,
         status: "new", qr_token: uid().replace(/-/g, "").slice(0, 12), created_at: nowIso(), updated_at: nowIso(),
       };
+      recompute(sp);   // початая катушка с малым остатком — сразу «заканчивается»
       db.spools.unshift(sp);
       addEvent(sp.id, { type: "created", after: sp.current_weight_g, reason: "Новая катушка" });
       save(); return sp;
@@ -1121,7 +1125,7 @@ function spoolsRoute(M, parts, query, body) {
     const before = Number(sp.current_weight_g);
     const empty = Number(sp.empty_spool_weight_g) || 0;
     const after = Math.max(0, Number(body.total_weight_g) - empty);
-    sp.current_weight_g = after; recompute(sp);
+    sp.current_weight_g = after; recompute(sp, before);
     addEvent(sp.id, { type: "weighed", before, after, delta: after - before, reason: body.reason || "Взвешивание" });
     save(); return sp;
   }
@@ -1131,7 +1135,7 @@ function spoolsRoute(M, parts, query, body) {
     if (body.new_weight_g != null) after = Number(body.new_weight_g);
     else if (body.delta_g != null) after = before + Number(body.delta_g);
     after = Math.max(0, after);
-    sp.current_weight_g = after; recompute(sp);
+    sp.current_weight_g = after; recompute(sp, before);
     addEvent(sp.id, { type: "manual_adjustment", before, after, delta: after - before, reason: body.reason || "Корректировка" });
     save(); return sp;
   }
@@ -1552,7 +1556,7 @@ function printJobsRoute(M, parts, body) {
     for (const { tool, sp, grams } of plan) {
       const before = Number(sp.current_weight_g);
       sp.current_weight_g = Math.max(allowNeg ? -1e9 : 0, before - grams);
-      recompute(sp);
+      recompute(sp, before);
       addEvent(sp.id, { type: "print_usage", before, after: sp.current_weight_g, delta: -grams, reason: `Печать ${pj.file_name}` });
       pj.spool_usage.push({ id: uid(), spool_id: sp.id, printer_slot_id: null, tool_index: tool.tool_index, used_g: Math.round(grams * 100) / 100, confirmed_at: nowIso() });
     }

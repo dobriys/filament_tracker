@@ -75,8 +75,8 @@ def recompute_status(spool: Spool, threshold_g: float) -> None:
         spool.status = "empty"
     elif left <= Decimal(str(threshold_g)):
         spool.status = "almost_empty"
-    elif spool.status in ("new",):
-        # не трогаем «new», пока пользователь сам не начнёт печатать
+    elif spool.status == "new":
+        # «новая» держится до первого списания — его отмечает _record_change
         pass
     else:
         spool.status = "in_use"
@@ -95,6 +95,10 @@ def _record_change(
     before = Decimal(spool.current_weight_g)
     after = Decimal(new_weight)
     spool.current_weight_g = after
+    # Первое списание (печать, ручное, перевесили легче) — катушку начали:
+    # «новая» сменяется на «используется». Обратно в «новую» не возвращается.
+    if spool.status == "new" and after < before:
+        spool.status = "in_use"
     recompute_status(spool, low_threshold(db, spool))
 
     event = SpoolEvent(
