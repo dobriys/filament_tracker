@@ -53,11 +53,13 @@ and "Reset demo" puts everything back.
 ### Inventory
 
 - **Spool inventory** — material, color, remaining grams, storage location, photo.
-  In the list, each row carries a stripe of the filament's real color, so you spot
-  the spool you want without reading a single name.
+  In the list, each spool shows a swatch of its real color and a remaining bar in the
+  same color, so you spot the one you want without reading a single name.
 - **Accurate remaining amount** — deduction by weight, manual corrections, full
   movement history. The "running low" threshold is measured against the spool's own
-  size, so one setting fits both kilogram rolls and samples.
+  size, so one setting fits both kilogram rolls and samples. Status keeps itself up
+  to date: a spool is "new" until something is deducted from it, then "in use",
+  "almost empty" and "empty".
 - **Filament profiles** — brand and material templates with every temperature, so you
   don't fill in the same card twice.
 - **Storage locations and printer slots** — see what's on the shelf and what's loaded.
@@ -76,6 +78,8 @@ and "Reset demo" puts everything back.
 - **Printer catalog** — 50+ Klipper/Moonraker models (Anycubic, Creality, Sovol, QIDI,
   FLSUN, ELEGOO, Prusa and more). Connection type, slot count and capabilities fill
   themselves in.
+- **Print thumbnails** — the history shows what each print actually was: the
+  picture comes from the gcode or straight from the printer.
 - **One-click deduction** — per-extruder usage already comes from the printer; you
   just confirm which spools it came off.
 - **Automatic deduction** — background polling brings finished prints in on their own,
@@ -117,6 +121,8 @@ and "Reset demo" puts everything back.
 - **Your own server** — login-based access, printer keys stored encrypted, nothing
   leaves the machine.
 - **Two languages** — English and Russian, switched on the fly.
+- **Works on your phone too** — light and dark themes; a sidebar on the desktop and a
+  bottom bar on the phone.
 
 ---
 
@@ -134,17 +140,19 @@ recent events.
 
 ### Spools
 
-The main inventory list. Each row opens with a stripe of the filament's real color,
-and the remaining bar uses that same color; as the spool runs down it turns ochre,
-then red. From here you can add, edit, duplicate in another color, weigh, or print a
-label.
+The main inventory list. Each row shows a swatch of the filament's real color and a
+remaining bar in that same color, while the status tells you where the spool stands:
+new, in use, almost empty or empty. Filter by material, location and status, or switch
+to a grid of cards. From here you can add, edit, duplicate in another color, weigh,
+or print a label.
 
 ![Spools](docs/screenshots/en/spools.png)
 
-The spool page opens with the thing you came for: how much is left. The winding on
-the gauge shows the remaining amount in the filament's own color, with a color
-sample and its hex code beside it. Further down the same page: placement and drying,
-the full spec sheet, a QR code for the label, and usage history.
+The spool page opens with the thing you came for: how much is left. The ring shows
+the remaining amount in the filament's own color, next to its length and how many
+prints it's good for; you can weigh the spool or set the remainder right there. The
+rest sits in tabs: Overview has the print profile, placement, drying and the QR code
+for the label, followed by specifications, history and notes.
 
 ![Spool detail](docs/screenshots/en/spool-detail.png)
 
@@ -154,19 +162,23 @@ Pick a model from the catalog when adding a printer and the rest fills itself in
 Klipper/Moonraker printer works, Anycubic on Rinkhals included: you only see what the
 printer actually has.
 
-The printer panel reconciles what sits in the slots against what's assigned in the
-app — and lets you assign or remove a spool right there: click a slot tile, no need to
-visit My spools. It also shows telemetry and lifetime stats, and deducts finished jobs
-with the button next to them. Deducted jobs are marked and won't be counted twice.
-There's no limit on how many printers you add.
+The **Moonraker** button opens the printer panel. It reconciles what sits in the
+slots against what's assigned in the app — and lets you assign or remove a spool right
+there: click a slot tile, no need to visit Spools. Below that are telemetry and
+lifetime stats, and the neighbouring tabs hold drying, the camera and finished jobs,
+deducted with the button next to them. Deducted jobs are marked and won't be counted
+twice. There's no limit on how many printers you add.
 
 ![Printers and Moonraker](docs/screenshots/en/printers.png)
 
 ### History
 
-Every deduction and correction: when, for which print, and off which spool. Prints
-that aren't deducted yet (drafts) are deducted right here, from the button in the
-row — even when the job has long scrolled out of the printer's own history.
+Every print: when, what it was, how much filament it took and what it cost. Each one
+has a thumbnail of the model: the slicer embeds it in the gcode, and for prints from
+the printer the app grabs the picture right away, before the temporary file is gone.
+Prints that aren't deducted yet (drafts) are deducted right here, from the button in
+the row — even when the job has long scrolled out of the printer's own history. Click
+a row for the details: which spools it came off and how much.
 
 ![History](docs/screenshots/en/print-jobs.png)
 
@@ -203,7 +215,8 @@ spools actually written off. Fields that need explaining carry a question mark.
 
 ![Print cost calculator](docs/screenshots/en/cost.png)
 
-What an hour of printing costs is set on the printer itself: price, upgrades,
+What an hour of printing costs is set on the printer itself (the Cost button in the
+printer list): price, upgrades,
 maintenance, service life, utilisation, power draw and the electricity tariff. An empty
 field means the default, shown as the placeholder.
 
@@ -211,9 +224,10 @@ field means the default, shown as the placeholder.
 
 ### Settings
 
-Sections are grouped by what they actually do, and the contents rail doubles as a
-status board: whether auto-import is on, whether Telegram is set up, how many sensors
-you have.
+Three tabs — Automation, Connections and Data. Every setting is a row: what it is
+and why on the left, the switch or fields on the right, and its status under the
+title — whether auto-import is on, whether Telegram is set up, how many sensors you
+have. Everything saves as you go, so there's no Save button to hunt for at the bottom.
 
 ![Settings](docs/screenshots/en/settings.png)
 

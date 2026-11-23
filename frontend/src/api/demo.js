@@ -723,9 +723,11 @@ function fakeQr(token) {
   let rects = "";
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
-      h = (h * 1103515245 + 12345) >>> 0;
+      // Math.imul: обычное умножение теряет младшие биты за 2^53, и сетка
+      // выходила сплошь чёрной. Младший бит ЛКГ чередуется — берём старший.
+      h = (Math.imul(h, 1103515245) + 12345) >>> 0;
       const corner = (x < 3 && y < 3) || (x > N - 4 && y < 3) || (x < 3 && y > N - 4);
-      if (corner || h % 2 === 0) rects += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
+      if (corner || (h >>> 16) % 2 === 0) rects += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
     }
   }
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${N} ${N}" shape-rendering="crispEdges"><rect width="${N}" height="${N}" fill="#fff"/><g fill="#000">${rects}</g></svg>`;
