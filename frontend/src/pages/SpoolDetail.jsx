@@ -1,11 +1,21 @@
 import { useEffect, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { Link as AriaLink } from "react-aria-components";
+import { Check, Copy01, Download01, Droplets02, Edit01, MarkerPin01, Plus, Printer, Tag01 } from "@untitledui/icons";
+import { Table, TableCard } from "@/components/application/table/table";
+import { Tab, TabList, TabPanel, Tabs } from "@/components/application/tabs/tabs";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
+import { Select } from "@/components/base/select/select";
+import { Card, CardHeader, EmptyNote, PageHeader, SpecGroup, SpecRow, SpoolStatusBadge, SpoolSwatch } from "../components/ft/ui.jsx";
+import { Notice, Stat } from "../components/ft/printer.jsx";
+import { cx } from "@/utils/cx";
 import { api } from "../api/client.js";
 import { SPEC_GROUPS, fmtSpec } from "../specFields.js";
 import { spoolTitle } from "../utils/spools.js";
 import { t, dateLocale, tReason } from "../i18n.js";
 import { slotLabel } from "../utils/slots.js";
-import Icon from "../components/Icon.jsx";
+import { locationPath } from "../utils/locations.js";
 
 const STATUS_RU = {
   new: t("Новая"), in_use: t("Используется"), almost_empty: t("Заканчивается"),
@@ -16,6 +26,8 @@ const EVENT_RU = {
   print_usage: t("Печать"), moved: t("Перемещение"), archived: t("Архив"),
   dried: t("Сушка"),
 };
+// Select не принимает пустую строку в роли id, поэтому «не выбрано» — условный ключ.
+const NONE = "__none";
 
 function fmtDate(iso) {
   if (!iso) return "—";
@@ -30,48 +42,67 @@ function lengthM(grams, density, dmm) {
 
 // Катушка и есть шкала остатка.
 //
-// Раньше страница показывала два круга про одно и то же: нарисованную полную
-// катушку и рядом пончик с процентом. Настоящая катушка на глазах пустеет —
-// поэтому длина намотки здесь равна остатку, а цвет намотки берётся у самого
-// филамента. Один объект отвечает сразу на «что это» и «сколько осталось».
-// На низком остатке цвет перебивается статусным: тревога важнее материала.
-function SpoolGauge({ pct, color, size = 136 }) {
+// Нарисованная катушка на глазах пустеет: длина намотки равна остатку, а цвет
+// намотки — цвет самого филамента. Один объект отвечает сразу на «что это» и
+// «сколько осталось». Цвет дуги всегда цвет филамента: тревога о низком остатке
+// живёт в значке статуса рядом с названием, а не в цвете дуги — длина и цвет
+// несут разные факты и не должны драться за один канал.
+function SpoolGauge({ pct, color, size = 160 }) {
   const R = 54, BAND = 15, C = 2 * Math.PI * R;
   const p = Math.max(0, Math.min(1, pct));
   const wound = p * C;
-  // Цвет намотки — всегда цвет филамента. Раньше на низком остатке он
-  // подменялся статусным, и оранжевая катушка на 4% выглядела красным
-  // огрызком: длина дуги и её цвет несут разные факты и не должны драться
-  // за один канал. Тревога живёт в бейдже статуса рядом с названием.
-  const fill = color || "var(--muted-2)";
-  // Конец намотки: у белого и натурального филамента дуга почти сливается с
-  // пустой дорожкой, и без этой засечки не видно, где намотка кончается.
+  const fill = color || "var(--color-bg-quaternary)";
+  // Засечка в конце намотки: у белого и натурального филамента дуга почти
+  // сливается с пустой дорожкой, и без неё не видно, где намотка кончается.
   const endAngle = ((-90 + p * 360) * Math.PI) / 180;
   const tick = (k) => [70 + k * Math.cos(endAngle), 70 + k * Math.sin(endAngle)];
   const [tx1, ty1] = tick(R - BAND / 2);
   const [tx2, ty2] = tick(R + BAND / 2);
   return (
-    <svg viewBox="0 0 140 140" width={size} height={size} className="spool-gauge"
-      role="img" aria-label={`${t("Остаток")} ${Math.round(p * 100)}%`}>
-      {/* пустая часть катушки */}
-      <circle cx="70" cy="70" r={R} fill="none" stroke="var(--border)" strokeWidth={BAND} />
-      {/* намотка: дуга = остаток, цвет = филамент */}
-      <circle cx="70" cy="70" r={R} fill="none" stroke={fill} strokeWidth={BAND}
-        strokeDasharray={`${wound} ${C - wound}`} transform="rotate(-90 70 70)" />
-      {/* волоски по краям намотки — иначе белый и натуральный сливаются с фоном */}
-      <circle cx="70" cy="70" r={R + BAND / 2} fill="none" stroke="var(--border)" strokeWidth="1" />
-      <circle cx="70" cy="70" r={R - BAND / 2} fill="none" stroke="var(--border)" strokeWidth="1" />
-      {p > 0.002 && p < 0.998 && (
-        <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} stroke="var(--muted)" strokeWidth="1.5" />
-      )}
-      {/* ступица */}
-      <circle cx="70" cy="70" r={R - BAND / 2 - 1} fill="var(--panel)" />
-      <text x="70" y="70" textAnchor="middle" dominantBaseline="central"
-        className="spool-gauge-pct">{Math.round(p * 100)}%</text>
-    </svg>
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 140 140" width={size} height={size} role="img" aria-label={`${t("Остаток")} ${Math.round(p * 100)}%`}>
+        {/* пустая часть катушки */}
+        <circle cx="70" cy="70" r={R} fill="none" strokeWidth={BAND} className="stroke-bg-quaternary" />
+        {/* намотка: дуга = остаток, цвет = филамент */}
+        <circle cx="70" cy="70" r={R} fill="none" stroke={fill} strokeWidth={BAND}
+          strokeDasharray={`${wound} ${C - wound}`} transform="rotate(-90 70 70)" />
+        {/* тонкие кромки намотки */}
+        <circle cx="70" cy="70" r={R + BAND / 2} fill="none" strokeWidth="1" className="stroke-border-secondary" />
+        <circle cx="70" cy="70" r={R - BAND / 2} fill="none" strokeWidth="1" className="stroke-border-secondary" />
+        {p > 0.002 && p < 0.998 && (
+          <line x1={tx1} y1={ty1} x2={tx2} y2={ty2} strokeWidth="1.5" className="stroke-fg-quaternary" />
+        )}
+        {/* ступица */}
+        <circle cx="70" cy="70" r={R - BAND / 2 - 1} className="fill-bg-primary" />
+      </svg>
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-display-xs font-semibold text-primary tabular-nums">{Math.round(p * 100)}%</span>
+        <span className="text-xs text-tertiary">{t("остаток")}</span>
+      </div>
+    </div>
   );
 }
 
+/** Крупное число с подписью и пояснением под ним. */
+function BigNumber({ label, value, hint }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-sm font-medium text-tertiary">{label}</p>
+      <p className="mt-1 text-display-xs font-semibold text-primary tabular-nums sm:text-display-sm">{value}</p>
+      <p className="mt-0.5 text-sm text-tertiary">{hint}</p>
+    </div>
+  );
+}
+
+/** Поле с кнопкой «OK» в одну строку: взвесить или указать остаток. */
+function WeightField({ label, value, onChange, onSubmit }) {
+  return (
+    <div className="flex items-end gap-2">
+      <Input size="sm" type="number" label={label} value={value} onChange={onChange} className="flex-1" />
+      <Button size="md" color="secondary" onClick={onSubmit} isDisabled={!value}>OK</Button>
+    </div>
+  );
+}
 
 export default function SpoolDetail() {
   const { id } = useParams();
@@ -80,17 +111,11 @@ export default function SpoolDetail() {
   const [events, setEvents] = useState([]);
   const [card, setCard] = useState(null);
   const [placement, setPlacement] = useState(null);
-  const [locations, setLocations] = useState([]);
-  const [slots, setSlots] = useState([]);
-  const [labelOpts, setLabelOpts] = useState(null);
   const [error, setError] = useState(null);
   const [weighInput, setWeighInput] = useState("");
   const [adjustInput, setAdjustInput] = useState("");
-  const [size, setSize] = useState("classic");
-  const [fieldSlots, setFieldSlots] = useState(["nozzle_temp", "bed_temp", "pressure_advance", "flow_info"]);
-  const [showLabel, setShowLabel] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState(null);
+  const [tab, setTab] = useState("overview");
 
   function load() {
     api.get(`/api/spools/${id}`).then(setSpool).catch(() => {});
@@ -98,38 +123,9 @@ export default function SpoolDetail() {
     api.get(`/api/spools/${id}/card`).then(setCard).catch(() => {});
     api.get(`/api/spools/${id}/placement`).then(setPlacement).catch(() => {});
   }
-  useEffect(() => {
-    load();
-    api.get("/api/locations").then(setLocations).catch(() => {});
-    api.get("/api/spools/label-options").then((o) => { setLabelOpts(o); if (o.default_fields) setFieldSlots(o.default_fields); }).catch(() => {});
-    (async () => {
-      const printers = await api.get("/api/printers").catch(() => []);
-      const all = [];
-      for (const p of printers) {
-        const ss = await api.get(`/api/printers/${p.id}/slots`).catch(() => []);
-        const detached = p.feed_state?.mode === "direct";
-        for (const s of ss) all.push({ id: s.id, label: `${p.name} / ${slotLabel(s, { detached })}` });
-      }
-      setSlots(all);
-    })();
-  }, [id]);
+  useEffect(() => { load(); }, [id]);
 
-  // Живой предпросмотр этикетки: перегенерируем PDF при смене размера/полей.
-  useEffect(() => {
-    if (!showLabel) return;
-    let active = true;
-    const fields = fieldSlots.filter((f) => f && f !== "none").join(",");
-    const t = setTimeout(async () => {
-      try {
-        const u = await api.blobUrl(`/api/spools/${id}/label.png?size=${size}&fields=${fields}`);
-        if (active) setPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return u; });
-        else URL.revokeObjectURL(u);
-      } catch { /* игнорируем */ }
-    }, 250);
-    return () => { active = false; clearTimeout(t); };
-  }, [showLabel, size, fieldSlots, id]);
-
-  if (!spool) return <div>{t("Загрузка…")}</div>;
+  if (!spool) return <div className="py-16 text-center text-sm text-tertiary">{t("Загрузка…")}</div>;
 
   const remaining = Number(spool.current_weight_g);
   const capacity = Number(spool.initial_filament_weight_g) || 1000;
@@ -160,24 +156,6 @@ export default function SpoolDetail() {
     try { await api.post(`/api/spools/${id}/adjust`, { new_weight_g: Number(adjustInput) }); setAdjustInput(""); load(); }
     catch (e) { setError(e.message); }
   }
-  async function setLocation(locationId) {
-    try { await api.post(`/api/spools/${id}/move`, { location_id: locationId || null }); load(); } catch (e) { setError(e.message); }
-  }
-  async function assignSlot(slotId) {
-    if (!slotId) return;
-    try { await api.post(`/api/slots/${slotId}/assign-spool`, { spool_id: id }); load(); } catch (e) { setError(e.message); }
-  }
-  async function unassignSlot() {
-    if (!placement?.slot) return;
-    try { await api.post(`/api/slots/${placement.slot.slot_id}/unassign-spool`); load(); } catch (e) { setError(e.message); }
-  }
-  const fieldsQuery = () => fieldSlots.filter((f) => f && f !== "none").join(",");
-  function downloadLabel() {
-    api.download(`/api/spools/${id}/label.pdf?size=${size}&fields=${fieldsQuery()}`, { filename: `spool-${size}.pdf` }).catch((e) => setError(e.message));
-  }
-  async function viewLabel() {
-    try { window.open(await api.blobUrl(`/api/spools/${id}/label.pdf?size=${size}&fields=${fieldsQuery()}`), "_blank"); } catch (e) { setError(e.message); }
-  }
   function copyProfile() {
     const text = `Nozzle ${nozzle}, Bed ${bed}, Fan ${fan}, Flow ${flow}`;
     navigator.clipboard?.writeText(text);
@@ -188,242 +166,234 @@ export default function SpoolDetail() {
     ? `${placement.slot.printer_name} / ${placement.slot.slot_name || "Slot " + placement.slot.slot_index}`
     : placement?.location_name;
 
+  // Бренд, материал и цвет уже стоят в названии — в подзаголовке только то,
+  // чего в названии нет: цвет и код, артикул, где катушка лежит.
+  const subtitle = (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+      {(colorName || colorHex) && (
+        <span>
+          {colorName || t("Цвет")}
+          {colorHex && <span className="ml-1.5 font-mono text-quaternary">{colorHex}</span>}
+        </span>
+      )}
+      {material && <span>{material}</span>}
+      {(spool.sku || spool.label) && (
+        <span className="inline-flex items-center gap-1"><Tag01 className="size-4" aria-hidden="true" /> {spool.sku || spool.label}</span>
+      )}
+      {locName && (
+        <span className="inline-flex items-center gap-1"><MarkerPin01 className="size-4" aria-hidden="true" /> {locName}</span>
+      )}
+    </div>
+  );
+
   return (
     <div>
-      {/* Хлебные крошки + действия */}
-      <div className="sd-head">
-        <div className="muted sd-crumbs"><Link to="/spools">{t("Катушки")}</Link> / {title}</div>
-        <div className="sd-head-actions">
-          <button className="secondary" onClick={() => navigate(`/spools/${id}/edit`)}><Icon name="pencil" /> {t("Редактировать")}</button>
-          <button onClick={() => navigate("/gcode")}>{t("＋ Учесть печать")}</button>
-        </div>
-      </div>
-
-      {/* Заголовок. Бренд, материал и цвет уже стоят в названии — вторым рядом
-          чипов их не повторяем; в мета-строке только то, чего в названии нет. */}
-      {/* Шкала показывает остаток и потому съёживается вместе с ним. Цвет —
-          постоянное свойство катушки, поэтому у него своё место: образец в
-          полную силу рядом с названием, как этикетка на реальной катушке. */}
-      <div className="sd-ident">
-        {spool.photo
-          ? <img className="sd-ident-chip" src={spool.photo} alt="" />
-          : <span className="sd-ident-chip" style={{ background: colorHex || "var(--panel-3)" }}
-              title={colorName || colorHex || undefined} />}
-        <div className="sd-ident-body">
-          <h2>{title}</h2>
-          <div className="sd-meta">
-            {(colorName || colorHex) && (
-              <span className="sd-color">
-                {colorName || t("Цвет")}
-                {colorHex && <b className="mono">{colorHex}</b>}
-              </span>
-            )}
-            {material && <span>{material}</span>}
-            {(spool.sku || spool.label) && (
-              <span className="inline-ico"><Icon name="tag" size={14} /> {spool.sku || spool.label}</span>
-            )}
-            {locName && <span className="inline-ico"><Icon name="pin" size={14} /> {locName}</span>}
-            <span className={`badge ${spool.status}`}>{STATUS_RU[spool.status] || spool.status}</span>
-          </div>
-        </div>
-      </div>
-      {error && <div className="error" style={{ marginBottom: 12 }}>{error}</div>}
+      <PageHeader
+        breadcrumbs={[{ label: t("Катушки"), href: "/spools" }, { label: title }]}
+        leading={spool.photo
+          ? <img src={spool.photo} alt="" className="size-14 shrink-0 rounded-xl object-cover ring-1 ring-secondary" />
+          : <SpoolSwatch color={colorHex} size="lg" />}
+        title={title}
+        badge={<SpoolStatusBadge status={spool.status} label={STATUS_RU[spool.status] || spool.status} />}
+        subtitle={subtitle}
+        actions={
+          <>
+            <Button size="md" color="secondary" iconLeading={Edit01} onClick={() => navigate(`/spools/${id}/edit`)}>{t("Редактировать")}</Button>
+            <Button size="md" iconLeading={Plus} onClick={() => navigate("/gcode")}>{t("Учесть печать")}</Button>
+          </>
+        }
+      />
+      {error && <Notice tone="error" className="mb-6" onClose={() => setError(null)}>{error}</Notice>}
 
       {/* Остаток — то, ради чего страницу и открывают */}
-      <div className="card sd-hero">
-        <SpoolGauge pct={pct} color={colorHex} />
-        <div className="sd-hero-body">
-          <div className="sd-stats">
-            <div>
-              <span className="eyebrow">{t("Осталось")}</span>
-              <b className="mono">{remaining.toFixed(0)}</b>
-              <em>{t("из")} {capacity.toFixed(0)} {t("г")}</em>
-            </div>
-            <div>
-              <span className="eyebrow">{t("Длина")}</span>
-              <b className="mono">{lenLeft.toFixed(0)}</b>
-              <em>{t("из")} {lenTotal.toFixed(0)} {t("м")}</em>
-            </div>
-            <div>
-              <span className="eyebrow">{t("Хватит на")}</span>
-              <b className="mono">{prints}</b>
-              <em>{t("печатей по 50 г")}</em>
-            </div>
+      <Card className="mb-6 flex flex-col gap-6 p-5 sm:flex-row sm:items-center sm:gap-8 sm:p-6">
+        <div className="flex justify-center sm:block"><SpoolGauge pct={pct} color={colorHex} /></div>
+        <div className="flex min-w-0 flex-1 flex-col gap-6">
+          <div className="grid grid-cols-3 gap-4">
+            <BigNumber label={t("Осталось")} value={remaining.toFixed(0)} hint={`${t("из")} ${capacity.toFixed(0)} ${t("г")}`} />
+            <BigNumber label={t("Длина")} value={lenLeft.toFixed(0)} hint={`${t("из")} ${lenTotal.toFixed(0)} ${t("м")}`} />
+            <BigNumber label={t("Хватит на")} value={prints} hint={t("печатей по 50 г")} />
           </div>
-          <div className="sd-update">
-            <label>
-              {t("Взвесить (общий вес с катушкой), г")}
-              <span className="unit-input">
-                <input type="number" value={weighInput} onChange={(e) => setWeighInput(e.target.value)} />
-                <button className="secondary" onClick={weigh} disabled={!weighInput}>OK</button>
-              </span>
-            </label>
-            <label>
-              {t("Указать остаток вручную, г")}
-              <span className="unit-input">
-                <input type="number" value={adjustInput} onChange={(e) => setAdjustInput(e.target.value)} />
-                <button className="secondary" onClick={adjust} disabled={!adjustInput}>OK</button>
-              </span>
-            </label>
+          <div className="grid grid-cols-1 gap-4 border-t border-secondary pt-5 lg:grid-cols-2">
+            <WeightField label={t("Взвесить (общий вес с катушкой), г")} value={weighInput} onChange={setWeighInput} onSubmit={weigh} />
+            <WeightField label={t("Указать остаток вручную, г")} value={adjustInput} onChange={setAdjustInput} onSubmit={adjust} />
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Профиль печати: пять значений в строку вместо сетки из карточек */}
-      <div className="card sd-profile">
-        <span className="eyebrow">{t("Профиль печати")}</span>
-        <div className="sd-profile-items">
-          <span><Icon name="thermometer" size={13} className="hot" /> {t("Сопло")} <b className="mono">{nozzle}</b></span>
-          <span><Icon name="thermometer" size={13} className="hot" /> {t("Стол")} <b className="mono">{bed}</b></span>
-          <span><Icon name="fan" size={13} /> {t("Обдув")} <b className="mono">{fan}</b></span>
-          <span><Icon name="droplet" size={13} /> Flow <b className="mono">{flow}</b></span>
-          <span><Icon name="gauge" size={13} /> Pressure Adv <b className="mono">{pa}</b></span>
-        </div>
-        <button className="secondary" onClick={copyProfile}>
-          <Icon name={copied ? "check" : "copy"} /> {copied ? t("Скопировано") : t("Копировать")}
-        </button>
-      </div>
-
-      {/* Три служебных блока в ряд — раньше они стояли столбиком и тянули
-          левую колонку на 300px ниже правой. */}
-      <div className="sd-utility">
-        <div className="card">
-          <h3 className="card-title">{t("Размещение")}</h3>
-          <div className="field-2" style={{ marginTop: 10 }}>
-            <div>
-              <label>{t("Место хранения")}</label>
-              <select value={spool.location_id || ""} onChange={(e) => setLocation(e.target.value)}>
-                <option value="">{t("— не указано —")}</option>
-                {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label>{t("В принтере (слот)")}</label>
-              <select value={placement?.slot?.slot_id || ""} onChange={(e) => assignSlot(e.target.value)}>
-                <option value="">{t("— не в принтере —")}</option>
-                {slots.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-              </select>
-              {placement?.slot && <button className="secondary" style={{ marginTop: 6 }} onClick={unassignSlot}>{t("Снять со слота")}</button>}
-            </div>
-          </div>
+      <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))} className="w-full">
+        {/* На телефоне четыре вкладки не помещаются в ширину: список прокручивается вбок,
+            а подчёркивание тянется на всю его длину. */}
+        <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+          <TabList type="underline" size="md" className="w-max min-w-full">
+            <Tab id="overview" label={t("Обзор")} />
+            <Tab id="specs" label={t("Характеристики")} />
+            <Tab id="history" label={t("История")} badge={events.length || undefined} />
+            <Tab id="notes" label={t("Заметки")} />
+          </TabList>
         </div>
 
-        <DryingCard spool={spool} events={events} onDone={load} />
-
-        <div className="card">
-            <h3 className="card-title">{t("QR и этикетка")}</h3>
-            <div style={{ display: "flex", gap: 16, alignItems: "center", marginTop: 10 }}>
-              {card?.qr_png_base64 && <img src={card.qr_png_base64} alt="QR" width={96} height={96} style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 8, padding: 4 }} />}
-              <div>
-                <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{t("Отсканируйте, чтобы открыть карточку с телефона.")}</div>
-                <button className="secondary" onClick={() => setShowLabel(!showLabel)}><Icon name="download" /> {t("Печать этикетки")}</button>
-              </div>
-            </div>
-            {showLabel && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {(labelOpts?.sizes || []).map((s) => (
-                    <button key={s.key} className={size === s.key ? "" : "secondary"} style={{ textAlign: "left" }} onClick={() => setSize(s.key)}>
-                      {s.key}<div style={{ fontSize: 11, opacity: 0.7 }}>{s.width_mm}×{s.height_mm}{t("мм")}</div>
-                    </button>
-                  ))}
+        <TabPanel id="overview" className="pt-6">
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+            <div className="flex flex-col gap-6">
+              <Card>
+                <CardHeader
+                  title={t("Профиль печати")}
+                  actions={
+                    <Button size="sm" color="secondary" iconLeading={copied ? Check : Copy01} onClick={copyProfile}>
+                      {copied ? t("Скопировано") : t("Копировать")}
+                    </Button>
+                  }
+                />
+                <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-3">
+                  <Stat label={t("Сопло")}>{nozzle}</Stat>
+                  <Stat label={t("Стол")}>{bed}</Stat>
+                  <Stat label={t("Обдув")}>{fan}</Stat>
+                  <Stat label="Flow">{flow}</Stat>
+                  <Stat label="Pressure Adv">{pa}</Stat>
                 </div>
-                <div style={{ marginTop: 10 }}>
-                  {fieldSlots.map((val, i) => (
-                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-                      <span className="muted" style={{ width: 60 }}>{t("Поле")}{" "}{i + 1}</span>
-                      <select value={val} style={{ flex: 1 }} onChange={(e) => { const n = [...fieldSlots]; n[i] = e.target.value; setFieldSlots(n); }}>
-                        {/* Названия полей приходят с сервера, но это подписи интерфейса,
-                            а не данные пользователя — прогоняем через словарь. */}
-                        {(labelOpts?.fields || []).map((f) => <option key={f.key} value={f.key}>{f.label ? t(f.label) : t("— нет —")}</option>)}
-                      </select>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ marginTop: 12 }}>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>{t("Предпросмотр (как на печати)")}</div>
-                  {previewUrl
-                    ? <img alt={t("Предпросмотр этикетки")} src={previewUrl} style={{ display: "block", width: "100%", border: "1px solid var(--border)", borderRadius: 8, background: "#fff" }} />
-                    : <div className="muted" style={{ padding: 20, border: "1px dashed var(--border)", borderRadius: 8, textAlign: "center" }}>{t("Генерирую…")}</div>}
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  <button className="secondary" onClick={viewLabel}>{t("Открыть крупно")}</button>
-                  <button onClick={downloadLabel}>{t("Скачать PDF")}</button>
-                </div>
-              </div>
-            )}
+              </Card>
+              <PlacementCard spool={spool} placement={placement} onChange={load} onError={setError} />
+            </div>
+            <div className="flex flex-col gap-6">
+              <DryingCard spool={spool} events={events} onDone={load} />
+              <LabelCard id={id} card={card} onError={setError} />
+            </div>
           </div>
-      </div>
+        </TabPanel>
 
-      {/* Характеристики: раньше четыре пункта висели слева вверху, а остальные
-          двадцать — плитой внизу страницы. Теперь это одно место. */}
-      <div className="card">
-        <h3 className="card-title">{t("Характеристики")}</h3>
-        <div className="sd-specs">
-          <div>
-            <div className="sd-specs-group">{t("Катушка")}</div>
-            <div className="row-item"><span className="k">{t("Вес нетто")}</span><span className="mono">{capacity.toFixed(0)} {t("г")}</span></div>
-            <div className="row-item"><span className="k">{t("Диаметр")}</span><span className="mono">{Number(dia)} {t("мм")}</span></div>
-            <div className="row-item"><span className="k">{t("Пустая катушка")}</span><span className="mono">{spool.empty_spool_weight_g != null ? `${Number(spool.empty_spool_weight_g).toFixed(0)} ${t("г")}` : "—"}</span></div>
-            <div className="row-item"><span className="k">{t("Куплена")}</span><span>{fmtDate(spool.purchase_date)}{spool.price != null ? ` · ${Number(spool.price)} ${spool.currency}` : ""}</span></div>
-          </div>
-          {SPEC_GROUPS.map((g) => {
-            const items = g.fields
-              .map((f) => ({ f, v: fmtSpec(f, spool.specs?.[f.key]) }))
-              .filter((x) => x.v != null);
-            if (!items.length) return null;
-            return (
-              <div key={g.title}>
-                <div className="sd-specs-group">{g.title}</div>
-                {items.map(({ f, v }) => (
-                  <div key={f.key} className="row-item">
-                    <span className="k">{f.label}</span>
-                    <span>{f.key.endsWith("_url") ? <a href={v} target="_blank" rel="noreferrer">{t("ссылка ↗")}</a> : v}</span>
-                  </div>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+        <TabPanel id="specs" className="pt-6">
+          <Card>
+            <div className="grid grid-cols-1 gap-x-10 gap-y-8 p-5 sm:grid-cols-2 xl:grid-cols-3">
+              <SpecGroup title={t("Катушка")}>
+                <SpecRow label={t("Вес нетто")}>{capacity.toFixed(0)} {t("г")}</SpecRow>
+                <SpecRow label={t("Диаметр")}>{Number(dia)} {t("мм")}</SpecRow>
+                <SpecRow label={t("Пустая катушка")}>{spool.empty_spool_weight_g != null ? `${Number(spool.empty_spool_weight_g).toFixed(0)} ${t("г")}` : "—"}</SpecRow>
+                <SpecRow label={t("Куплена")}>{fmtDate(spool.purchase_date)}{spool.price != null ? ` · ${Number(spool.price)} ${spool.currency}` : ""}</SpecRow>
+              </SpecGroup>
+              {SPEC_GROUPS.map((g) => {
+                const items = g.fields
+                  .map((f) => ({ f, v: fmtSpec(f, spool.specs?.[f.key]) }))
+                  .filter((x) => x.v != null);
+                if (!items.length) return null;
+                return (
+                  <SpecGroup key={g.title} title={g.title}>
+                    {items.map(({ f, v }) => (
+                      <SpecRow key={f.key} label={f.label}>
+                        {f.key.endsWith("_url")
+                          ? <AriaLink href={v} target="_blank" rel="noreferrer" className="cursor-pointer rounded-sm text-brand-secondary outline-focus-ring hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">{t("ссылка ↗")}</AriaLink>
+                          : v}
+                      </SpecRow>
+                    ))}
+                  </SpecGroup>
+                );
+              })}
+            </div>
+          </Card>
+        </TabPanel>
 
-      <div className="sd-bottom">
-        <div className="card">
-          <h3 className="card-title">{t("История использования")}</h3>
-          <table className="cards-mobile" style={{ marginTop: 10 }}>
-            <thead><tr><th>{t("Дата")}</th><th>{t("Событие")}</th><th>{t("Объём")}</th></tr></thead>
-            <tbody>
-              {events.map((ev) => (
-                <tr key={ev.id}>
-                  <td data-label={t("Дата")}>{fmtDate(ev.created_at)}</td>
-                  <td data-label={t("Событие")}>{tReason(ev.reason) || EVENT_RU[ev.event_type] || ev.event_type}</td>
-                  <td data-label={t("Объём")} className="mono" style={{ color: ev.delta_g < 0 ? "var(--danger)" : ev.delta_g > 0 ? "var(--ok)" : "var(--text)" }}>
-                    {ev.delta_g != null ? `${ev.delta_g > 0 ? "+" : ""}${Number(ev.delta_g).toFixed(0)}${t("г")}` : "—"}
-                  </td>
-                </tr>
-              ))}
-              {events.length === 0 && <tr><td colSpan={3} className="muted">{t("Пока нет событий")}</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <TabPanel id="history" className="pt-6">
+          <TableCard.Root>
+            <Table size="sm" aria-label={t("История использования")}>
+              <Table.Header>
+                <Table.Head id="date" isRowHeader label={t("Дата")} />
+                <Table.Head id="event" label={t("Событие")} className="w-full" />
+                <Table.Head id="delta" label={t("Объём")} />
+              </Table.Header>
+              <Table.Body items={events} renderEmptyState={() => <EmptyNote>{t("Пока нет событий")}</EmptyNote>}>
+                {(ev) => (
+                  <Table.Row id={ev.id}>
+                    <Table.Cell className="whitespace-nowrap">{fmtDate(ev.created_at)}</Table.Cell>
+                    <Table.Cell>{tReason(ev.reason) || EVENT_RU[ev.event_type] || ev.event_type}</Table.Cell>
+                    <Table.Cell
+                      className={cx(
+                        "font-medium whitespace-nowrap tabular-nums",
+                        ev.delta_g < 0 ? "text-error-primary" : ev.delta_g > 0 ? "text-success-primary" : "text-primary",
+                      )}
+                    >
+                      {ev.delta_g != null ? `${ev.delta_g > 0 ? "+" : ""}${Number(ev.delta_g).toFixed(0)} ${t("г")}` : "—"}
+                    </Table.Cell>
+                  </Table.Row>
+                )}
+              </Table.Body>
+            </Table>
+          </TableCard.Root>
+        </TabPanel>
 
-        <div className="card">
-          <h3 className="card-title">{t("Заметки")}</h3>
-          <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-            {spool.notes || <span className="muted">{t("Заметок нет.")}</span>}
-          </div>
-        </div>
-      </div>
+        <TabPanel id="notes" className="pt-6">
+          <Card className="p-5">
+            {spool.notes
+              ? <p className="m-0 text-md whitespace-pre-wrap text-secondary">{spool.notes}</p>
+              : <p className="m-0 text-sm text-tertiary">{t("Заметок нет.")}</p>}
+          </Card>
+        </TabPanel>
+      </Tabs>
     </div>
   );
 }
 
+/** Где лежит катушка: место хранения и слот принтера. */
+function PlacementCard({ spool, placement, onChange, onError }) {
+  const [locations, setLocations] = useState([]);
+  const [slots, setSlots] = useState([]);
+
+  useEffect(() => {
+    api.get("/api/locations").then(setLocations).catch(() => {});
+    (async () => {
+      const printers = await api.get("/api/printers").catch(() => []);
+      const all = [];
+      for (const p of printers) {
+        const ss = await api.get(`/api/printers/${p.id}/slots`).catch(() => []);
+        const detached = p.feed_state?.mode === "direct";
+        for (const s of ss) all.push({ id: s.id, label: `${p.name} / ${slotLabel(s, { detached })}` });
+      }
+      setSlots(all);
+    })();
+  }, []);
+
+  async function setLocation(locationId) {
+    try { await api.post(`/api/spools/${spool.id}/move`, { location_id: locationId || null }); onChange(); } catch (e) { onError(e.message); }
+  }
+  async function assignSlot(slotId) {
+    if (!slotId) return;
+    try { await api.post(`/api/slots/${slotId}/assign-spool`, { spool_id: spool.id }); onChange(); } catch (e) { onError(e.message); }
+  }
+  async function unassignSlot() {
+    if (!placement?.slot) return;
+    try { await api.post(`/api/slots/${placement.slot.slot_id}/unassign-spool`); onChange(); } catch (e) { onError(e.message); }
+  }
+
+  const locItems = [{ id: NONE, label: t("— не указано —") }, ...locations.map((l) => ({ id: l.id, label: locationPath(locations, l.id) }))];
+  const slotItems = [{ id: NONE, label: t("— не в принтере —") }, ...slots];
+  const slotKey = placement?.slot?.slot_id || NONE;
+
+  return (
+    <Card>
+      <CardHeader title={t("Размещение")} />
+      <div className="flex flex-col gap-4 p-5">
+        <Select size="sm" label={t("Место хранения")} items={locItems} selectedKey={spool.location_id || NONE}
+          onSelectionChange={(k) => setLocation(k === NONE ? null : String(k))}>
+          {(item) => <Select.Item id={item.id}>{item.label}</Select.Item>}
+        </Select>
+        <div className="flex flex-col gap-2">
+          <Select size="sm" label={t("В принтере (слот)")} items={slotItems} selectedKey={slotKey}
+            onSelectionChange={(k) => (k === NONE ? unassignSlot() : assignSlot(String(k)))}>
+            {(item) => <Select.Item id={item.id}>{item.label}</Select.Item>}
+          </Select>
+          {placement?.slot && (
+            <div><Button size="sm" color="secondary" onClick={unassignSlot}>{t("Снять со слота")}</Button></div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 function DryingCard({ spool, events, onDone }) {
   const lastDried = events.find((e) => e.event_type === "dried");
   const specs = spool.specs || {};
-  const [temp, setTemp] = useState(specs.drying_temp || 50);
-  const [hours, setHours] = useState(specs.dry_time_hours || 4);
+  const [temp, setTemp] = useState(String(specs.drying_temp || 50));
+  const [hours, setHours] = useState(String(specs.dry_time_hours || 4));
   const [busy, setBusy] = useState(false);
 
   async function markDried() {
@@ -435,24 +405,108 @@ function DryingCard({ spool, events, onDone }) {
   }
 
   return (
-    <div className="card">
-      <h3 className="card-title inline-ico"><Icon name="droplet" size={15} /> {t("Сушка филамента")}</h3>
-      <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-        {t("Последняя сушка:")} {lastDried ? fmtDate(lastDried.created_at) : t("не сушилась")}
-      </div>
-      <div className="field-2" style={{ marginTop: 10 }}>
-        <div>
-          <label>{t("Температура, °C")}</label>
-          <input type="number" value={temp} onChange={(e) => setTemp(e.target.value)} />
+    <Card>
+      <CardHeader
+        title={t("Сушка филамента")}
+        description={`${t("Последняя сушка:")} ${lastDried ? fmtDate(lastDried.created_at) : t("не сушилась")}`}
+      />
+      <div className="flex flex-col gap-4 p-5">
+        <div className="grid grid-cols-2 gap-4">
+          <Input size="sm" type="number" label={t("Температура, °C")} value={temp} onChange={setTemp} />
+          <Input size="sm" type="number" label={t("Время, ч")} value={hours} onChange={setHours} />
         </div>
-        <div>
-          <label>{t("Время, ч")}</label>
-          <input type="number" value={hours} onChange={(e) => setHours(e.target.value)} />
-        </div>
+        <Button size="md" color="secondary" iconLeading={Droplets02} isDisabled={busy} onClick={markDried}>{t("Просушена")}</Button>
       </div>
-      <button className="secondary" style={{ marginTop: 10, width: "100%" }} disabled={busy} onClick={markDried}>
-        <Icon name="check" /> {t("Просушена")}
-      </button>
-    </div>
+    </Card>
+  );
+}
+
+/** QR-код катушки и печать этикетки с живым предпросмотром. */
+function LabelCard({ id, card, onError }) {
+  const [labelOpts, setLabelOpts] = useState(null);
+  const [size, setSize] = useState("classic");
+  const [fieldSlots, setFieldSlots] = useState(["nozzle_temp", "bed_temp", "pressure_advance", "flow_info"]);
+  const [showLabel, setShowLabel] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  useEffect(() => {
+    api.get("/api/spools/label-options")
+      .then((o) => { setLabelOpts(o); if (o.default_fields) setFieldSlots(o.default_fields); })
+      .catch(() => {});
+  }, []);
+
+  const fieldsQuery = () => fieldSlots.filter((f) => f && f !== "none").join(",");
+
+  // Живой предпросмотр этикетки: перегенерируем картинку при смене размера/полей.
+  useEffect(() => {
+    if (!showLabel) return;
+    let active = true;
+    const fields = fieldSlots.filter((f) => f && f !== "none").join(",");
+    const timer = setTimeout(async () => {
+      try {
+        const u = await api.blobUrl(`/api/spools/${id}/label.png?size=${size}&fields=${fields}`);
+        if (active) setPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return u; });
+        else URL.revokeObjectURL(u);
+      } catch { /* игнорируем */ }
+    }, 250);
+    return () => { active = false; clearTimeout(timer); };
+  }, [showLabel, size, fieldSlots, id]);
+
+  function downloadLabel() {
+    api.download(`/api/spools/${id}/label.pdf?size=${size}&fields=${fieldsQuery()}`, { filename: `spool-${size}.pdf` }).catch((e) => onError(e.message));
+  }
+  async function viewLabel() {
+    try { window.open(await api.blobUrl(`/api/spools/${id}/label.pdf?size=${size}&fields=${fieldsQuery()}`), "_blank"); } catch (e) { onError(e.message); }
+  }
+
+  // Названия полей приходят с сервера, но это подписи интерфейса, а не данные
+  // пользователя — прогоняем через словарь.
+  const fieldItems = (labelOpts?.fields || []).map((f) => ({ id: f.key || "none", label: f.label ? t(f.label) : t("— нет —") }));
+
+  return (
+    <Card>
+      <CardHeader title={t("QR и этикетка")} />
+      <div className="flex flex-col gap-5 p-5">
+        <div className="flex items-center gap-4">
+          {card?.qr_png_base64 && (
+            <img src={card.qr_png_base64} alt="QR" width={96} height={96} className="size-24 shrink-0 rounded-lg bg-white p-1 ring-1 ring-secondary" />
+          )}
+          <div className="flex min-w-0 flex-col items-start gap-3">
+            <p className="m-0 text-sm text-tertiary">{t("Отсканируйте, чтобы открыть карточку с телефона.")}</p>
+            <Button size="sm" color="secondary" iconLeading={Printer} onClick={() => setShowLabel(!showLabel)}>{t("Печать этикетки")}</Button>
+          </div>
+        </div>
+
+        {showLabel && (
+          <div className="flex flex-col gap-4 border-t border-secondary pt-5">
+            <div className="grid grid-cols-2 gap-2">
+              {(labelOpts?.sizes || []).map((s) => (
+                <Button key={s.key} size="sm" color={size === s.key ? "primary" : "secondary"} onClick={() => setSize(s.key)}>
+                  {s.key} · {s.width_mm}×{s.height_mm} {t("мм")}
+                </Button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {fieldSlots.map((val, i) => (
+                <Select key={i} size="sm" label={`${t("Поле")} ${i + 1}`} items={fieldItems} selectedKey={val || "none"}
+                  onSelectionChange={(k) => { const n = [...fieldSlots]; n[i] = String(k); setFieldSlots(n); }}>
+                  {(item) => <Select.Item id={item.id}>{item.label}</Select.Item>}
+                </Select>
+              ))}
+            </div>
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-secondary">{t("Предпросмотр (как на печати)")}</p>
+              {previewUrl
+                ? <img alt={t("Предпросмотр этикетки")} src={previewUrl} className="block w-full rounded-lg bg-white ring-1 ring-secondary" />
+                : <div className="rounded-lg border border-dashed border-primary p-5 text-center text-sm text-tertiary">{t("Генерирую…")}</div>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" color="secondary" onClick={viewLabel}>{t("Открыть крупно")}</Button>
+              <Button size="sm" iconLeading={Download01} onClick={downloadLabel}>{t("Скачать PDF")}</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }

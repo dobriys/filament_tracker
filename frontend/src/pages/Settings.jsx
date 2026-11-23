@@ -1,9 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Button as AriaButton, Link as AriaLink } from "react-aria-components";
+import { ChevronDown, ChevronRight } from "@untitledui/icons";
+import { Badge } from "@/components/base/badges/badges";
+import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
+import { Button } from "@/components/base/buttons/button";
+import { Checkbox } from "@/components/base/checkbox/checkbox";
+import { Input } from "@/components/base/input/input";
+import { Toggle } from "@/components/base/toggle/toggle";
+import { Card, CardHeader, PageHeader } from "../components/ft/ui.jsx";
+import { NONE, Pick, SectionLabel } from "../components/ft/form.jsx";
+import { Notice, Stat } from "../components/ft/printer.jsx";
+import { cx } from "@/utils/cx";
 import { api } from "../api/client.js";
 import { useAuth } from "../api/auth.jsx";
 import { dateLocale, t } from "../i18n.js";
 import { lowThresholdFor, setLowConfig } from "../utils/spools.js";
-import Icon from "../components/Icon.jsx";
 
 // ------------------------------------------------------------------
 // Разделы настроек
@@ -31,9 +42,6 @@ const GROUPS = [
 ];
 const SECTION_IDS = GROUPS.flatMap((g) => g.ids);
 
-// Готовые ответы на вопрос «когда предупреждать, что катушка кончается».
-// Рядовому пользователю не нужно знать про доли и границы — ему нужно выбрать,
-// узнавать ли заранее. Точные числа остаются под «Настроить точнее».
 // Часовой пояс для времени в уведомлениях. Список берём у браузера: держать
 // свой список из четырёх сотен имён и следить за его актуальностью незачем.
 // В старых движках метода нет — тогда остаются пояс устройства и сохранённый.
@@ -59,11 +67,29 @@ function timeIn(zone) {
   }
 }
 
+// Готовые ответы на вопрос «когда предупреждать, что катушка кончается».
+// Рядовому пользователю не нужно знать про доли и границы — ему нужно выбрать,
+// узнавать ли заранее. Точные числа остаются под «Настроить точнее».
 const LOW_PRESETS = [
   { key: "early",  label: "Заранее",           hint: "успеть заказать замену", pct: 15, min_g: 80, max_g: 400 },
   { key: "normal", label: "Обычно",            hint: "рекомендуется",          pct: 10, min_g: 50, max_g: 200 },
   { key: "late",   label: "В самом конце",     hint: "меньше уведомлений",     pct: 5,  min_g: 40, max_g: 100 },
 ];
+
+const LEVEL_COLOR = { error: "error", warning: "warning" };
+
+/** Раздел настроек: карточка с заголовком, пояснением и содержимым. */
+function Section({ id, title, description, children }) {
+  return (
+    <Card id={id} className="scroll-mt-20 lg:scroll-mt-8">
+      <CardHeader title={title} description={description} />
+      <div className="flex flex-col gap-5 p-5">{children}</div>
+    </Card>
+  );
+}
+
+const AdminOnly = () => <p className="m-0 text-sm text-tertiary">{t("Доступно только администратору.")}</p>;
+const Hint = ({ children }) => <p className="m-0 text-sm text-tertiary">{children}</p>;
 
 export default function Settings() {
   const { user } = useAuth();
@@ -91,7 +117,12 @@ export default function Settings() {
   });
   const [log, setLog] = useState(null); // null = не загружен, {entries,total} = загружен
   const [logFilter, setLogFilter] = useState({ level: "", source: "", q: "" });
+  // Общее уведомление {ok, text}: рисуется всплывающей плашкой, видной при любой
+  // прокрутке (карточки далеко друг от друга, а результат действия должен быть
+  // заметен сразу).
   const [msg, setMsg] = useState(null);
+  const say = (text) => setMsg({ ok: true, text });
+  const fail = (text) => setMsg({ ok: false, text });
   const [serverVersion, setServerVersion] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [spoolmanUrl, setSpoolmanUrl] = useState("");
@@ -106,13 +137,11 @@ export default function Settings() {
   const [lowMin, setLowMin] = useState("");
   const [lowMax, setLowMax] = useState("");
   const [lowBusy, setLowBusy] = useState(false);
-  // Раскрыт ли блок точной настройки. Держим в состоянии, а не отдаём атрибуту
-  // open как есть: React переприменяет его на каждый рендер и захлопывал бы
-  // панель прямо под руками, стоит совпасть с пресетом.
+  // Раскрыт ли блок точной настройки.
   const [lowAdv, setLowAdv] = useState(false);
   const [tgBusy, setTgBusy] = useState(false);
-  // Свой статус рядом с кнопками: общий msg рисуется вверху страницы, а карточка
-  // Telegram далеко внизу — результат «Отправить тест» туда просто не видно.
+  // Свой статус рядом с кнопками карточки Telegram: результат «Отправить тест»
+  // должен быть виден там же, где нажали.
   const [tgMsg, setTgMsg] = useState(null);
   // Home Assistant. Токен, как и телеграмный, с сервера не приходит.
   const [haUrl, setHaUrl] = useState("");
@@ -159,6 +188,13 @@ export default function Settings() {
     api.get("/api/printers").then(setPrinters).catch(() => {});
     api.get("/api/locations").then(setLocations).catch(() => {});
   }, []);
+
+  // Успех уходит сам через несколько секунд, ошибка остаётся, пока её не закроют.
+  useEffect(() => {
+    if (!msg?.ok) return undefined;
+    const timer = setTimeout(() => setMsg(null), 4500);
+    return () => clearTimeout(timer);
+  }, [msg]);
 
   function goToSection(id) {
     const el = document.getElementById(id);
@@ -217,21 +253,18 @@ export default function Settings() {
     try {
       const r = await api.post("/api/filament-catalog/refresh");
       setCatalogInfo(r);
-      setMsg(`${t("Каталог филамента обновлён:")} ${r.count} ${t("записей")}`);
-    } catch (err) { setMsg(err.message); }
+      say(`${t("Каталог филамента обновлён:")} ${r.count} ${t("записей")}`);
+    } catch (err) { fail(err.message); }
     setCatalogBusy(false);
   }
 
   // Применяем ответ сервера (PUT возвращает полное состояние), а не оптимистично:
   // при ошибке состояние не меняется — переключатель сам «откатится».
-  function toggle(key) {
-    return async (e) => {
-      const v = e.target.checked;
-      try {
-        setS(await api.put("/api/settings", { [key]: v }));
-        setMsg(t("Настройка сохранена"));
-      } catch (err) { setMsg(err.message); }
-    };
+  async function saveToggle(key, value) {
+    try {
+      setS(await api.put("/api/settings", { [key]: value }));
+      say(t("Настройка сохранена"));
+    } catch (err) { fail(err.message); }
   }
 
   // Режимы автоматизации Moonraker — единый выбор вместо двух чекбоксов.
@@ -262,27 +295,22 @@ export default function Settings() {
     };
     try {
       setS(await api.put("/api/settings", patch));  // применяем ответ сервера
-      setMsg(t("Настройка сохранена"));
-    } catch (err) { setMsg(err.message); }
+      say(t("Настройка сохранена"));
+    } catch (err) { fail(err.message); }
   }
 
-  function Toggle({ k, label, hint }) {
-    return (
-      <div style={{ marginBottom: 10 }}>
-        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input
-            type="checkbox"
-            style={{ width: "auto" }}
-            checked={s[k]}
-            onChange={toggle(k)}
-            disabled={!isAdmin}
-          />
-          {label}
-        </label>
-        {hint && <div className="muted" style={{ marginLeft: 24, fontSize: 13 }}>{hint}</div>}
-      </div>
-    );
-  }
+  /** Выключатель настройки с подписью и пояснением. */
+  const setting = (k, label, hint) => (
+    <Toggle
+      size="sm"
+      className="max-w-full"
+      isSelected={!!s[k]}
+      onChange={(v) => saveToggle(k, v)}
+      isDisabled={!isAdmin}
+      label={label}
+      hint={hint}
+    />
+  );
 
   // Типы уведомлений: ключ совпадает с notifications.EVENTS на бэкенде.
   const TG_EVENTS = [
@@ -314,22 +342,14 @@ export default function Settings() {
       // Порог остатка красит катушки по всему приложению — обновляем его сразу,
       // не дожидаясь перезахода (см. utils/spools.js).
       setLowConfig(next);
-      setMsg(t("Настройка сохранена"));
+      say(t("Настройка сохранена"));
       setTgMsg({ ok: true, text: t("Настройка сохранена") });
       return true;
     } catch (err) {
-      setMsg(err.message);
+      fail(err.message);
       setTgMsg({ ok: false, text: err.message });
       return false;
     }
-  }
-
-  function toggleEvent(key) {
-    return (e) => saveTelegram({ telegram_events: { [key]: e.target.checked } });
-  }
-
-  function togglePhotoEvent(key) {
-    return (e) => saveTelegram({ telegram_photo_events: { [key]: e.target.checked } });
   }
 
   async function saveLow(values) {
@@ -340,7 +360,7 @@ export default function Settings() {
       spool_low_max_g: src.max_g,
     };
     if (!Number.isFinite(patch.spool_low_pct) || patch.spool_low_min_g <= 0 || patch.spool_low_max_g <= 0) {
-      setMsg(t("Заполните долю и оба зажима"));
+      fail(t("Заполните долю и оба зажима"));
       return;
     }
     setLowBusy(true);
@@ -349,8 +369,8 @@ export default function Settings() {
       const next = await api.put("/api/settings", patch);
       setS(next);
       setLowConfig(next);
-      setMsg(t("Настройка сохранена"));
-    } catch (err) { setMsg(err.message); }
+      say(t("Настройка сохранена"));
+    } catch (err) { fail(err.message); }
     setLowBusy(false);
   }
 
@@ -533,6 +553,27 @@ export default function Settings() {
   const entityOptions = (deviceClass) =>
     (haEntities || []).filter((e) => e.device_class === deviceClass);
 
+  // Список «Где показывать»: панель, принтеры и места хранения.
+  const bindItems = [
+    { id: NONE, label: t("Отдельным блоком на панели") },
+    ...printers.map((p) => ({ id: `printer:${p.id}`, label: `${t("Принтер")}: ${p.name}` })),
+    ...locations.map((l) => ({ id: `location:${l.id}`, label: `${t("Место хранения")}: ${l.name}` })),
+  ];
+
+  // Пояса: «как на сервере», пояс этого устройства, все остальные и — если
+  // сохранённого нет в списке браузера — он сам, иначе поле показало бы пустоту.
+  const tzItems = useMemo(() => {
+    const items = [
+      { id: NONE, label: t("Как на сервере") },
+      { id: TZ_BROWSER, label: TZ_BROWSER, supportingText: t("Это устройство") },
+      ...TZ_ALL.filter((z) => z !== TZ_BROWSER).map((z) => ({ id: z, label: z })),
+    ];
+    if (s.timezone && s.timezone !== TZ_BROWSER && !TZ_ALL.includes(s.timezone)) {
+      items.push({ id: s.timezone, label: s.timezone });
+    }
+    return items;
+  }, [s.timezone]);
+
   async function loadLog(f = logFilter) {
     setMsg(null);
     const qs = new URLSearchParams();
@@ -543,19 +584,19 @@ export default function Settings() {
     try {
       const r = await api.get(`/api/diagnostics/log?${qs.toString()}`);
       setLog(r);
-    } catch (err) { setMsg(err.message); }
+    } catch (err) { fail(err.message); }
   }
   async function clearLog() {
     setMsg(null);
     try {
       await api.post("/api/diagnostics/clear");
       setLog({ entries: [], total: 0 });
-      setMsg(t("Журнал очищен"));
-    } catch (err) { setMsg(err.message); }
+      say(t("Журнал очищен"));
+    } catch (err) { fail(err.message); }
   }
   function downloadLog() {
     api.download("/api/diagnostics/log.txt", { filename: "filament-tracker-diagnostics.txt" })
-      .catch((e) => setMsg(e.message));
+      .catch((e) => fail(e.message));
   }
 
   async function importSpoolman() {
@@ -565,13 +606,13 @@ export default function Settings() {
     setSpoolmanBusy(true);
     try {
       const r = await api.post("/api/spools/import-spoolman", { url });
-      setMsg(`${t("Импорт из Spoolman: добавлено")} ${r.imported}, ${t("пропущено")} ${r.skipped} ${t("из")} ${r.total}`);
-    } catch (err) { setMsg(err.message); }
+      say(`${t("Импорт из Spoolman: добавлено")} ${r.imported}, ${t("пропущено")} ${r.skipped} ${t("из")} ${r.total}`);
+    } catch (err) { fail(err.message); }
     setSpoolmanBusy(false);
   }
 
   function exportBackup() {
-    api.download("/api/backup/export", { filename: "filament-backup.json" }).catch((e) => setMsg(e.message));
+    api.download("/api/backup/export", { filename: "filament-backup.json" }).catch((e) => fail(e.message));
   }
   async function importBackup(e) {
     const file = e.target.files?.[0];
@@ -583,8 +624,8 @@ export default function Settings() {
     setMsg(null);
     try {
       const res = await api.postFile("/api/backup/import", file);
-      setMsg(`${t("Восстановлено: профили")} ${res.filament_profiles}, ${t("катушки")} ${res.spools}, ${t("места")} ${res.locations}, ${t("принтеры")} ${res.printers}, ${t("печати")} ${res.print_jobs ?? 0}`);
-    } catch (err) { setMsg(err.message); }
+      say(`${t("Восстановлено: профили")} ${res.filament_profiles}, ${t("катушки")} ${res.spools}, ${t("места")} ${res.locations}, ${t("принтеры")} ${res.printers}, ${t("печати")} ${res.print_jobs ?? 0}`);
+    } catch (err) { fail(err.message); }
     e.target.value = "";
   }
 
@@ -617,445 +658,328 @@ export default function Settings() {
     journal: { on: s.error_logging, text: s.error_logging ? t("Пишется") : t("Выключен") },
   };
 
+  const mode = AUTO_MODES.find((m) => m.key === autoMode);
+  const msgOf = (m) => m && <Notice tone={m.ok ? "success" : "error"}>{m.text}</Notice>;
+
   const SECTION_NODES = {
     prints: (
-      <section key="prints" id="prints" className="card settings-section">
-        <h3 className="card-title-lg">{t("Завершённые печати")}</h3>
-        <div className="card-sub" style={{ marginBottom: 12 }}>
-          {t("Что приложение делает с завершёнными печатями с принтера.")}
+      <Section key="prints" id="prints" title={t("Завершённые печати")} description={t("Что приложение делает с завершёнными печатями с принтера.")}>
+        <div>
+          <ButtonGroup
+            size="md"
+            aria-label={SECTION_TITLES.prints}
+            selectionMode="single"
+            disallowEmptySelection
+            isDisabled={!isAdmin}
+            selectedKeys={[autoMode]}
+            onSelectionChange={(keys) => {
+              const k = [...keys][0];
+              if (k && k !== autoMode) setAutoMode(String(k));
+            }}
+          >
+            {AUTO_MODES.map((m) => <ButtonGroupItem key={m.key} id={m.key}>{m.label}</ButtonGroupItem>)}
+          </ButtonGroup>
         </div>
-        <div className="seg-toggle" role="tablist" aria-label={SECTION_TITLES.prints}>
-          {AUTO_MODES.map((m) => (
-            <button
-              key={m.key}
-              type="button"
-              role="tab"
-              aria-selected={autoMode === m.key}
-              className={`seg-item ${autoMode === m.key ? "active" : ""}`}
-              disabled={!isAdmin}
-              onClick={() => setAutoMode(m.key)}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-        <div className="seg-hint">
-          <b>{AUTO_MODES.find((m) => m.key === autoMode)?.label}.</b>{" "}
-          {AUTO_MODES.find((m) => m.key === autoMode)?.hint}
-        </div>
-        {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
-      </section>
+        <Hint><b className="font-semibold text-secondary">{mode?.label}.</b> {mode?.hint}</Hint>
+        {!isAdmin && <AdminOnly />}
+      </Section>
     ),
-    consumption: (
-      <section key="consumption" id="consumption" className="card settings-section">
-        <h3 className="card-title-lg">{t("Списание")}</h3>
-        <Toggle
-          k="allow_negative_consumption"
-          label={t("Разрешить списание катушки в минус при нехватке остатка")}
-        />
-        {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
-      </section>
-    ),
-    low: (
-      <section key="low" id="low" className="card settings-section">
-        <h3 className="card-title-lg">{t("Остаток филамента")}</h3>
-        <p className="muted">
-          {t("Когда предупреждать, что катушка заканчивается: остаток краснеет в списках, катушка попадает в «Заканчиваются» на панели и уходит уведомление.")}
-        </p>
 
-        <div className="low-presets">
+    consumption: (
+      <Section key="consumption" id="consumption" title={t("Списание")}>
+        {setting("allow_negative_consumption", t("Разрешить списание катушки в минус при нехватке остатка"))}
+        {!isAdmin && <AdminOnly />}
+      </Section>
+    ),
+
+    low: (
+      <Section
+        key="low" id="low" title={t("Остаток филамента")}
+        description={t("Когда предупреждать, что катушка заканчивается: остаток краснеет в списках, катушка попадает в «Заканчиваются» на панели и уходит уведомление.")}
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {LOW_PRESETS.map((preset) => (
-            <button
+            <AriaButton
               key={preset.key}
-              type="button"
-              className={`low-preset${lowPresetKey === preset.key ? " active" : ""}`}
-              disabled={!isAdmin || lowBusy}
-              onClick={() => applyLowPreset(preset)}
+              onPress={() => applyLowPreset(preset)}
+              isDisabled={!isAdmin || lowBusy}
+              className={cx(
+                "flex cursor-pointer flex-col items-start gap-0.5 rounded-xl p-4 text-left outline-focus-ring ring-inset transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
+                lowPresetKey === preset.key ? "bg-brand-primary ring-2 ring-brand" : "bg-primary ring-1 ring-primary hover:bg-primary_hover",
+              )}
             >
-              <b>{t(preset.label)}</b>
-              <span className="muted">{t(preset.hint)}</span>
-            </button>
+              <span className="text-sm font-semibold text-primary">{t(preset.label)}</span>
+              <span className="text-sm text-tertiary">{t(preset.hint)}</span>
+            </AriaButton>
           ))}
         </div>
 
         {/* Главное объяснение — не формула, а два числа: когда именно скажем.
             Порог считается от размера катушки, поэтому и примера два. */}
-        <div className="low-explain">
+        <p className="m-0 text-sm text-secondary">
           {t("Скажем, когда останется")}{" "}
-          <b className="mono">{Math.round(lowThresholdFor(1000, lowCfgDraft))}{" "}{t("г")}</b>{" "}
+          <b className="font-semibold text-primary tabular-nums">{Math.round(lowThresholdFor(1000, lowCfgDraft))} {t("г")}</b>{" "}
           {t("на обычной катушке 1 кг")}
           {" — "}
           {t("и")}{" "}
-          <b className="mono">{Math.round(lowThresholdFor(250, lowCfgDraft))}{" "}{t("г")}</b>{" "}
+          <b className="font-semibold text-primary tabular-nums">{Math.round(lowThresholdFor(250, lowCfgDraft))} {t("г")}</b>{" "}
           {t("на маленькой 250 г.")}
-        </div>
+        </p>
 
         {isAdmin && (
-          <details
-            className="low-advanced"
-            open={lowAdv}
-            onToggle={(e) => setLowAdv(e.currentTarget.open)}
-          >
-            <summary>{t("Настроить точнее")}</summary>
-            <p className="muted" style={{ fontSize: 12 }}>
-              {t("Порог считается как доля от размера катушки, но не выходит за границы в граммах. Это и позволяет одной настройке работать и на пробнике 250 г, и на бухте 3 кг.")}
-            </p>
-            <div className="row">
-              <label>
-                {t("Доля от катушки, %")}
-                <input type="number" min="0" max="100" value={lowPct}
-                  onChange={(e) => setLowPct(e.target.value)} />
-              </label>
-              <label>
-                {t("Не меньше, г")}
-                <input type="number" min="1" value={lowMin}
-                  onChange={(e) => setLowMin(e.target.value)} />
-              </label>
-              <label>
-                {t("Не больше, г")}
-                <input type="number" min="1" value={lowMax}
-                  onChange={(e) => setLowMax(e.target.value)} />
-              </label>
-            </div>
-            <div className="low-preview">
-              {lowPreview.map((p) => (
-                <div key={p.capacity}>
-                  <span className="muted">
-                    {p.capacity >= 1000 ? `${p.capacity / 1000} ${t("кг")}` : `${p.capacity} ${t("г")}`}
-                  </span>
-                  <b className="mono">{p.threshold}{" "}{t("г")}</b>
+          <div>
+            <Button
+              size="sm"
+              color="link-color"
+              iconTrailing={<ChevronDown className={cx("size-4 transition duration-100 ease-linear", lowAdv && "rotate-180")} aria-hidden="true" />}
+              onClick={() => setLowAdv((v) => !v)}
+            >
+              {t("Настроить точнее")}
+            </Button>
+            {lowAdv && (
+              <div className="mt-3 flex flex-col gap-4 rounded-xl p-4 ring-1 ring-secondary ring-inset">
+                <Hint>
+                  {t("Порог считается как доля от размера катушки, но не выходит за границы в граммах. Это и позволяет одной настройке работать и на пробнике 250 г, и на бухте 3 кг.")}
+                </Hint>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <Input size="sm" type="number" min="0" max="100" label={t("Доля от катушки, %")} value={lowPct} onChange={setLowPct} />
+                  <Input size="sm" type="number" min="1" label={t("Не меньше, г")} value={lowMin} onChange={setLowMin} />
+                  <Input size="sm" type="number" min="1" label={t("Не больше, г")} value={lowMax} onChange={setLowMax} />
                 </div>
-              ))}
-            </div>
-            <button className="secondary" onClick={saveLow} disabled={lowBusy} style={{ marginTop: 12 }}>
-              {t("Сохранить")}
-            </button>
-          </details>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {lowPreview.map((p) => (
+                    <Stat key={p.capacity} label={p.capacity >= 1000 ? `${p.capacity / 1000} ${t("кг")}` : `${p.capacity} ${t("г")}`}>
+                      {p.threshold} {t("г")}
+                    </Stat>
+                  ))}
+                </div>
+                <div>
+                  <Button size="md" color="secondary" onClick={() => saveLow()} isDisabled={lowBusy}>{t("Сохранить")}</Button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
-        {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
-      </section>
+        {!isAdmin && <AdminOnly />}
+      </Section>
     ),
+
     telegram: (
-      <section key="telegram" id="telegram" className="card settings-section">
-        <h3 className="card-title-lg">{t("Уведомления в Telegram")}</h3>
-        <p className="muted">
-          {t("Сообщения об изменениях состояния принтера: печать завершена, ошибка, сушка и т.д. Создайте бота через @BotFather, получите токен, напишите боту и укажите chat id (узнать можно у @userinfobot).")}
-        </p>
-        {!isAdmin && <div className="muted">{t("Доступно только администратору.")}</div>}
+      <Section
+        key="telegram" id="telegram" title={t("Уведомления в Telegram")}
+        description={t("Сообщения об изменениях состояния принтера: печать завершена, ошибка, сушка и т.д. Создайте бота через @BotFather, получите токен, напишите боту и укажите chat id (узнать можно у @userinfobot).")}
+      >
+        {!isAdmin && <AdminOnly />}
         {isAdmin && (
           <>
-            <Toggle
-              k="telegram_enabled"
-              label={t("Отправлять уведомления")}
-              hint={t("Общий выключатель: пока выключен, ничего не отправляется и принтеры не опрашиваются ради уведомлений.")}
-            />
-            <div className="settings-fields">
-              <label>
-                {t("Токен бота")}
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={tgToken}
-                  onChange={(e) => setTgToken(e.target.value)}
+            {setting(
+              "telegram_enabled",
+              t("Отправлять уведомления"),
+              t("Общий выключатель: пока выключен, ничего не отправляется и принтеры не опрашиваются ради уведомлений."),
+            )}
+            <div className="flex flex-col gap-4 border-t border-secondary pt-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input
+                  size="sm" type="password" autoComplete="new-password" label={t("Токен бота")}
+                  value={tgToken} onChange={setTgToken}
                   placeholder={s.telegram_token_set ? t("Токен сохранён — введите новый, чтобы заменить") : "123456:ABC-DEF..."}
                 />
-              </label>
-              <label>
-                {t("Chat id")}
-                <input
-                  value={tgChat}
-                  onChange={(e) => setTgChat(e.target.value)}
-                  placeholder="123456789"
-                />
-              </label>
-              <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
-                {t("Напишите боту «/start» и нажмите «Определить chat id» — вводить вручную не нужно.")}
+                <Input size="sm" label={t("Chat id")} value={tgChat} onChange={setTgChat} placeholder="123456789" />
               </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button className="secondary" onClick={saveTelegramBot} disabled={tgBusy}>
-                  {t("Сохранить")}
-                </button>
-                <button
-                  className="secondary"
-                  onClick={detectChat}
-                  disabled={tgBusy || !s.telegram_token_set}
-                  title={t("Определить по тем, кто написал боту")}
-                >
+              <Hint>{t("Напишите боту «/start» и нажмите «Определить chat id» — вводить вручную не нужно.")}</Hint>
+              <div className="flex flex-wrap gap-2">
+                <Button size="md" color="secondary" onClick={saveTelegramBot} isDisabled={tgBusy}>{t("Сохранить")}</Button>
+                <Button size="md" color="secondary" onClick={detectChat} isDisabled={tgBusy || !s.telegram_token_set}>
                   {t("Определить chat id")}
-                </button>
-                <button
-                  className="secondary"
-                  onClick={testTelegram}
-                  disabled={tgBusy || !s.telegram_token_set || !s.telegram_chat_id}
-                >
+                </Button>
+                <Button size="md" color="secondary" onClick={testTelegram} isDisabled={tgBusy || !s.telegram_token_set || !s.telegram_chat_id}>
                   {t("Отправить тест")}
-                </button>
+                </Button>
               </div>
-              {tgMsg && (
-                <div className={tgMsg.ok ? "muted" : "error"} style={{ fontSize: 13 }}>
-                  {tgMsg.text}
-                </div>
-              )}
+              {msgOf(tgMsg)}
             </div>
-            <div style={{ marginTop: 16 }}>
-              <div className="card-sub" style={{ marginBottom: 8 }}>{t("Часовой пояс")}</div>
-              <div className="settings-fields">
-                <label>
-                  {t("Время в сообщениях")}
-                  <select
-                    value={s.timezone || ""}
-                    onChange={(e) => saveTelegram({ timezone: e.target.value })}
-                  >
-                    <option value="">{t("Как на сервере")}</option>
-                    <optgroup label={t("Это устройство")}>
-                      <option value={TZ_BROWSER}>{TZ_BROWSER}</option>
-                    </optgroup>
-                    {TZ_ALL.length > 0 && (
-                      <optgroup label={t("Все пояса")}>
-                        {TZ_ALL.filter((z) => z !== TZ_BROWSER).map((z) => (
-                          <option key={z} value={z}>{z}</option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {/* Сохранённого пояса может не быть в списке браузера —
-                        без этой строки поле показало бы пустоту. */}
-                    {s.timezone && s.timezone !== TZ_BROWSER && !TZ_ALL.includes(s.timezone) && (
-                      <option value={s.timezone}>{s.timezone}</option>
-                    )}
-                  </select>
-                </label>
-                <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+
+            <div className="border-t border-secondary pt-5">
+              <SectionLabel>{t("Часовой пояс")}</SectionLabel>
+              <div className="flex max-w-md flex-col gap-2">
+                <Pick
+                  label={t("Время в сообщениях")}
+                  value={s.timezone || NONE}
+                  onChange={(k) => saveTelegram({ timezone: k === NONE ? "" : k })}
+                  items={tzItems}
+                />
+                <Hint>
                   {s.timezone
                     ? `${t("Сейчас в этом поясе:")} ${timeIn(s.timezone) || "—"}`
                     : t("Сервер обычно живёт по UTC — тогда время в сообщениях будет отличаться от вашего.")}
-                </div>
+                </Hint>
               </div>
             </div>
-            <div style={{ marginTop: 16 }}>
-              <div className="card-sub" style={{ marginBottom: 8 }}>{t("Что отправлять")}</div>
-              <div className="settings-checks">
+
+            <div className="border-t border-secondary pt-5">
+              <SectionLabel>{t("Что отправлять")}</SectionLabel>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {TG_EVENTS.map(([key, label]) => (
-                  <label key={key}>
-                    <input
-                      type="checkbox"
-                      style={{ width: "auto" }}
-                      checked={!!s.telegram_events?.[key]}
-                      onChange={toggleEvent(key)}
-                      disabled={!s.telegram_enabled}
-                    />
-                    {label}
-                  </label>
+                  <Checkbox
+                    key={key}
+                    size="sm"
+                    label={label}
+                    isSelected={!!s.telegram_events?.[key]}
+                    onChange={(v) => saveTelegram({ telegram_events: { [key]: v } })}
+                    isDisabled={!s.telegram_enabled}
+                  />
                 ))}
               </div>
             </div>
-            <div style={{ marginTop: 16 }}>
-              <div className="card-sub" style={{ marginBottom: 8 }}>{t("Снимок с камеры")}</div>
-              <Toggle
-                k="telegram_photo_enabled"
-                label={t("Прикладывать кадр с камеры принтера")}
-                hint={t("Кадр уходит вместе с сообщением: сначала картинка, под ней текст. Камера не ответила — придёт обычное сообщение. Адрес камеры берётся у Moonraker, а задать свой можно в карточке принтера («Принтеры» → Moonraker).")}
-              />
-              <div className="settings-checks">
+
+            <div className="flex flex-col gap-4 border-t border-secondary pt-5">
+              <SectionLabel className="mb-0">{t("Снимок с камеры")}</SectionLabel>
+              {setting(
+                "telegram_photo_enabled",
+                t("Прикладывать кадр с камеры принтера"),
+                t("Кадр уходит вместе с сообщением: сначала картинка, под ней текст. Камера не ответила — придёт обычное сообщение. Адрес камеры берётся у Moonraker, а задать свой можно в карточке принтера («Принтеры» → Moonraker)."),
+              )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {TG_PHOTO_EVENTS.map(([key, label]) => (
-                  <label key={key}>
-                    <input
-                      type="checkbox"
-                      style={{ width: "auto" }}
-                      checked={!!s.telegram_photo_events?.[key]}
-                      onChange={togglePhotoEvent(key)}
-                      disabled={!s.telegram_enabled || !s.telegram_photo_enabled}
-                    />
-                    {label}
-                  </label>
+                  <Checkbox
+                    key={key}
+                    size="sm"
+                    label={label}
+                    isSelected={!!s.telegram_photo_events?.[key]}
+                    onChange={(v) => saveTelegram({ telegram_photo_events: { [key]: v } })}
+                    isDisabled={!s.telegram_enabled || !s.telegram_photo_enabled}
+                  />
                 ))}
               </div>
             </div>
           </>
         )}
-      </section>
+      </Section>
     ),
+
     sensors: (
-      <section key="sensors" id="sensors" className="card settings-section">
-        <h3 className="card-title-lg">{t("Датчики температуры и влажности")}</h3>
-        <p className="muted">
-          {t("Показания zigbee/wifi-датчиков из Home Assistant — на панели, рядом с принтером и в местах хранения. Нужен адрес HA и токен долгосрочного доступа (профиль в HA → «Токены долгосрочного доступа»).")}
-        </p>
-        {!isAdmin && <div className="muted">{t("Доступно только администратору.")}</div>}
+      <Section
+        key="sensors" id="sensors" title={t("Датчики температуры и влажности")}
+        description={t("Показания zigbee/wifi-датчиков из Home Assistant — на панели, рядом с принтером и в местах хранения. Нужен адрес HA и токен долгосрочного доступа (профиль в HA → «Токены долгосрочного доступа»).")}
+      >
+        {!isAdmin && <AdminOnly />}
         {isAdmin && (
           <>
-            <Toggle
-              k="ha_enabled"
-              label={t("Показывать показания датчиков")}
-              hint={t("Общий выключатель: пока выключен, Home Assistant не опрашивается.")}
-            />
-            <div className="settings-fields">
-              <label>
-                {t("Адрес Home Assistant")}
-                <input
-                  value={haUrl}
-                  onChange={(e) => setHaUrl(e.target.value)}
-                  placeholder="http://homeassistant.local:8123"
+            {setting(
+              "ha_enabled",
+              t("Показывать показания датчиков"),
+              t("Общий выключатель: пока выключен, Home Assistant не опрашивается."),
+            )}
+            <div className="flex flex-col gap-4 border-t border-secondary pt-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input
+                  size="sm" label={t("Адрес Home Assistant")} value={haUrl} onChange={setHaUrl}
+                  placeholder="http://homeassistant.local:8123" className="sm:col-span-2"
                 />
-              </label>
-              <label>
-                {t("Токен долгосрочного доступа")}
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={haToken}
-                  onChange={(e) => setHaToken(e.target.value)}
+                <Input
+                  size="sm" type="password" autoComplete="new-password" label={t("Токен долгосрочного доступа")}
+                  value={haToken} onChange={setHaToken}
                   placeholder={s.ha_token_set ? t("Токен сохранён — введите новый, чтобы заменить") : "eyJhbGciOi..."}
                 />
-              </label>
-              <label>
-                {t("Общий порог «влажность высокая», %")}
-                <input
-                  type="number"
-                  min="1"
-                  max="99"
-                  value={haWet}
-                  onChange={(e) => setHaWet(e.target.value)}
+                <Input
+                  size="sm" type="number" min="1" max="99" label={t("Общий порог «влажность высокая», %")}
+                  value={haWet} onChange={setHaWet}
                 />
-              </label>
-              <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+              </div>
+              <Hint>
                 {t("Применяется к датчикам, у которых не задан свой порог. Выше порога показания подсвечиваются, а при включённом уведомлении «Влажность выше порога» приходит сообщение в Telegram.")}
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button className="secondary" onClick={saveHaConnection} disabled={haBusy}>
-                  {t("Сохранить")}
-                </button>
-                <button className="secondary" onClick={testHa} disabled={haBusy || !s.ha_token_set || !s.ha_base_url}>
+              </Hint>
+              <div className="flex flex-wrap gap-2">
+                <Button size="md" color="secondary" onClick={saveHaConnection} isDisabled={haBusy}>{t("Сохранить")}</Button>
+                <Button size="md" color="secondary" onClick={testHa} isDisabled={haBusy || !s.ha_token_set || !s.ha_base_url}>
                   {t("Проверить связь")}
-                </button>
-                <button className="secondary" onClick={loadHaEntities} disabled={haBusy || !s.ha_token_set || !s.ha_base_url}>
+                </Button>
+                <Button size="md" color="secondary" onClick={loadHaEntities} isDisabled={haBusy || !s.ha_token_set || !s.ha_base_url}>
                   {t("Загрузить список датчиков")}
-                </button>
+                </Button>
               </div>
-              {haMsg && (
-                <div className={haMsg.ok ? "muted" : "error"} style={{ fontSize: 13 }}>
-                  {haMsg.text}
-                </div>
-              )}
+              {msgOf(haMsg)}
             </div>
 
-            <div style={{ marginTop: 16 }}>
-              <div className="card-sub" style={{ marginBottom: 8 }}>{t("Датчики")}</div>
-              {haSensors.length === 0 && (
-                <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
-                  {t("Датчики не добавлены. Нажмите «Добавить датчик» и укажите сущности температуры и влажности.")}
-                </div>
-              )}
-              {haSensors.map((sensor, i) => (
-                <div key={i} className="sensor-card">
-                  {/* Свёрнутая строка отвечает на два вопроса: что за прибор и
-                      где появятся его показания. Форма нужна только при правке. */}
-                  <button
-                    type="button"
-                    className="sensor-head"
-                    aria-expanded={openSensor === i}
-                    onClick={() => setOpenSensor(openSensor === i ? null : i)}
-                  >
-                    <Icon name="chevron" size={14} />
-                    <span>{sensor.name || t("Новый датчик")}</span>
-                    <span className="muted sensor-where">{bindLabel(sensor)}</span>
-                  </button>
-                  {openSensor === i && (
-                  <div className="sensor-body settings-fields">
-                    <label>
-                      {t("Название")}
-                      <input
-                        value={sensor.name || ""}
-                        onChange={(e) => patchSensor(i, { name: e.target.value })}
-                        placeholder={t("Сушилка ACE Pro")}
-                      />
-                    </label>
-                    <label>
-                      {t("Сущность температуры")}
-                      <input
-                        list="ha-temp-entities"
-                        value={sensor.temp_entity || ""}
-                        onChange={(e) => patchSensor(i, { temp_entity: e.target.value })}
-                        placeholder="sensor.ace_pro_temp_hum_temperature"
-                      />
-                    </label>
-                    <label>
-                      {t("Сущность влажности")}
-                      <input
-                        list="ha-humidity-entities"
-                        value={sensor.humidity_entity || ""}
-                        onChange={(e) => patchSensor(i, { humidity_entity: e.target.value })}
-                        placeholder="sensor.ace_pro_temp_hum_humidity"
-                      />
-                    </label>
-                    <label>
-                      {t("Сущность заряда батареи (необязательно)")}
-                      <input
-                        list="ha-battery-entities"
-                        value={sensor.battery_entity || ""}
-                        onChange={(e) => patchSensor(i, { battery_entity: e.target.value })}
-                        placeholder="sensor.ace_pro_temp_hum_battery"
-                      />
-                    </label>
-                    <label>
-                      {t("Свой порог влажности, % (необязательно)")}
-                      <input
-                        type="number"
-                        min="1"
-                        max="99"
-                        value={sensor.humidity_max ?? ""}
-                        onChange={(e) => patchSensor(i, {
-                          humidity_max: e.target.value === "" ? null : Number(e.target.value),
-                        })}
-                        placeholder={`${t("как общий")} — ${s.humidity_alert_max_pct}%`}
-                      />
-                    </label>
-                    <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
-                      {t("Пусто — берётся общий порог. Разным местам нужны разные значения: в сушилке нагрев занижает влажность, а нейлону и PVA нужен порог жёстче, чем PLA.")}
-                    </div>
-                    <label>
-                      {t("Где показывать")}
-                      <select
-                        value={sensor.bind_type && sensor.bind_id ? `${sensor.bind_type}:${sensor.bind_id}` : ""}
-                        onChange={(e) => {
-                          const [bind_type, bind_id] = e.target.value ? e.target.value.split(":") : [null, null];
-                          patchSensor(i, { bind_type, bind_id });
-                        }}
-                      >
-                        <option value="">{t("Отдельным блоком на панели")}</option>
-                        {printers.map((p) => (
-                          <option key={p.id} value={`printer:${p.id}`}>{t("Принтер")}: {p.name}</option>
-                        ))}
-                        {locations.map((l) => (
-                          <option key={l.id} value={`location:${l.id}`}>{t("Место хранения")}: {l.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="muted" style={{ fontSize: 12, marginTop: -4 }}>
-                      {bindHint(sensor)}
-                    </div>
-                    <div>
-                      <button className="danger secondary" onClick={() => removeSensor(i)}>
-                        {t("Удалить датчик")}
-                      </button>
-                    </div>
-                  </div>
-                  )}
-                </div>
-              ))}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <button className="secondary" onClick={addSensor}>{t("Добавить датчик")}</button>
-                {/* Пока правки не отправлены — кнопка обычная (акцентная), иначе
-                    нечем отличить сохранённое состояние от несохранённого. */}
-                <button
-                  className={haDirty ? "" : "secondary"}
-                  onClick={() => saveHa({ ha_sensors: haSensors })}
-                  disabled={haBusy || !haDirty}
-                >
-                  {t("Сохранить датчики")}
-                </button>
-                {haDirty && (
-                  <span className="badge almost_empty">{t("есть несохранённые изменения")}</span>
+            <div className="border-t border-secondary pt-5">
+              <SectionLabel>{t("Датчики")}</SectionLabel>
+              <div className="flex flex-col gap-3">
+                {haSensors.length === 0 && (
+                  <Hint>{t("Датчики не добавлены. Нажмите «Добавить датчик» и укажите сущности температуры и влажности.")}</Hint>
                 )}
+                {haSensors.map((sensor, i) => {
+                  const isOpen = openSensor === i;
+                  return (
+                    <div key={i} className="rounded-xl ring-1 ring-secondary ring-inset">
+                      {/* Свёрнутая строка отвечает на два вопроса: что за прибор и
+                          где появятся его показания. Форма нужна только при правке. */}
+                      <AriaButton
+                        onPress={() => setOpenSensor(isOpen ? null : i)}
+                        aria-expanded={isOpen}
+                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl bg-transparent px-4 py-3 text-left outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2"
+                      >
+                        <ChevronRight className={cx("size-4 shrink-0 text-fg-quaternary transition duration-100 ease-linear", isOpen && "rotate-90")} aria-hidden="true" />
+                        <span className="text-sm font-semibold text-primary">{sensor.name || t("Новый датчик")}</span>
+                        <span className="ml-auto min-w-0 truncate text-sm text-tertiary">{bindLabel(sensor)}</span>
+                      </AriaButton>
+                      {isOpen && (
+                        <div className="flex flex-col gap-4 border-t border-secondary p-4">
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <Input
+                              size="sm" label={t("Название")} value={sensor.name || ""}
+                              onChange={(v) => patchSensor(i, { name: v })} placeholder={t("Сушилка ACE Pro")}
+                              className="sm:col-span-2"
+                            />
+                            <Input
+                              size="sm" list="ha-temp-entities" label={t("Сущность температуры")} value={sensor.temp_entity || ""}
+                              onChange={(v) => patchSensor(i, { temp_entity: v })} placeholder="sensor.ace_pro_temp_hum_temperature"
+                            />
+                            <Input
+                              size="sm" list="ha-humidity-entities" label={t("Сущность влажности")} value={sensor.humidity_entity || ""}
+                              onChange={(v) => patchSensor(i, { humidity_entity: v })} placeholder="sensor.ace_pro_temp_hum_humidity"
+                            />
+                            <Input
+                              size="sm" list="ha-battery-entities" label={t("Сущность заряда батареи (необязательно)")} value={sensor.battery_entity || ""}
+                              onChange={(v) => patchSensor(i, { battery_entity: v })} placeholder="sensor.ace_pro_temp_hum_battery"
+                            />
+                            <Input
+                              size="sm" type="number" min="1" max="99" label={t("Свой порог влажности, % (необязательно)")}
+                              value={String(sensor.humidity_max ?? "")}
+                              onChange={(v) => patchSensor(i, { humidity_max: v === "" ? null : Number(v) })}
+                              placeholder={`${t("как общий")} — ${s.humidity_alert_max_pct}%`}
+                            />
+                          </div>
+                          <Hint>
+                            {t("Пусто — берётся общий порог. Разным местам нужны разные значения: в сушилке нагрев занижает влажность, а нейлону и PVA нужен порог жёстче, чем PLA.")}
+                          </Hint>
+                          <Pick
+                            label={t("Где показывать")}
+                            value={sensor.bind_type && sensor.bind_id ? `${sensor.bind_type}:${sensor.bind_id}` : NONE}
+                            onChange={(k) => {
+                              if (k === NONE) { patchSensor(i, { bind_type: null, bind_id: null }); return; }
+                              const [bind_type, ...rest] = k.split(":");
+                              patchSensor(i, { bind_type, bind_id: rest.join(":") });
+                            }}
+                            items={bindItems}
+                          />
+                          <Hint>{bindHint(sensor)}</Hint>
+                          <div>
+                            <Button size="sm" color="secondary-destructive" onClick={() => removeSensor(i)}>{t("Удалить датчик")}</Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="md" color="secondary" onClick={addSensor}>{t("Добавить датчик")}</Button>
+                  {/* Пока правки не отправлены — кнопка акцентная, иначе
+                      нечем отличить сохранённое состояние от несохранённого. */}
+                  <Button size="md" color={haDirty ? "primary" : "secondary"} onClick={() => saveHa({ ha_sensors: haSensors })} isDisabled={haBusy || !haDirty}>
+                    {t("Сохранить датчики")}
+                  </Button>
+                  {haDirty && <Badge size="sm" color="warning" type="pill-color">{t("есть несохранённые изменения")}</Badge>}
+                </div>
               </div>
               {/* Подсказки к полям entity_id — заполняются кнопкой «Загрузить список датчиков». */}
               <datalist id="ha-temp-entities">
@@ -1076,129 +1000,117 @@ export default function Settings() {
             </div>
           </>
         )}
-      </section>
+      </Section>
     ),
+
     catalog: (
-      <section key="catalog" id="catalog" className="card settings-section">
-        <h3 className="card-title-lg">{t("Каталог филамента")}</h3>
-        <p className="muted">
+      <Section key="catalog" id="catalog" title={t("Каталог филамента")}>
+        <Hint>
           {t("Автозаполнение катушки по базе филаментов")}{" "}
-          <a href="https://github.com/Donkie/SpoolmanDB" target="_blank" rel="noreferrer">SpoolmanDB</a>
+          <AriaLink href="https://github.com/Donkie/SpoolmanDB" target="_blank" rel="noreferrer" className="cursor-pointer rounded-sm text-brand-secondary outline-focus-ring hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">SpoolmanDB</AriaLink>
           {catalogInfo?.count ? ` · ${catalogInfo.count} ${t("записей")}` : ""}.{" "}
           {t("Снапшот встроен и работает офлайн; кнопка ниже подтягивает свежую версию.")}
-        </p>
-        <button className="secondary" onClick={refreshCatalog} disabled={catalogBusy}>
-          {catalogBusy ? t("Обновление…") : t("Обновить из SpoolmanDB")}
-        </button>
-      </section>
+        </Hint>
+        <div>
+          <Button size="md" color="secondary" onClick={refreshCatalog} isLoading={catalogBusy}>
+            {catalogBusy ? t("Обновление…") : t("Обновить из SpoolmanDB")}
+          </Button>
+        </div>
+      </Section>
     ),
+
     spoolman: (
-      <section key="spoolman" id="spoolman" className="card settings-section">
-        <h3 className="card-title-lg">{t("Импорт из Spoolman")}</h3>
-        <p className="muted">{t("Перенос катушек из вашего Spoolman по сети. Повторный импорт пропускает уже добавленные катушки.")}</p>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <input
-            style={{ flex: "1 1 260px" }}
-            value={spoolmanUrl}
-            onChange={(e) => setSpoolmanUrl(e.target.value)}
-            placeholder="http://spoolman.local:7912"
+      <Section
+        key="spoolman" id="spoolman" title={t("Импорт из Spoolman")}
+        description={t("Перенос катушек из вашего Spoolman по сети. Повторный импорт пропускает уже добавленные катушки.")}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            size="sm" aria-label={t("Импорт из Spoolman")} className="min-w-64 flex-1"
+            value={spoolmanUrl} onChange={setSpoolmanUrl} placeholder="http://spoolman.local:7912"
           />
-          <button className="secondary" onClick={importSpoolman} disabled={spoolmanBusy || !spoolmanUrl.trim()}>
+          <Button size="md" color="secondary" onClick={importSpoolman} isLoading={spoolmanBusy} isDisabled={!spoolmanUrl.trim()}>
             {spoolmanBusy ? t("Импорт…") : t("Импортировать")}
-          </button>
+          </Button>
         </div>
-      </section>
+      </Section>
     ),
+
     backup: (
-      <section key="backup" id="backup" className="card settings-section">
-        <h3 className="card-title-lg">{t("Бэкап")}</h3>
-        <p className="muted">{t("Экспорт всех ваших данных в JSON и восстановление из файла (данные заменяются: текущие удаляются).")}</p>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="secondary" onClick={exportBackup}>{t("Скачать бэкап (JSON)")}</button>
-          <button className="secondary" onClick={() => fileRef.current.click()}>{t("Восстановить из файла")}</button>
-          <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={importBackup} />
+      <Section
+        key="backup" id="backup" title={t("Бэкап")}
+        description={t("Экспорт всех ваших данных в JSON и восстановление из файла (данные заменяются: текущие удаляются).")}
+      >
+        <div className="flex flex-wrap gap-2">
+          <Button size="md" color="secondary" onClick={exportBackup}>{t("Скачать бэкап (JSON)")}</Button>
+          <Button size="md" color="secondary" onClick={() => fileRef.current?.click()}>{t("Восстановить из файла")}</Button>
+          <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={importBackup} />
         </div>
-      </section>
+      </Section>
     ),
+
     journal: (
-      <section key="journal" id="journal" className="card settings-section">
-        <h3 className="card-title-lg">{t("Диагностический журнал")}</h3>
-        <p className="muted">
-          {t("Для отладки: включите запись, повторите проблемные действия, затем скачайте журнал и приложите его к issue на GitHub. Пишутся действия (запросы к серверу с результатом), автоматизация принтера (импорт, автосписание, сушка) и ошибки — бэкенда и браузера. Хранится в базе (последние 5000 записей).")}
-        </p>
-        <Toggle
-          k="error_logging"
-          label={t("Записывать действия и ошибки")}
-          hint={t("Личных данных в записях обычно нет, но перед публикацией просмотрите журнал: секреты (пароли, ключи) вырезаются автоматически.")}
-        />
-        {!isAdmin && <div className="muted" style={{ marginTop: 6 }}>{t("Доступно только администратору.")}</div>}
+      <Section
+        key="journal" id="journal" title={t("Диагностический журнал")}
+        description={t("Для отладки: включите запись, повторите проблемные действия, затем скачайте журнал и приложите его к issue на GitHub. Пишутся действия (запросы к серверу с результатом), автоматизация принтера (импорт, автосписание, сушка) и ошибки — бэкенда и браузера. Хранится в базе (последние 5000 записей).")}
+      >
+        {setting(
+          "error_logging",
+          t("Записывать действия и ошибки"),
+          t("Личных данных в записях обычно нет, но перед публикацией просмотрите журнал: секреты (пароли, ключи) вырезаются автоматически."),
+        )}
+        {!isAdmin && <AdminOnly />}
         {isAdmin && (
           <>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
-              <select
-                style={{ width: "auto" }}
-                value={logFilter.level}
-                onChange={(e) => { const f = { ...logFilter, level: e.target.value }; setLogFilter(f); loadLog(f); }}
-              >
-                <option value="">{t("Все уровни")}</option>
-                <option value="info">info</option>
-                <option value="warning">warning</option>
-                <option value="error">error</option>
-              </select>
-              <select
-                style={{ width: "auto" }}
-                value={logFilter.source}
-                onChange={(e) => { const f = { ...logFilter, source: e.target.value }; setLogFilter(f); loadLog(f); }}
-              >
-                <option value="">{t("Все источники")}</option>
-                <option value="http">http</option>
-                <option value="poller">poller</option>
-                <option value="backend">backend</option>
-                <option value="frontend">frontend</option>
-              </select>
-              <input
-                style={{ flex: "1 1 160px" }}
-                placeholder={t("Поиск по тексту/пути")}
-                value={logFilter.q}
-                onChange={(e) => setLogFilter({ ...logFilter, q: e.target.value })}
+            <div className="flex flex-wrap items-center gap-2 border-t border-secondary pt-5">
+              <Pick
+                aria-label={t("Все уровни")}
+                className="w-36"
+                value={logFilter.level || NONE}
+                onChange={(k) => { const f = { ...logFilter, level: k === NONE ? "" : k }; setLogFilter(f); loadLog(f); }}
+                items={[{ id: NONE, label: t("Все уровни") }, ...["info", "warning", "error"].map((l) => ({ id: l, label: l }))]}
+              />
+              <Pick
+                aria-label={t("Все источники")}
+                className="w-40"
+                value={logFilter.source || NONE}
+                onChange={(k) => { const f = { ...logFilter, source: k === NONE ? "" : k }; setLogFilter(f); loadLog(f); }}
+                items={[{ id: NONE, label: t("Все источники") }, ...["http", "poller", "backend", "frontend"].map((l) => ({ id: l, label: l }))]}
+              />
+              <Input
+                size="sm" aria-label={t("Поиск по тексту/пути")} className="min-w-44 flex-1"
+                placeholder={t("Поиск по тексту/пути")} value={logFilter.q}
+                onChange={(v) => setLogFilter({ ...logFilter, q: v })}
                 onKeyDown={(e) => { if (e.key === "Enter") loadLog(); }}
               />
-              <button className="secondary" onClick={() => loadLog()}>{t("Показать")}</button>
-              <button className="secondary" onClick={downloadLog}>{t("Скачать (.txt)")}</button>
-              <button className="secondary" onClick={clearLog}>{t("Очистить")}</button>
+              <Button size="md" color="secondary" onClick={() => loadLog()}>{t("Показать")}</Button>
+              <Button size="md" color="secondary" onClick={downloadLog}>{t("Скачать (.txt)")}</Button>
+              <Button size="md" color="secondary" onClick={clearLog}>{t("Очистить")}</Button>
             </div>
             {log !== null && (
               log.entries.length === 0 ? (
-                <div className="muted" style={{ marginTop: 10 }}>{t("Журнал пуст.")}</div>
+                <Hint>{t("Журнал пуст.")}</Hint>
               ) : (
-                <>
-                  <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-                    {t("Показано")} {log.entries.length} {t("из")} {log.total}
-                  </div>
-                  <div style={{
-                    marginTop: 6, maxHeight: 360, overflow: "auto", fontSize: 12,
-                    background: "var(--panel-2)", border: "1px solid var(--border)", borderRadius: 6,
-                  }}>
+                <div className="flex flex-col gap-2">
+                  <p className="m-0 text-xs text-tertiary">{t("Показано")} {log.entries.length} {t("из")} {log.total}</p>
+                  <div className="max-h-96 overflow-auto rounded-lg bg-secondary_alt text-xs ring-1 ring-secondary ring-inset">
                     {log.entries.map((e) => (
-                      <div key={e.id} style={{ padding: "6px 10px", borderBottom: "1px solid var(--border-soft)" }}>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <span className="badge" style={{
-                            background: `var(--badge-${e.level === "error" ? "danger" : e.level === "warning" ? "warn" : "info"}-bg)`,
-                            color: `var(--badge-${e.level === "error" ? "danger" : e.level === "warning" ? "warn" : "info"}-text)`,
-                          }}>{e.level}</span>
-                          <span className="mono muted">{e.time}</span>
-                          <span className="mono">{e.source}</span>
-                          {e.status != null && <span className="mono muted">{e.status}</span>}
-                          {e.duration_ms != null && <span className="mono muted">{e.duration_ms}ms</span>}
+                      <div key={e.id} className="border-b border-secondary px-3 py-2 last:border-b-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge size="sm" color={LEVEL_COLOR[e.level] || "gray"} type="pill-color">{e.level}</Badge>
+                          <span className="font-mono text-tertiary">{e.time}</span>
+                          <span className="font-mono text-primary">{e.source}</span>
+                          {e.status != null && <span className="font-mono text-tertiary">{e.status}</span>}
+                          {e.duration_ms != null && <span className="font-mono text-tertiary">{e.duration_ms}ms</span>}
                         </div>
-                        <div className="mono" style={{ marginTop: 2 }}>
+                        <div className="mt-1 font-mono break-words text-primary">
                           {e.action || `${e.method || ""} ${e.path || ""}`}
                         </div>
-                        {e.message && <div style={{ marginTop: 2 }}>{e.message}</div>}
+                        {e.message && <div className="mt-1 break-words text-secondary">{e.message}</div>}
                         {e.context && (
-                          <details style={{ marginTop: 2 }}>
-                            <summary className="muted" style={{ cursor: "pointer" }}>{t("подробнее")}</summary>
-                            <pre style={{ whiteSpace: "pre-wrap", margin: "4px 0 0", fontSize: 11 }}>
+                          <details className="mt-1">
+                            <summary className="cursor-pointer text-tertiary">{t("подробнее")}</summary>
+                            <pre className="m-0 mt-1 text-[11px] whitespace-pre-wrap text-secondary">
                               {JSON.stringify(e.context, null, 2)}
                             </pre>
                           </details>
@@ -1206,64 +1118,94 @@ export default function Settings() {
                       </div>
                     ))}
                   </div>
-                </>
+                </div>
               )
             )}
           </>
         )}
-      </section>
+      </Section>
     ),
+  };
+
+  // Кнопка раздела в оглавлении: точка состояния, название и подпись.
+  const railItem = (id) => {
+    const st = SECTION_STATE[id];
+    const active = activeSection === id;
+    return (
+      <AriaButton
+        key={id}
+        onPress={() => goToSection(id)}
+        aria-current={active ? "true" : undefined}
+        className={cx(
+          "flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2 text-left outline-focus-ring transition duration-100 ease-linear focus-visible:outline-2 focus-visible:-outline-offset-2",
+          active ? "bg-secondary_hover" : "bg-transparent hover:bg-primary_hover",
+        )}
+      >
+        <span className={cx("mt-1.5 size-2 shrink-0 rounded-full", st ? (st.on ? "bg-success-solid" : "bg-quaternary") : "bg-transparent")} aria-hidden="true" />
+        <span className="flex min-w-0 flex-col">
+          <span className={cx("text-sm font-medium", active ? "text-primary" : "text-secondary")}>{SECTION_TITLES[id]}</span>
+          {st && <span className="text-xs text-tertiary">{st.text}</span>}
+        </span>
+      </AriaButton>
+    );
   };
 
   return (
     <div>
-      <h2>{t("Настройки")}</h2>
-      {msg && <div className="muted" style={{ marginBottom: 8 }}>{msg}</div>}
+      <PageHeader title={t("Настройки")} />
 
-      <div className="settings-layout">
-        <nav className="settings-rail" aria-label={t("Разделы настроек")}>
+      {/* Результат действий — плашкой поверх страницы: карточки далеко друг от друга */}
+      {msg && (
+        <div className="fixed inset-x-4 bottom-24 z-40 lg:inset-x-auto lg:right-8 lg:bottom-8 lg:w-96">
+          <Notice tone={msg.ok ? "success" : "error"} className="shadow-lg" onClose={() => setMsg(null)}>{msg.text}</Notice>
+        </div>
+      )}
+
+      {/* На узком экране оглавления слева нет — вместо него полоса разделов */}
+      <nav aria-label={t("Разделы настроек")} className="-mx-4 mb-6 overflow-x-auto px-4 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
+        <div className="flex w-max gap-2">
+          {SECTION_IDS.map((id) => (
+            <AriaButton
+              key={id}
+              onPress={() => goToSection(id)}
+              className={cx(
+                "cursor-pointer rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap outline-focus-ring ring-1 ring-inset focus-visible:outline-2 focus-visible:outline-offset-2",
+                activeSection === id ? "bg-brand-primary text-brand-secondary ring-utility-brand-200" : "bg-primary text-secondary ring-primary",
+              )}
+            >
+              {SECTION_TITLES[id]}
+            </AriaButton>
+          ))}
+        </div>
+      </nav>
+
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[232px_minmax(0,1fr)]">
+        <nav aria-label={t("Разделы настроек")} className="hidden self-start lg:sticky lg:top-8 lg:flex lg:flex-col lg:gap-6">
           {GROUPS.map((g) => (
-            <div className="rail-group" key={g.title}>
-              <div className="eyebrow rail-group-title">{g.title}</div>
-              {g.ids.map((id) => {
-                const st = SECTION_STATE[id];
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    className={`rail-item${activeSection === id ? " active" : ""}`}
-                    aria-current={activeSection === id ? "true" : undefined}
-                    onClick={() => goToSection(id)}
-                  >
-                    {st && <span className={`rail-dot${st.on ? " on" : ""}`} aria-hidden="true" />}
-                    <span className="rail-text">
-                      <span className="rail-name">{SECTION_TITLES[id]}</span>
-                      {st && <span className="rail-state">{st.text}</span>}
-                    </span>
-                  </button>
-                );
-              })}
+            <div key={g.title}>
+              <p className="m-0 mb-1.5 px-3 text-xs font-medium text-quaternary">{g.title}</p>
+              <div className="flex flex-col gap-0.5">{g.ids.map(railItem)}</div>
             </div>
           ))}
         </nav>
 
-        <div className="settings-sections">
+        <div className="flex min-w-0 flex-col gap-10">
           {GROUPS.map((g) => (
-            <div className="settings-group" key={g.title}>
-              <h3 className="settings-group-title">{g.title}</h3>
-              {g.ids.map((id) => SECTION_NODES[id])}
+            <div key={g.title} className="flex flex-col gap-4">
+              <h2 className="m-0 text-lg font-semibold text-primary">{g.title}</h2>
+              <div className="flex flex-col gap-6">{g.ids.map((id) => SECTION_NODES[id])}</div>
             </div>
           ))}
 
-          <div className="muted settings-version">
-            Filament Tracker · {t("интерфейс")} <span className="mono">{window.__FT_CONFIG__?.version || "dev"}</span>
-            {serverVersion && <> · {t("сервер")} <span className="mono">{serverVersion}</span></>}
+          <p className="m-0 text-sm text-tertiary">
+            Filament Tracker · {t("интерфейс")} <span className="font-mono">{window.__FT_CONFIG__?.version || "dev"}</span>
+            {serverVersion && <> · {t("сервер")} <span className="font-mono">{serverVersion}</span></>}
             {updateInfo?.update_available && (
-              <> · <a className="update-badge" href={updateInfo.release_url} target="_blank" rel="noreferrer">
-                {t("доступна новая версия")} <span className="mono">{updateInfo.latest_version}</span>
-              </a></>
+              <> · <AriaLink href={updateInfo.release_url} target="_blank" rel="noreferrer" className="cursor-pointer rounded-sm font-medium text-brand-secondary outline-focus-ring hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
+                {t("доступна новая версия")} <span className="font-mono">{updateInfo.latest_version}</span>
+              </AriaLink></>
             )}
-          </div>
+          </p>
         </div>
       </div>
     </div>

@@ -1,4 +1,9 @@
 import { useEffect, useState } from "react";
+import { XClose } from "@untitledui/icons";
+import { BadgeWithDot } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { cx } from "@/utils/cx";
 import { api } from "../api/client.js";
 import { t } from "../i18n.js";
 import SpoolPicker from "./SpoolPicker.jsx";
@@ -6,11 +11,19 @@ import { slotLabel } from "../utils/slots.js";
 
 // Вердикты сверки «что видит принтер» ↔ «что привязано в приложении»
 const VERDICT = {
-  match: { icon: "✓", cls: "ok", label: () => t("Совпадает") },
-  color_diff: { icon: "≈", cls: "hint", label: () => t("Материал совпадает, оттенок отличается") },
-  mismatch: { icon: "!", cls: "warn", label: () => t("Не совпадает с катушкой") },
-  unassigned: { icon: "+", cls: "hint", label: () => t("Катушка не привязана") },
-  empty: { icon: "—", cls: "dim", label: () => t("Слот пуст") },
+  match: { icon: "✓", cls: "ok", tone: "success", label: () => t("Совпадает") },
+  color_diff: { icon: "≈", cls: "hint", tone: "gray", label: () => t("Материал совпадает, оттенок отличается") },
+  mismatch: { icon: "!", cls: "warn", tone: "warning", label: () => t("Не совпадает с катушкой") },
+  unassigned: { icon: "+", cls: "hint", tone: "gray", label: () => t("Катушка не привязана") },
+  empty: { icon: "—", cls: "dim", tone: "gray", label: () => t("Слот пуст") },
+};
+
+// Цвет значка вердикта в плитке слота.
+const VERDICT_TEXT = {
+  ok: "text-fg-success-primary",
+  warn: "text-fg-warning-primary",
+  hint: "text-fg-quaternary",
+  dim: "text-fg-quaternary",
 };
 
 // Подпись вердикта. «Слот пуст, а катушка числится» общая фраза «не совпадает»
@@ -24,16 +37,9 @@ function verdictNote(g) {
 
 const Dot = ({ hex, size = 14 }) => (
   <span
-    style={{
-      display: "inline-block",
-      width: size,
-      height: size,
-      borderRadius: "50%",
-      background: hex || "var(--border)",
-      border: "1px solid var(--border)",
-      verticalAlign: "middle",
-      flexShrink: 0,
-    }}
+    aria-hidden="true"
+    className="inline-block shrink-0 rounded-full align-middle ring-1 ring-black/10 ring-inset dark:ring-white/25"
+    style={{ width: size, height: size, background: hex || "var(--color-bg-quaternary)" }}
   />
 );
 
@@ -41,29 +47,32 @@ const Dot = ({ hex, size = 14 }) => (
 export function GateCard({ g }) {
   const v = VERDICT[g.verdict] || VERDICT.empty;
   return (
-    <div className={`gate-card gate-${v.cls}`} title={v.label()}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span className="muted" style={{ fontSize: 12 }}>{t("Слот")} {g.slot_index}</span>
-        <span className={`gate-verdict ${v.cls}`}>{v.icon}</span>
+    <div className="flex flex-col gap-3 rounded-xl bg-primary p-4 ring-1 ring-secondary ring-inset" title={v.label()}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-tertiary">{t("Слот")} {g.slot_index}</span>
+        <BadgeWithDot type="pill-color" size="sm" color={v.tone}>
+          {g.verdict === "match" ? v.label() : g.verdict === "unassigned" ? t("Не привязана") : g.verdict === "empty" ? t("Пуст") : g.verdict === "mismatch" ? t("Не совпадает") : t("Оттенок")}
+        </BadgeWithDot>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-        <Dot hex={g.occupied ? g.color_hex : null} />
-        <div style={{ fontSize: 13, fontWeight: 600 }}>
-          {g.occupied ? (g.material || "—") : t("пусто")}
+      <div className="flex items-center gap-3">
+        <Dot hex={g.occupied ? g.color_hex : null} size={32} />
+        <div className="min-w-0">
+          <p className="text-md font-semibold text-primary">{g.occupied ? (g.material || "—") : t("пусто")}</p>
+          <p className="flex items-center gap-1.5 truncate text-sm text-tertiary">
+            {g.spool ? (
+              <>
+                <Dot hex={g.spool.color_hex} size={10} />
+                <span className="truncate">{g.spool.color_name || g.spool.label || t("Без метки")}</span>
+              </>
+            ) : (
+              <span className="truncate">{v.label()}</span>
+            )}
+          </p>
         </div>
       </div>
-      <div className="muted" style={{ fontSize: 12, marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-        {g.spool ? (
-          <>
-            <Dot hex={g.spool.color_hex} size={10} />
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {g.spool.color_name || g.spool.label || t("Без метки")}
-            </span>
-          </>
-        ) : (
-          <span>{v.label()}</span>
-        )}
-      </div>
+      {g.spool?.current_weight_g != null && (
+        <p className="text-sm font-medium text-secondary tabular-nums">{Math.round(g.spool.current_weight_g)} {t("г")}</p>
+      )}
     </div>
   );
 }
@@ -73,7 +82,7 @@ export function GateCard({ g }) {
 export function GateChips({ gates, selected = null, onSelect }) {
   if (!gates?.length) return null;
   return (
-    <div className="gate-tiles">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
       {gates.map((g) => {
         const v = VERDICT[g.verdict] || VERDICT.empty;
         const isSel = selected === g.gate;
@@ -92,15 +101,20 @@ export function GateChips({ gates, selected = null, onSelect }) {
         return (
           <div
             key={g.gate}
-            className={`gate-tile gate-${v.cls}${onSelect ? " pickable" : ""}${isSel ? " selected" : ""}`}
+            className={cx(
+              "relative flex flex-col items-center gap-2 rounded-xl bg-primary px-2 pt-4 pb-3 text-center ring-inset outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2",
+              isSel ? "ring-2 ring-brand-500" : "ring-1 ring-secondary",
+              g.verdict === "mismatch" && !isSel && "ring-utility-yellow-300",
+              onSelect && "cursor-pointer transition duration-100 ease-linear hover:bg-primary_hover",
+            )}
             title={onSelect ? `${hint} · ${t("нажмите, чтобы привязать или снять катушку")}` : hint}
             {...pick}
           >
-            <span className={`gate-verdict ${v.cls}`}>{v.icon}</span>
-            <div className="gate-tile-swatch" style={{ background: g.occupied ? g.color_hex : "var(--panel-2)" }} />
-            <div className="gate-tile-cap">{g.slot_index}: {g.occupied ? (g.material || "—") : t("пусто")}</div>
+            <span className={cx("absolute top-1.5 right-2 text-sm leading-none font-bold", VERDICT_TEXT[v.cls])} aria-hidden="true">{v.icon}</span>
+            <Dot hex={g.occupied ? g.color_hex : null} size={40} />
+            <p className="text-xs font-semibold text-primary">{g.slot_index}: {g.occupied ? (g.material || "—") : t("пусто")}</p>
             {g.spool?.current_weight_g != null && (
-              <div className="gate-tile-g mono">{Math.round(g.spool.current_weight_g)} {t("г")}</div>
+              <p className="-mt-1 text-xs text-tertiary tabular-nums">{Math.round(g.spool.current_weight_g)} {t("г")}</p>
             )}
           </div>
         );
@@ -190,44 +204,38 @@ export function GateEditor({ printer, gate: g, onChanged, onClose }) {
   const forgotten = g.verdict === "mismatch" && !g.occupied;
 
   return (
-    <div className="gate-editor">
-      <div className="gate-editor-head">
-        <b>{t("Слот")} {g.slot_index}</b>
-        <span className={`gate-editor-note ${v.cls}`}>
-          <span className={`gate-verdict ${v.cls}`}>{v.icon}</span> {verdictNote(g)}
-        </span>
-        <button className="secondary gate-editor-close" onClick={onClose} title={t("Закрыть")} aria-label={t("Закрыть")}>×</button>
+    <div className="mt-4 flex flex-col gap-4 rounded-xl bg-secondary p-4 ring-1 ring-secondary ring-inset">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="text-md font-semibold text-primary">{t("Слот")} {g.slot_index}</p>
+        <BadgeWithDot type="pill-color" size="sm" color={v.tone}>{verdictNote(g)}</BadgeWithDot>
+        <div className="ml-auto">
+          <ButtonUtility size="xs" color="tertiary" icon={XClose} tooltip={t("Закрыть")} onClick={onClose} />
+        </div>
       </div>
 
-      <div className="gate-editor-rows">
-        <span className="muted">{t("Принтер видит")}</span>
-        <span className="gate-editor-val">
+      <dl className="grid grid-cols-[max-content_1fr] items-center gap-x-6 gap-y-2 text-sm">
+        <dt className="text-tertiary">{t("Принтер видит")}</dt>
+        <dd className="m-0 flex items-center gap-2 font-medium text-primary">
           <Dot hex={g.occupied ? g.color_hex : null} size={12} />
           {g.occupied ? (g.material || "—") : t("пусто")}
-        </span>
+        </dd>
 
-        <span className="muted">{t("Привязана")}</span>
-        <span className="gate-editor-val">
+        <dt className="text-tertiary">{t("Привязана")}</dt>
+        <dd className="m-0 flex flex-wrap items-center gap-2 font-medium text-primary">
           {bound ? (
             <>
               <Dot hex={bound.color_hex} size={12} />
-              <span className="gate-editor-spool">
+              <span className="min-w-0 break-words">
                 {[bound.color_name || bound.label || t("Без метки"), bound.material].filter(Boolean).join(" · ")}
                 {grams != null ? ` · ${Math.round(grams)} ${t("г")}` : ""}
               </span>
-              <button
-                className={forgotten ? "" : "secondary"}
-                disabled={busy}
-                onClick={unbind}
-              >
-                {t("Снять")}
-              </button>
+              <Button size="sm" color={forgotten ? "primary" : "secondary"} isDisabled={busy} onClick={unbind}>{t("Снять")}</Button>
             </>
           ) : (
-            <span className="muted">{t("нет")}</span>
+            <span className="font-normal text-tertiary">{t("нет")}</span>
           )}
-        </span>
-      </div>
+        </dd>
+      </dl>
 
       <SpoolPicker
         spools={spools || []}
@@ -239,7 +247,7 @@ export function GateEditor({ printer, gate: g, onChanged, onClose }) {
         placeholder={bound ? t("— заменить катушку —") : t("— привязать катушку —")}
         onSelect={(id) => id !== bound?.id && bind(id)}
       />
-      {err && <div className="error">{err}</div>}
+      {err && <p className="text-sm text-error-primary">{err}</p>}
     </div>
   );
 }

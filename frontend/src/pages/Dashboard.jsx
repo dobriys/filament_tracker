@@ -8,8 +8,16 @@ import { PrinterArt, brandAccent } from "../components/PrinterArt.jsx";
 import EnvSensor, { useEnvSensors } from "../components/EnvSensor.jsx";
 import FeedChangeBanner from "../components/FeedChangeBanner.jsx";
 import { slotLabel } from "../utils/slots.js";
-import Icon from "../components/Icon.jsx";
 import LightToggle from "../components/LightToggle.jsx";
+import { Button as AriaButton } from "react-aria-components";
+import { CheckCircle, Disc01, Droplets02, PauseCircle, PlayCircle, Plus, StopCircle } from "@untitledui/icons";
+import { Badge, BadgeWithDot } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
+import { Toggle } from "@/components/base/toggle/toggle";
+import { cx } from "@/utils/cx";
+import { Card, CardHeader, MetricCard, PageHeader, SpoolSwatch } from "../components/ft/ui.jsx";
+import { Notice, Stat, StateBadge, ZoneTitle } from "../components/ft/printer.jsx";
 
 const MAT_COLORS = ["#2e6be6", "#3d4657", "#17a34a", "#f6a723", "#8a5fbf", "#e0526e", "#17a2a6", "#9aa1ab"];
 
@@ -38,8 +46,8 @@ function BarChart({ data, materials, colorFor }) {
           const y = padT + ch * (1 - tk);
           return (
             <g key={i}>
-              <line x1={padL} y1={y} x2={W} y2={y} stroke="var(--border)" strokeWidth="1" strokeDasharray="3 4" />
-              <text x={padL - 6} y={y + 3} textAnchor="end" fontSize="9" fill="var(--muted)">{Math.round(niceMax * tk)}</text>
+              <line x1={padL} y1={y} x2={W} y2={y} stroke="var(--color-border-secondary)" strokeWidth="1" strokeDasharray="3 4" />
+              <text x={padL - 6} y={y + 3} textAnchor="end" fontSize="9" fill="var(--color-text-quaternary)">{Math.round(niceMax * tk)}</text>
             </g>
           );
         })}
@@ -70,15 +78,17 @@ function BarChart({ data, materials, colorFor }) {
                   );
                 })}
               </g>
-              <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--muted)">{t(d.label)}</text>
+              <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--color-text-quaternary)">{t(d.label)}</text>
             </g>
           );
         })}
       </svg>
       {materials.length > 0 && (
-        <div className="bar-legend">
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-tertiary">
           {materials.map((m) => (
-            <span key={m} className="bar-legend-item"><i style={{ background: colorFor(m) }} />{m}</span>
+            <span key={m} className="inline-flex items-center gap-1.5">
+              <i className="size-2 rounded-full" style={{ background: colorFor(m) }} />{m}
+            </span>
           ))}
         </div>
       )}
@@ -91,7 +101,7 @@ function Donut({ data, colorFor }) {
   const r = 55, c = 2 * Math.PI * r, cx = 80, cy = 80;
   let offset = 0;
   return (
-    <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+    <div className="flex flex-wrap items-center gap-6">
       <svg viewBox="0 0 160 160" width="128" height="128">
         <g transform="rotate(-90 80 80)">
           {data.map((d, i) => {
@@ -106,15 +116,15 @@ function Donut({ data, colorFor }) {
             return el;
           })}
         </g>
-        <text x="80" y="76" textAnchor="middle" fontSize="13" fill="var(--muted)">{t("всего")}</text>
-        <text x="80" y="94" textAnchor="middle" fontSize="16" fontWeight="600" fill="var(--text)">{(total / 1000).toFixed(1)}{t("кг")}</text>
+        <text x="80" y="76" textAnchor="middle" fontSize="13" fill="var(--color-text-quaternary)">{t("всего")}</text>
+        <text x="80" y="94" textAnchor="middle" fontSize="16" fontWeight="600" fill="var(--color-text-primary)">{(total / 1000).toFixed(1)}{t("кг")}</text>
       </svg>
-      <div style={{ fontSize: 13 }}>
+      <div className="flex flex-col gap-1.5 text-sm">
         {data.map((d, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-            <span style={{ width: 9, height: 9, borderRadius: 3, background: colorFor(d.material) }} />
-            <span style={{ minWidth: 60 }}>{d.material}</span>
-            <span className="muted">{Math.round((d.grams / total) * 100)}%</span>
+          <div key={i} className="flex items-center gap-2">
+            <span className="size-2 rounded-full" style={{ background: colorFor(d.material) }} />
+            <span className="min-w-16 text-secondary">{d.material}</span>
+            <span className="text-tertiary tabular-nums">{Math.round((d.grams / total) * 100)}%</span>
           </div>
         ))}
       </div>
@@ -208,17 +218,6 @@ function fmtDryerRemaining(sec) {
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-function Temp({ label, t, target }) {
-  return (
-    <div>
-      <div className="muted" style={{ fontSize: 12 }}>{label}</div>
-      <div style={{ fontSize: 15, fontWeight: 600 }}>
-        {t != null ? Math.round(t) + "°" : "—"}
-        {target != null && target > 0 && <span className="muted" style={{ fontWeight: 400 }}> / {Math.round(target)}°</span>}
-      </div>
-    </div>
-  );
-}
 
 // Сколько ждём, пока принтер подтвердит включение/выключение сушки.
 const DRYER_CONFIRM_MS = 30000;
@@ -292,75 +291,50 @@ function DryerControls({ printer, dryer, onChanged, row = false }) {
   const remainingLabel = remainingSec != null ? fmtDryerRemaining(remainingSec) : null;
   const durationLabel = dryer?.duration_min > 0 ? fmtDryerRemaining(dryer.duration_min * 60) : null;
 
+  const stateColor = pending ? "gray" : drying ? "brand" : dryer?.status === "heater_err" ? "error" : "gray";
+  const stateText =
+    pending === "start" ? t("включаем…")
+    : pending === "stop" ? t("выключаем…")
+    : drying ? t("Идёт сушка")
+    : dryer?.status === "heater_err" ? t("ошибка нагревателя")
+    : t("выключена");
+
   return (
-    <div className={`dryer-control${row ? " dryer-row-control" : ""}`}>
-      <div className="dryer-head">
+    <div className={cx("flex gap-5", row ? "flex-col lg:flex-row lg:flex-wrap lg:items-end" : "flex-col")}>
+      <div className="flex items-start justify-between gap-6 lg:min-w-64">
         <div>
-          <div className="dryer-title">{t("Сушка филамента")}</div>
-          <div className={`dryer-state ${drying ? "on" : ""} ${pending ? "pending" : ""} ${dryer?.status === "heater_err" ? "error" : ""}`}>
-            <span />
-            {pending === "start" ? t("включаем…")
-              : pending === "stop" ? t("выключаем…")
-              : drying ? t("Идёт сушка")
-              : dryer?.status === "heater_err" ? t("ошибка нагревателя")
-              : t("выключена")}
+          <p className="text-md font-semibold text-primary">{t("Сушка филамента")}</p>
+          <div className="mt-1">
+            <BadgeWithDot type="pill-color" size="sm" color={stateColor}>{stateText}</BadgeWithDot>
           </div>
         </div>
-        <button
-          type="button"
-          className={`apple-switch ${switchOn ? "on" : ""} ${pending ? "pending" : ""}`}
-          role="switch"
-          aria-checked={switchOn}
-          aria-busy={busy}
+        <Toggle
+          size="md"
           aria-label={drying ? t("Выключить") : t("Включить сушку")}
-          title={drying ? t("Выключить") : t("Включить сушку")}
-          disabled={busy}
-          onClick={() => send(drying ? "stop" : "start")}
-        >
-          <span />
-        </button>
+          isSelected={switchOn}
+          isDisabled={busy}
+          onChange={() => send(drying ? "stop" : "start")}
+        />
       </div>
 
       {(drying || dryer?.humidity > 0) && (
-        <div className="dryer-live-panel">
+        <div className="flex flex-wrap gap-2 lg:flex-1">
           {drying && (
             <>
-              <div className="dryer-live-metric">
-                <span>{t("Температура")}</span>
-                <b>{dryer.target_temp}°C</b>
-              </div>
-              {durationLabel && (
-                <div className="dryer-live-metric">
-                  <span>{t("Длительность")}</span>
-                  <b>{durationLabel}</b>
-                </div>
-              )}
-              <div className="dryer-live-metric">
-                <span>{t("Осталось")}</span>
-                <b>{remainingLabel || "—"}</b>
-              </div>
+              <Stat label={t("Температура")} className="min-w-24">{dryer.target_temp}°C</Stat>
+              {durationLabel && <Stat label={t("Длительность")} className="min-w-24">{durationLabel}</Stat>}
+              <Stat label={t("Осталось")} className="min-w-24">{remainingLabel || "—"}</Stat>
             </>
           )}
-          {dryer?.humidity > 0 && (
-            <div className="dryer-live-metric">
-              <span>{t("Влажность")}</span>
-              <b>{dryer.humidity}%</b>
-            </div>
-          )}
+          {dryer?.humidity > 0 && <Stat label={t("Влажность")} className="min-w-24">{dryer.humidity}%</Stat>}
         </div>
       )}
 
-      <div className="dryer-fields">
-        <div>
-          <label>{t("Температура, °C")}</label>
-          <input type="number" min="35" max="70" value={temp} onChange={(e) => setTemp(e.target.value)} disabled={drying || busy} />
-        </div>
-        <div>
-          <label>{t("Время, ч")}</label>
-          <input type="number" min="0.5" max="24" step="0.5" value={hours} onChange={(e) => setHours(e.target.value)} disabled={drying || busy} />
-        </div>
+      <div className="flex gap-3">
+        <Input size="sm" type="number" label={t("Температура, °C")} value={String(temp)} onChange={setTemp} isDisabled={drying || busy} className="w-32" />
+        <Input size="sm" type="number" label={t("Время, ч")} value={String(hours)} onChange={setHours} isDisabled={drying || busy} className="w-28" />
       </div>
-      {err && <div className="error">{err}</div>}
+      {err && <Notice tone="error" className="w-full">{err}</Notice>}
     </div>
   );
 }
@@ -576,207 +550,202 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
   const selGate = gates.find((g) => g.gate === gateSel);
   const accent = brandAccent(printer.brand);
 
+  const zoneTitle = isPreparing ? t("Подготовка к печати") : isPrinting ? t("Печатается") : isPaused ? t("Печать на паузе") : t("Последняя печать");
+  const tempText = (v, target) => `${v != null ? Math.round(v) + "°" : "—"}${target > 0 ? ` / ${Math.round(target)}°` : ""}`;
+  const hasZone2 = hasMmu || showDirect || sensors.length > 0;
+  const consumeTitle =
+    job?.consumed ? t("По этой печати материал уже списан")
+    : canConsume && jobInterrupted ? t("Печать прервана — списать фактически израсходованное")
+    : canConsume ? t("Списать материал по этой печати")
+    : t("Доступно после завершения печати");
+
   return (
     <>
-    <div className="card moonraker-card" style={{ "--brand": accent }}>
-      <div className="printer-head">
-        <PrinterArt caps={caps} brand={printer.brand} model={printer.model} size={62} />
-        <div className="printer-head-main">
-          <h3>{printer.name}</h3>
-        </div>
-        <div className="printer-head-status">
-          {!offline && (
-            <LightToggle printerId={printer.id} light={light} onChanged={loadOverview} onError={setErr} />
-          )}
-          {job?.consumed && <span className="badge added">{t("Списано")}</span>}
-          {offline ? <span className="badge used">{t("не в сети")}</span> : status && <span className={`act-tag ${stTag}`}>{stLabel}</span>}
-        </div>
-      </div>
-
-      {offline ? (
-        <div className="muted">{t("Не удалось связаться с принтером.")}</div>
-      ) : (
-        <>
-          {showError && fmtPrinterError(errMsg) && (
-            <div className="printer-error" title={errMsg}>
-              <div className="printer-error-main">
-                <span>
-                  <Icon name="alert" size={14} /> {knownErr ? knownErr.label() : fmtPrinterError(errMsg)}
-                  {knownErr && <b className="printer-error-code"> · {printer.brand || "Anycubic"} {knownErr.code}</b>}
-                </span>
-                <span className="printer-error-actions">
-                  {knownErr ? (
-                    <a href={anycubicWikiUrl(knownErr.code)} target="_blank" rel="noopener noreferrer">{t("решение ↗")}</a>
-                  ) : (
-                    <a href={errorSearchUrl(errMsg, printer.brand)} target="_blank" rel="noopener noreferrer">{t("искать в Google ↗")}</a>
-                  )}
-                  <button className="printer-error-reset" onClick={resetError} disabled={busy} title={t("Сбросить ошибку на принтере")}>{t("Сбросить")}</button>
-                  <button className="printer-error-close" onClick={dismissError} title={t("Скрыть")} aria-label={t("Скрыть")}>×</button>
-                </span>
-              </div>
-              {knownErr && <div className="printer-error-raw">{fmtPrinterError(errMsg)}</div>}
-            </div>
-          )}
-          {feedChange && (
-            <FeedChangeBanner
-              printer={printer}
-              change={feedChange}
-              onConfirmed={loadOverview}
-            />
-          )}
-          <div className="printer-grid">
-            {/* Блок «Печать» */}
-            <div className="printer-zone">
-              <div className="zone-title">{isPreparing ? t("Подготовка к печати") : isPrinting ? t("Печатается") : isPaused ? t("Печать на паузе") : t("Последняя печать")}</div>
-              <div className="zone-file-row">
-                {thumb && <img className="zone-thumb" src={thumb} alt="" title={file} />}
-                <div className="zone-file-box" title={file}>{file || t("нет данных")}</div>
-              </div>
-              {stuckPaused && (
-                <div className="printer-hint">
-                  <Icon name="alert" size={14} />
-                  {t("Принтер держит паузу, но задания за ней нет: продолжать и отменять нечего — поможет «Сбросить».")}
-                </div>
-              )}
-              {isPreparing ? (
-                <>
-                  <div style={{ margin: "10px 0 6px", fontSize: 15 }}>
-                    {t("Калибровка стола и прогрев — печать ещё не началась")}
-                  </div>
-                  <div className="progress"><div className="progress-indeterminate" style={{ background: "var(--accent)" }} /></div>
-                  <div className="zone-metrics">
-                    <div><span className="muted">{t("Слоёв в задании")}</span><b className="mono">{totalLayer || "—"}</b></div>
-                    <div><span className="muted">{t("Сопло")}</span><b className="mono">{status?.nozzle_temp != null ? Math.round(status.nozzle_temp) + "°" : "—"}{status?.nozzle_target > 0 ? ` / ${Math.round(status.nozzle_target)}°` : ""}</b></div>
-                    <div><span className="muted">{t("Стол")}</span><b className="mono">{status?.bed_temp != null ? Math.round(status.bed_temp) + "°" : "—"}{status?.bed_target > 0 ? ` / ${Math.round(status.bed_target)}°` : ""}</b></div>
-                  </div>
-                </>
-              ) : isPrinting || isPaused ? (
-                <>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "10px 0 6px" }}>
-                    <span className="mono" style={{ fontSize: 26, fontWeight: 600 }}>{pct != null ? pct + "%" : "—"}</span>
-                    <span className="muted" style={{ fontSize: 13 }}>
-                      {isPaused ? t("печать приостановлена") : `${t("осталось ~")}${remaining != null ? fmtDur(remaining) : t("считаем…")}`}
-                    </span>
-                  </div>
-                  <div className="progress"><div style={{ width: `${pct || 0}%`, background: "var(--accent)" }} /></div>
-                  <div className="zone-metrics">
-                    <div><span className="muted">{t("Прошло")}</span><b className="mono">{fmtDur(elapsed)}</b></div>
-                    <div><span className="muted">{t("Слой")}</span><b className="mono">{layer > 0 && totalLayer > 0 ? `${layer} / ${totalLayer}` : "—"}</b></div>
-                    <div><span className="muted">{t("Сопло")}</span><b className="mono">{status?.nozzle_temp != null ? Math.round(status.nozzle_temp) + "°" : "—"}{status?.nozzle_target > 0 ? ` / ${Math.round(status.nozzle_target)}°` : ""}</b></div>
-                    <div><span className="muted">{t("Стол")}</span><b className="mono">{status?.bed_temp != null ? Math.round(status.bed_temp) + "°" : "—"}{status?.bed_target > 0 ? ` / ${Math.round(status.bed_target)}°` : ""}</b></div>
-                  </div>
-                </>
-              ) : (
-                <div className="zone-metrics" style={{ marginTop: 10 }}>
-                  <div><span className="muted">{t("Расход")}</span><b className="mono">{job?.filament_total_g != null ? `${Number(job.filament_total_g).toFixed(0)} ${t("г")}` : "—"}</b></div>
-                  <div><span className="muted">{t("Цена")}</span><b className="mono">{job?.cost != null ? fmtMoney(job.cost, job.cost_currency) : "—"}</b></div>
-                  <div><span className="muted">{t("Статус")}</span><b>{job?.consumed ? t("списано") : job?.status === "completed" ? t("ждёт списания") : job?.status || "—"}</b></div>
-                </div>
-              )}
-              {err && <div className="error">{err}</div>}
-              <div className="printer-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: "auto", paddingTop: 14 }}>
-                {/* Управление печатью — только пока есть что паузить или отменять. */}
-                {(isPrinting || isPreparing || isPaused) && (
-                  <>
-                    <button
-                      className="secondary"
-                      onClick={() => printControl(isPaused ? "resume" : "pause")}
-                      disabled={busy}
-                      title={isPaused ? t("Продолжить печать с места остановки") : t("Приостановить печать")}
-                    >
-                      <Icon name={isPaused ? "play" : "pause"} size={14} /> {isPaused ? t("Продолжить") : t("На паузу")}
-                    </button>
-                    <button
-                      className="danger secondary"
-                      onClick={() => printControl("cancel")}
-                      disabled={busy}
-                      title={t("Отменить текущую печать")}
-                    >
-                      <Icon name="stop" size={14} /> {t("Остановить")}
-                    </button>
-                    {stuckPaused && (
-                      <button
-                        className="secondary"
-                        onClick={resetStuck}
-                        disabled={busy}
-                        title={t("Вернуть принтер в «Ожидание» (SDCARD_RESET_FILE)")}
-                      >
-                        {t("Сбросить")}
-                      </button>
-                    )}
-                  </>
-                )}
-                <button
-                  onClick={consume}
-                  disabled={!canConsume || busy}
-                  title={
-                    job?.consumed ? t("По этой печати материал уже списан")
-                    : canConsume && jobInterrupted ? t("Печать прервана — списать фактически израсходованное")
-                    : canConsume ? t("Списать материал по этой печати")
-                    : t("Доступно после завершения печати")
-                  }
-                >
-                  {job?.consumed ? t("Списано ✓") : canConsume && jobInterrupted ? t("Списать по факту") : t("Списать")}
-                </button>
-                <button className="secondary" onClick={() => navigate(`/printers?moonraker=${printer.id}`)}>{t("Завершённые задания →")}</button>
-              </div>
-            </div>
-
-            {/* Блок «Слоты» — только если у принтера мультиподача. Показания
-                датчика идут прямо под слотами: он лежит внутри самого ACE, так
-                что это микроклимат тех катушек, что видно в слотах выше. */}
-            {(hasMmu || showDirect || sensors.length > 0) && (
-              <div className="printer-zone">
-                {hasMmu && (
-                  <>
-                    <div className="zone-title">{mmuTitle}</div>
-                    <GateChips
-                      gates={gates}
-                      selected={gateSel}
-                      onSelect={(n) => setGateSel((cur) => (cur === n ? null : n))}
-                    />
-                    {selGate && (
-                      <GateEditor
-                        printer={printer}
-                        gate={selGate}
-                        onChanged={loadOverview}
-                        onClose={() => setGateSel(null)}
-                      />
-                    )}
-                  </>
-                )}
-                {showDirect && (
-                  <>
-                    <div className="zone-title">
-                      {directSlot?.slot_index === 0 ? t("Внешняя катушка") : t("Прямая подача")}
-                      {caps.mmu_off && (
-                        <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>
-                          {" · "}{caps.mmu_name || t("мультиподача")} {t("отключена")}
-                        </span>
-                      )}
-                    </div>
-                    <DirectFeed slot={directSlot} printerId={printer.id} navigate={navigate} />
-                  </>
-                )}
-                {sensors.length > 0 && (
-                  <div className={`zone-env${hasMmu || showDirect ? "" : " zone-env--bare"}`}>
-                    {!hasMmu && !showDirect && <div className="zone-title">{t("Микроклимат")}</div>}
-                    {sensors.map((s) => (
-                      <EnvSensor key={s.id} sensor={s} threshold={humidityMax} spread showName={sensors.length > 1} />
-                    ))}
-                  </div>
-                )}
-              </div>
+      <Card className="overflow-hidden">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-secondary px-5 py-4">
+          <PrinterArt caps={caps} brand={printer.brand} model={printer.model} size={48} />
+          <div className="min-w-0 flex-1">
+            <h3 className="m-0 truncate text-md font-semibold text-primary">{printer.name}</h3>
+            {(printer.brand || printer.model) && (
+              <p className="truncate text-sm text-tertiary">{[printer.brand, printer.model].filter(Boolean).join(" ")}</p>
             )}
           </div>
-        </>
+          <div className="flex flex-wrap items-center gap-3">
+            {!offline && <LightToggle printerId={printer.id} light={light} onChanged={loadOverview} onError={setErr} />}
+            {job?.consumed && <Badge size="sm" color="success" type="pill-color">{t("Списано")}</Badge>}
+            {offline
+              ? <BadgeWithDot type="pill-color" size="sm" color="error">{t("не в сети")}</BadgeWithDot>
+              : status && <StateBadge tag={stTag}>{stLabel}</StateBadge>}
+          </div>
+        </div>
+
+        <div className="p-5">
+          {offline ? (
+            <p className="text-sm text-tertiary">{t("Не удалось связаться с принтером.")}</p>
+          ) : (
+            <div className="flex flex-col gap-5">
+              {showError && fmtPrinterError(errMsg) && (
+                <Notice
+                  tone="error"
+                  title={knownErr ? knownErr.label() : fmtPrinterError(errMsg)}
+                  onClose={dismissError}
+                  actions={
+                    <>
+                      {knownErr ? (
+                        <a className="underline" href={anycubicWikiUrl(knownErr.code)} target="_blank" rel="noopener noreferrer">{t("решение ↗")}</a>
+                      ) : (
+                        <a className="underline" href={errorSearchUrl(errMsg, printer.brand)} target="_blank" rel="noopener noreferrer">{t("искать в Google ↗")}</a>
+                      )}
+                      <AriaButton className="cursor-pointer bg-transparent underline" onPress={resetError} isDisabled={busy} aria-label={t("Сбросить ошибку на принтере")}>{t("Сбросить")}</AriaButton>
+                    </>
+                  }
+                >
+                  {knownErr ? `${printer.brand || "Anycubic"} ${knownErr.code} · ${fmtPrinterError(errMsg)}` : null}
+                </Notice>
+              )}
+              {feedChange && (
+                <FeedChangeBanner printer={printer} change={feedChange} onConfirmed={loadOverview} />
+              )}
+
+              <div className={cx("grid gap-6", hasZone2 && "lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]")}>
+                {/* Блок «Печать» */}
+                <div className="flex min-w-0 flex-col">
+                  <ZoneTitle>{zoneTitle}</ZoneTitle>
+                  <div className="flex items-center gap-3">
+                    {thumb && <img className="h-14 w-[4.5rem] shrink-0 rounded-lg object-cover ring-1 ring-secondary ring-inset" src={thumb} alt="" title={file} />}
+                    <div className="min-w-0 flex-1 truncate rounded-lg bg-secondary px-3 py-2 font-mono text-sm text-secondary" title={file}>
+                      {file || t("нет данных")}
+                    </div>
+                  </div>
+
+                  {stuckPaused && (
+                    <Notice tone="warning" className="mt-3">
+                      {t("Принтер держит паузу, но задания за ней нет: продолжать и отменять нечего — поможет «Сбросить».")}
+                    </Notice>
+                  )}
+
+                  {isPreparing ? (
+                    <>
+                      <p className="mt-4 mb-2 text-sm text-secondary">{t("Калибровка стола и прогрев — печать ещё не началась")}</p>
+                      {/* Прогресс неизвестен — бегунок вместо шкалы. */}
+                      <div className="h-2 overflow-hidden rounded-full bg-quaternary" role="progressbar" aria-label={t("Калибровка стола и прогрев — печать ещё не началась")}>
+                        <div className="h-full w-[35%] animate-progress-slide rounded-full bg-brand-solid" />
+                      </div>
+                      <div className="mt-4 grid grid-cols-3 gap-3">
+                        <Stat label={t("Слоёв в задании")}>{totalLayer || "—"}</Stat>
+                        <Stat label={t("Сопло")}>{tempText(status?.nozzle_temp, status?.nozzle_target)}</Stat>
+                        <Stat label={t("Стол")}>{tempText(status?.bed_temp, status?.bed_target)}</Stat>
+                      </div>
+                    </>
+                  ) : isPrinting || isPaused ? (
+                    <>
+                      <div className="mt-4 mb-2 flex items-baseline justify-between gap-3">
+                        <span className="text-display-xs font-semibold tracking-tight text-primary tabular-nums">{pct != null ? pct + "%" : "—"}</span>
+                        <span className="text-sm text-tertiary">
+                          {isPaused ? t("печать приостановлена") : `${t("осталось ~")}${remaining != null ? fmtDur(remaining) : t("считаем…")}`}
+                        </span>
+                      </div>
+                      <div className="h-2.5 overflow-hidden rounded-full bg-quaternary">
+                        <div className="h-full rounded-full bg-brand-solid transition-[width] duration-500" style={{ width: `${pct || 0}%` }} />
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <Stat label={t("Прошло")}>{fmtDur(elapsed)}</Stat>
+                        <Stat label={t("Слой")}>{layer > 0 && totalLayer > 0 ? `${layer} / ${totalLayer}` : "—"}</Stat>
+                        <Stat label={t("Сопло")}>{tempText(status?.nozzle_temp, status?.nozzle_target)}</Stat>
+                        <Stat label={t("Стол")}>{tempText(status?.bed_temp, status?.bed_target)}</Stat>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="mt-4 grid grid-cols-3 gap-3">
+                      <Stat label={t("Расход")}>{job?.filament_total_g != null ? `${Number(job.filament_total_g).toFixed(0)} ${t("г")}` : "—"}</Stat>
+                      <Stat label={t("Цена")}>{job?.cost != null ? fmtMoney(job.cost, job.cost_currency) : "—"}</Stat>
+                      <Stat label={t("Статус")}>{job?.consumed ? t("списано") : job?.status === "completed" ? t("ждёт списания") : job?.status || "—"}</Stat>
+                    </div>
+                  )}
+
+                  {err && <Notice tone="error" className="mt-3">{err}</Notice>}
+
+                  <div className="mt-auto flex flex-wrap items-center gap-2 pt-5">
+                    {/* Управление печатью — только пока есть что паузить или отменять. */}
+                    {(isPrinting || isPreparing || isPaused) && (
+                      <>
+                        <Button
+                          size="sm"
+                          color="secondary"
+                          iconLeading={isPaused ? PlayCircle : PauseCircle}
+                          isDisabled={busy}
+                          onClick={() => printControl(isPaused ? "resume" : "pause")}
+                        >
+                          {isPaused ? t("Продолжить") : t("На паузу")}
+                        </Button>
+                        <Button size="sm" color="secondary-destructive" iconLeading={StopCircle} isDisabled={busy} onClick={() => printControl("cancel")}>
+                          {t("Остановить")}
+                        </Button>
+                        {stuckPaused && (
+                          <Button size="sm" color="secondary" isDisabled={busy} onClick={resetStuck}>{t("Сбросить")}</Button>
+                        )}
+                      </>
+                    )}
+                    <span title={consumeTitle}>
+                      <Button size="sm" color="primary" isDisabled={!canConsume || busy} onClick={consume}>
+                        {job?.consumed ? t("Списано ✓") : canConsume && jobInterrupted ? t("Списать по факту") : t("Списать")}
+                      </Button>
+                    </span>
+                    <Button size="sm" color="link-color" onClick={() => navigate(`/printers?moonraker=${printer.id}`)}>{t("Завершённые задания →")}</Button>
+                  </div>
+                </div>
+
+                {/* Блок «Слоты» — только если у принтера мультиподача. Показания
+                    датчика идут прямо под слотами: он лежит внутри самого ACE, так
+                    что это микроклимат тех катушек, что видно в слотах выше. */}
+                {hasZone2 && (
+                  <div className="min-w-0 lg:border-l lg:border-secondary lg:pl-6">
+                    {hasMmu && (
+                      <>
+                        <ZoneTitle>{mmuTitle}</ZoneTitle>
+                        <GateChips
+                          gates={gates}
+                          selected={gateSel}
+                          onSelect={(n) => setGateSel((cur) => (cur === n ? null : n))}
+                        />
+                        {selGate && (
+                          <GateEditor printer={printer} gate={selGate} onChanged={loadOverview} onClose={() => setGateSel(null)} />
+                        )}
+                      </>
+                    )}
+                    {showDirect && (
+                      <>
+                        <ZoneTitle>
+                          {directSlot?.slot_index === 0 ? t("Внешняя катушка") : t("Прямая подача")}
+                          {caps.mmu_off && (
+                            <span className="font-normal normal-case"> · {caps.mmu_name || t("мультиподача")} {t("отключена")}</span>
+                          )}
+                        </ZoneTitle>
+                        <DirectFeed slot={directSlot} printerId={printer.id} navigate={navigate} />
+                      </>
+                    )}
+                    {sensors.length > 0 && (
+                      <div className={cx((hasMmu || showDirect) && "mt-5 border-t border-secondary pt-4")}>
+                        {!hasMmu && !showDirect && <ZoneTitle>{t("Микроклимат")}</ZoneTitle>}
+                        <div className="flex flex-col gap-2">
+                          {sensors.map((s) => (
+                            <EnvSensor key={s.id} sensor={s} threshold={humidityMax} spread showName={sensors.length > 1} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+      {!offline && dryer && (
+        <Card className="p-5">
+          <DryerControls printer={printer} dryer={dryer} onChanged={loadOverview} row />
+        </Card>
       )}
-    </div>
-    {!offline && dryer && (
-      <div className="card dryer-row">
-        <DryerControls printer={printer} dryer={dryer} onChanged={loadOverview} row />
-      </div>
-    )}
     </>
   );
 }
@@ -787,31 +756,31 @@ function MoonrakerCard({ printer, navigate, onTotals, sensors = [], humidityMax 
 function DirectFeed({ slot, printerId, navigate }) {
   const spool = slot?.spool;
   const grams = spool?.current_weight_g;
+  const go = () => navigate(spool ? `/spools/${spool.id}` : `/printers?slots=${printerId}`);
   return (
     <div
-      className={`direct-feed${spool ? "" : " direct-feed--empty"}`}
+      className={cx(
+        "flex cursor-pointer items-center gap-3 rounded-xl p-3 outline-focus-ring transition duration-100 ease-linear hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2",
+        spool ? "ring-1 ring-secondary ring-inset" : "border border-dashed border-primary",
+      )}
       role="button"
       tabIndex={0}
       title={spool ? t("Открыть катушку") : t("Назначить катушку на слот")}
-      onClick={() => navigate(spool ? `/spools/${spool.id}` : `/printers?slots=${printerId}`)}
-      onKeyDown={(e) => e.key === "Enter" && navigate(spool ? `/spools/${spool.id}` : `/printers?slots=${printerId}`)}
+      onClick={go}
+      onKeyDown={(e) => e.key === "Enter" && go()}
     >
-      <div
-        className="direct-feed-swatch"
-        style={{ background: spool?.color_hex || "var(--panel-2)" }}
-      />
-      <div className="direct-feed-body">
-        <div className="direct-feed-title">
+      <SpoolSwatch color={spool?.color_hex} size="md" className="rounded-full" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-primary">
           {spool ? (spool.material || t("Материал не указан")) : t("Катушка не назначена")}
-        </div>
-        <div className="muted direct-feed-sub">
+        </p>
+        <p className="truncate text-sm text-tertiary">
           {spool
-            ? [spool.color_name || spool.label, grams != null ? `${Math.round(grams)} ${t("г")}` : null]
-                .filter(Boolean).join(" · ")
+            ? [spool.color_name || spool.label, grams != null ? `${Math.round(grams)} ${t("г")}` : null].filter(Boolean).join(" · ")
             : `${slotLabel(slot) || t("Внешняя катушка")} — ${t("привязать в разделе «Принтеры»")}`}
-        </div>
+        </p>
       </div>
-      <Icon name="spool" size={18} />
+      <Disc01 className="size-5 shrink-0 text-fg-quaternary" aria-hidden="true" />
     </div>
   );
 }
@@ -821,47 +790,28 @@ function DirectFeed({ slot, printerId, navigate }) {
 function PrinterLifetime({ totals, name }) {
   if (!totals) return null;
   return (
-    <div className="printer-lifetime">
-      <div className="printer-lifetime-head">
-        <div>
-          <div className="printer-lifetime-title">{t("Ресурс принтера")}</div>
-          <div className="printer-lifetime-subtitle">{name || t("Статистика за всё время")}</div>
-        </div>
+    <section>
+      <div className="mb-3">
+        <h3 className="m-0 text-md font-semibold text-primary">{t("Ресурс принтера")}</h3>
+        <p className="text-sm text-tertiary">{name || t("Статистика за всё время")}</p>
       </div>
-      <div className="printer-lifetime-body">
-        <div className="printer-lifetime-hero">
-          <span>{t("Всего печатей")}</span>
-          <b>{totals.total_jobs}</b>
-          <em>{t("завершённых заданий")}</em>
-        </div>
-        <div className="printer-lifetime-grid">
-          <div className="printer-lifetime-stat">
-            <span>{t("Время печати")}</span>
-            <b>{Math.round((totals.total_print_time_sec || 0) / 3600)}</b>
-            <em>{t("ч печати")}</em>
-          </div>
-          <div className="printer-lifetime-stat">
-            <span>{t("Филамент")}</span>
-            <b>{((totals.total_filament_mm || 0) / 1e6).toFixed(2)}</b>
-            <em>{t("км филамента")}</em>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <MetricCard label={t("Всего печатей")} value={totals.total_jobs} hint={t("завершённых заданий")} />
+        <MetricCard label={t("Время печати")} value={Math.round((totals.total_print_time_sec || 0) / 3600)} hint={t("ч печати")} />
+        <MetricCard label={t("Филамент")} value={((totals.total_filament_mm || 0) / 1e6).toFixed(2)} hint={t("км филамента")} />
       </div>
-    </div>
+    </section>
   );
 }
 
-function Kpi({ label, value, sub }) {
-  return (
-    <div className="card kpi">
-      <div className="kpi-top">
-        <div className="kpi-label">{label}</div>
-      </div>
-      <div className="kpi-value">{value}</div>
-      <div className="kpi-sub">{sub}</div>
-    </div>
-  );
-}
+const ACT_TYPE = () => ({
+  used: ["gray", t("Расход")],
+  added: ["success", t("Добавлено")],
+  updated: ["gray", t("Изменено")],
+  moved: ["brand", t("Перемещено")],
+});
+
+const linkCls = "text-sm font-semibold text-brand-secondary hover:text-brand-secondary_hover";
 
 export default function Dashboard() {
   const [d, setD] = useState(null);
@@ -895,24 +845,22 @@ export default function Dashboard() {
   const barMaterials = matOrder.filter((m) => matTotals[m] > 0);
 
   return (
-    <div>
-      <h2 style={{ marginBottom: 2 }}>{t("Панель")}</h2>
-      <div className="muted" style={{ marginBottom: 16 }}>{t("Обзор запасов филамента и недавней активности.")}</div>
+    <div className="flex flex-col gap-6">
+      <PageHeader className="mb-0 lg:mb-0" title={t("Панель")} subtitle={t("Обзор запасов филамента и недавней активности.")} />
 
-      <div className="dash-kpis">
-        <Kpi label={t("Всего катушек")} value={d.total_spools} sub={`+${d.added_this_month} ${t("в этом месяце")}`} />
-        <Kpi label={t("Заканчиваются")} value={d.low_stock_count} sub={t("Требуют внимания")} />
-        <Kpi label={t("Остаток филамента")} value={`${(d.est_filament_left_g / 1000).toFixed(1)} ${t("кг")}`} sub={`~${d.est_print_hours} ${t("ч печати")}`} />
-        <Kpi
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label={t("Всего катушек")} value={d.total_spools} hint={`+${d.added_this_month} ${t("в этом месяце")}`} />
+        <MetricCard label={t("Заканчиваются")} value={d.low_stock_count} hint={t("Требуют внимания")} tone={d.low_stock_count > 0 ? "warning" : undefined} />
+        <MetricCard label={t("Остаток филамента")} value={`${(d.est_filament_left_g / 1000).toFixed(1)} ${t("кг")}`} hint={`~${d.est_print_hours} ${t("ч печати")}`} />
+        <MetricCard
           label={t("Печатей (30 дн)")}
           value={d.recent_prints_30d}
-          sub={`${(d.consumed_30d_g / 1000).toFixed(1)} ${t("кг израсходовано")}${d.consumed_30d_cost != null ? ` · ${fmtMoney(d.consumed_30d_cost, d.cost_currency)}` : ""}${d.failed_30d ? ` · ${t("брак")} ${d.failed_30d}` : ""}`}
-          bg="var(--kpi4-bg)"
+          hint={`${(d.consumed_30d_g / 1000).toFixed(1)} ${t("кг израсходовано")}${d.consumed_30d_cost != null ? ` · ${fmtMoney(d.consumed_30d_cost, d.cost_currency)}` : ""}${d.failed_30d ? ` · ${t("брак")} ${d.failed_30d}` : ""}`}
         />
       </div>
 
       {mrPrinters.length > 0 && (
-        <div className="dash-printers">
+        <div className="flex flex-col gap-4">
           {mrPrinters.map((p) => (
             <MoonrakerCard
               key={p.id}
@@ -927,118 +875,117 @@ export default function Dashboard() {
       )}
 
       {looseSensors.length > 0 && (
-        <div className="card env-conditions">
-          <div className="env-conditions-head">
-            <h3 className="card-title">{t("Условия хранения")}</h3>
-            <span className="env-conditions-note">{t("по датчикам Home Assistant")}</span>
-          </div>
-          <div className="env-conditions-list">
+        <Card>
+          <CardHeader title={t("Условия хранения")} description={t("по датчикам Home Assistant")} />
+          <div className="divide-y divide-secondary px-5">
             {looseSensors.map((s) => (
-              <EnvSensor key={s.id} sensor={s} threshold={humidityMax} row />
+              <div key={s.id} className="py-3"><EnvSensor sensor={s} threshold={humidityMax} row /></div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Четыре плитки в ряд. Раньше band был двумя строками половинной ширины,
-          и графики растягивались до ~640px, раздуваясь по высоте. Подписи-
-          пояснения убраны: оси и легенда говорят то же короче. */}
-      <div className="dash-main">
-        <div className="card">
-          <h3 className="card-title">{t("Расход по месяцам")}</h3>
-          <BarChart data={d.monthly_usage} materials={barMaterials} colorFor={colorFor} />
-        </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader title={t("Расход по месяцам")} />
+          <div className="p-5"><BarChart data={d.monthly_usage} materials={barMaterials} colorFor={colorFor} /></div>
+        </Card>
+        <Card>
+          <CardHeader title={t("Распределение по материалам")} />
+          <div className="p-5">
+            {d.material_distribution.length ? <Donut data={d.material_distribution} colorFor={colorFor} /> : <p className="text-sm text-tertiary">{t("Нет данных")}</p>}
+          </div>
+        </Card>
+      </div>
 
-        <div className="card">
-          <h3 className="card-title">{t("Распределение по материалам")}</h3>
-          {d.material_distribution.length ? <Donut data={d.material_distribution} colorFor={colorFor} /> : <div className="muted">{t("Нет данных")}</div>}
-        </div>
-
-        {/* Низкий остаток + быстрое добавление. На мобиле поднимается над графиками. */}
-        <div className="card dash-quick">
-          <h3 className="card-title">{t("Быстрые действия и уведомления")}</h3>
-          {/* Тело растёт и прижимает кнопку к низу — плитка одной высоты с
-              графиками и без пустого низа. */}
-          <div className="dash-quick-body">
+      <div className={cx("grid gap-4", d.drying_alerts?.length > 0 && "lg:grid-cols-2")}>
+        {/* Низкий остаток + быстрое добавление. */}
+        <Card className="flex flex-col">
+          <CardHeader
+            title={t("Быстрые действия и уведомления")}
+            badge={d.low_stock.length > 0 ? <Badge size="sm" color="warning" type="pill-color">{d.low_stock.length}</Badge> : null}
+          />
+          <div className="flex-1 p-5">
             {d.low_stock.length === 0 ? (
-              <div className="ok-panel" style={{ marginTop: 12 }}>
-                <div className="ok-panel-title"><Icon name="check" size={15} /> {t("Всё в порядке")}</div>
-                <div className="muted">{t("Нет катушек с низким остатком.")}</div>
-                <Link to="/spools" style={{ display: "inline-block", marginTop: 6 }}>{t("Все катушки →")}</Link>
-              </div>
+              <Notice tone="success" title={t("Всё в порядке")}>
+                {t("Нет катушек с низким остатком.")}{" "}
+                <Link to="/spools" className="font-semibold underline">{t("Все катушки →")}</Link>
+              </Notice>
             ) : (
-              <div style={{ marginTop: 12 }}>
+              <div className="flex flex-col gap-4">
                 {d.low_stock.slice(0, 3).map((s) => (
-                  <div key={s.id} style={{ marginBottom: 10 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
-                        <div className="muted" style={{ fontSize: 12 }}>{s.sub}</div>
+                  <div key={s.id}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-primary">{s.name}</p>
+                        <p className="truncate text-sm text-tertiary">{s.sub}</p>
                       </div>
-                      <span className="badge empty">{s.remaining_g}{" "}{t("г")}</span>
+                      <Badge size="sm" color={s.remaining_g > 0 ? "warning" : "error"} type="pill-color">{s.remaining_g}{" "}{t("г")}</Badge>
                     </div>
-                    <div className="lowstock-bar"><div style={{ width: `${Math.round(s.pct * 100)}%` }} /></div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-quaternary">
+                      <div className="h-full rounded-full" style={{ width: `${Math.max(2, Math.round(s.pct * 100))}%`, background: "var(--color-utility-red-500, #f04438)" }} />
+                    </div>
                   </div>
                 ))}
-                {d.low_stock.length > 3 && <Link to="/spools">{t("Весь инвентарь →")}</Link>}
+                {d.low_stock.length > 3 && <Link to="/spools" className={linkCls}>{t("Весь инвентарь →")}</Link>}
               </div>
             )}
           </div>
-          <button className="secondary" style={{ width: "100%", marginTop: 12 }} onClick={() => navigate("/spools/new")}>
-            {t("＋ Добавить катушку")}
-          </button>
-        </div>
+          <div className="px-5 pb-5">
+            <Button size="md" color="secondary" iconLeading={Plus} className="w-full" onClick={() => navigate("/spools/new")}>
+              {t("Добавить катушку")}
+            </Button>
+          </div>
+        </Card>
 
         {d.drying_alerts?.length > 0 && (
-          <div className="card">
-            <h3 className="card-title"><Icon name="droplet" size={15} /> {t("Пора просушить")}</h3>
-            {d.drying_alerts.slice(0, 3).map((a) => (
-              <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 }}>
-                <div style={{ minWidth: 0 }}>
-                  <Link to={`/spools/${a.id}`} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</Link>
-                  <div className="muted" style={{ fontSize: 12 }}>{a.material}</div>
+          <Card>
+            <CardHeader title={t("Пора просушить")} />
+            <div className="divide-y divide-secondary px-5">
+              {d.drying_alerts.slice(0, 3).map((a) => (
+                <div key={a.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <Link to={`/spools/${a.id}`} className="block truncate text-sm font-medium text-primary hover:text-brand-secondary">{a.name}</Link>
+                    <p className="text-sm text-tertiary">{a.material}</p>
+                  </div>
+                  <Badge size="sm" color="warning" type="pill-color">{a.days} {t("дн")}</Badge>
                 </div>
-                <span className="badge almost_empty">{a.days} {t("дн")}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </Card>
         )}
       </div>
 
       {mrPrinters.map((p) => lifetimes[p.id] && (
-        <PrinterLifetime
-          key={p.id}
-          totals={lifetimes[p.id]}
-          name={mrPrinters.length > 1 ? p.name : undefined}
-        />
+        <PrinterLifetime key={p.id} totals={lifetimes[p.id]} name={mrPrinters.length > 1 ? p.name : undefined} />
       ))}
 
-      <div className="card">
-        <h3 className="card-title">{t("Недавняя активность")}</h3>
-        <div className="act-list">
+      <Card>
+        <CardHeader title={t("Недавняя активность")} actions={<Link to="/print-jobs" className={linkCls}>{t("Вся история →")}</Link>} />
+        <div className="divide-y divide-secondary px-5">
           {d.recent_activity.slice(0, 3).map((a, i) => {
             const neg = a.amount && a.amount.startsWith("-");
             const pos = a.amount && a.amount.startsWith("+");
+            const [tone, label] = ACT_TYPE()[a.type] || ["gray", a.type];
             return (
-              <div className="act-item" key={i}>
-                <div style={{ minWidth: 0 }}>
-                  <span className="act-name">{a.name}</span>{" "}
-                  <span className={`act-tag ${a.type}`} style={{ marginLeft: 6 }}>{{ used: t("Расход"), added: t("Добавлено"), updated: t("Изменено"), moved: t("Перемещено") }[a.type] || a.type}</span>
-                  <div className="act-sub">{tReason(a.sub)}</div>
+              <div className="flex items-center justify-between gap-4 py-3" key={i}>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-primary">{a.name}</span>
+                    <Badge size="sm" color={tone} type="pill-color">{label}</Badge>
+                  </div>
+                  <p className="truncate text-sm text-tertiary">{tReason(a.sub)}</p>
                 </div>
-                <div className="act-right">
-                  <div className={`act-amount ${neg ? "neg" : pos ? "pos" : ""}`}>{a.amount || "—"}</div>
-                  <div className="act-time">{timeAgo(a.created_at)}</div>
+                <div className="shrink-0 text-right">
+                  <p className={cx("text-sm font-semibold tabular-nums", neg ? "text-error-primary" : pos ? "text-success-primary" : "text-primary")}>{a.amount || "—"}</p>
+                  <p className="text-sm text-tertiary">{timeAgo(a.created_at)}</p>
                 </div>
               </div>
             );
           })}
-          {d.recent_activity.length === 0 && <div className="muted">{t("Пока нет активности")}</div>}
+          {d.recent_activity.length === 0 && <p className="py-6 text-sm text-tertiary">{t("Пока нет активности")}</p>}
         </div>
-        <div style={{ textAlign: "right", marginTop: 8 }}>
-          <Link to="/print-jobs">{t("Вся история →")}</Link>
-        </div>
-      </div>
+      </Card>
     </div>
   );
 }

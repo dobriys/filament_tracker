@@ -5,9 +5,10 @@
 // настроек: выше него плашка подсвечивается, потому что филамент в этот момент
 // набирает влагу.
 import { useEffect, useState } from "react";
+import { BatteryFull, BatteryLow, Droplets02, Thermometer01 } from "@untitledui/icons";
+import { cx } from "@/utils/cx";
 import { api } from "../api/client.js";
 import { t, dateLocale } from "../i18n.js";
-import Icon from "./Icon.jsx";
 
 // Загрузка показаний с автообновлением. Датчики меняются медленно, а вкладку
 // держат открытой часами — опрашиваем нечасто и только пока вкладка видима.
@@ -51,58 +52,76 @@ export default function EnvSensor({ sensor, threshold = 45, showName = true, inl
   // Шкала влаги: заливка = текущая влажность, метка = безопасный порог (оба 0–100 %).
   const fill = humidity != null ? Math.max(0, Math.min(100, humidity)) : 0;
   const mark = Math.max(0, Math.min(100, limit));
+  const updated = ago(sensor.updated_at);
 
-  const variantClass = row ? " env-sensor--row" : spread ? " env-sensor--spread" : inline ? " env-sensor--inline" : "";
-
-  // Куски переиспользуются в компактной и растянутой раскладках — держим их
-  // здесь, чтобы разметка не расходилась между вариантами.
+  // Куски переиспользуются во всех раскладках — держим их здесь, чтобы разметка
+  // не расходилась между вариантами. Влажность — единственная цветная величина
+  // в блоке, потому что единственная, требующая решения.
   const humidityHead = (
-    <div className="env-humidity-head">
-      <Icon name="droplet" size={15} />
-      <b className="mono env-humidity-val">
-        {humidity != null ? humidity.toFixed(0) : "—"}<span className="env-unit">%</span>
+    <div className="flex items-center gap-1.5">
+      <Droplets02 className={cx("size-4 shrink-0", wet ? "text-fg-warning-primary" : "text-fg-brand-primary")} aria-hidden="true" />
+      <b className={cx("text-xl leading-none font-semibold tracking-tight tabular-nums", wet ? "text-warning-primary" : "text-primary")}>
+        {humidity != null ? humidity.toFixed(0) : "—"}
+        <span className="ml-px text-sm font-semibold text-tertiary">%</span>
       </b>
-      {wet && <span className="env-flag">{t("выше")} {limit}%</span>}
+      {wet && (
+        <span className="pt-px text-xs font-semibold tracking-wide text-warning-primary uppercase">{t("выше")} {limit}%</span>
+      )}
     </div>
   );
-  const gauge = (
+  const gauge = (className) => (
     <div
-      className="env-gauge"
+      className={cx("relative rounded-full bg-quaternary", className)}
       title={humidity != null ? `${humidity.toFixed(1)}% · ${t("порог")} ${limit}%` : undefined}
     >
-      <div className="env-gauge-fill" style={{ width: `${fill}%` }} />
-      <div className="env-gauge-mark" style={{ left: `${mark}%` }} />
+      <div
+        className={cx("absolute top-0 left-0 h-full min-w-[3px] rounded-full transition-[width] duration-500 ease-out", wet ? "bg-utility-yellow-500" : "bg-utility-brand-500")}
+        style={{ width: `${fill}%` }}
+      />
+      {/* Метка безопасного порога — видно, насколько близко к «мокрому». */}
+      <div className="absolute -top-0.5 -bottom-0.5 w-0.5 -translate-x-px rounded-sm bg-fg-quaternary" style={{ left: `${mark}%` }} />
     </div>
   );
+  // Температура — контекст, не тревога: ахроматична намеренно.
   const tempEl = (
-    <div className="env-temp" title={t("Температура")}>
-      <Icon name="thermometer" size={14} />
-      <span className="mono">{temperature != null ? `${temperature.toFixed(1)}°C` : "—"}</span>
+    <div className="inline-flex items-center gap-1.5 text-md text-tertiary" title={t("Температура")}>
+      <Thermometer01 className="size-4 shrink-0 text-fg-quaternary" aria-hidden="true" />
+      <span className="font-semibold text-secondary tabular-nums">{temperature != null ? `${temperature.toFixed(1)}°C` : "—"}</span>
     </div>
   );
-  const foot = (battery != null || ago(sensor.updated_at)) ? (
-    <div className="env-sensor-foot">
+  const foot = (battery != null || updated) ? (
+    <div className="flex flex-wrap items-center gap-2 text-xs text-tertiary">
       {battery != null && (
-        lowBattery
-          ? <span className="badge empty" title={t("Пора менять батарейку")}><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
-          : <span className="muted inline-ico"><Icon name="battery" size={13} /> {Math.round(battery)}%</span>
+        lowBattery ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-error-primary px-2 py-0.5 font-medium text-error-primary ring-1 ring-utility-red-200 ring-inset"
+            title={t("Пора менять батарейку")}
+          >
+            <BatteryLow className="size-3.5" aria-hidden="true" /> {Math.round(battery)}%
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1">
+            <BatteryFull className="size-3.5" aria-hidden="true" /> {Math.round(battery)}%
+          </span>
+        )
       )}
-      {ago(sensor.updated_at) && <span className="muted">{ago(sensor.updated_at)}</span>}
+      {updated && <span>{updated}</span>}
     </div>
   ) : null;
+  const errorEl = (
+    <div className="text-sm text-tertiary" title={error}>{t("Нет связи с Home Assistant")}</div>
+  );
 
   // Строчный вид — карточка «Условия хранения» на панели. Датчиков там мало,
   // поэтому каждый умещается в одну плотную линию: имя слева, показания справа.
   if (row) {
     return (
-      <div className={`env-sensor env-sensor--row${wet ? " wet" : ""}`}>
-        {showName && <div className="env-row-name">{sensor.name}</div>}
-        {error ? (
-          <div className="env-sensor-error" title={error}>{t("Нет связи с Home Assistant")}</div>
-        ) : (
-          <div className="env-row-metrics">
-            <div className={`env-humidity${wet ? " is-wet" : ""}`}>{humidityHead}</div>
-            {humidity != null && gauge}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+        {showName && <div className="text-md font-semibold break-words text-primary">{sensor.name}</div>}
+        {error ? errorEl : (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {humidityHead}
+            {humidity != null && gauge("h-1.5 w-14 flex-none")}
             {tempEl}
             {foot}
           </div>
@@ -111,34 +130,48 @@ export default function EnvSensor({ sensor, threshold = 45, showName = true, inl
     );
   }
 
-  return (
-    <div className={`env-sensor${variantClass}${wet ? " wet" : ""}`}>
-      {showName && <div className="env-sensor-name">{sensor.name}</div>}
-      {error ? (
-        <div className="env-sensor-error" title={error}>{t("Нет связи с Home Assistant")}</div>
-      ) : spread ? (
-        // Растянутый вид (под слотами): числа разнесены по ширине блока, а шкала
-        // влаги тянется во всю ширину — по ряду слотов, катушки которых она бережёт.
-        <>
-          <div className="env-spread-row">
-            <div className={`env-humidity${wet ? " is-wet" : ""}`}>{humidityHead}</div>
-            {tempEl}
-            {foot}
-          </div>
-          {humidity != null && gauge}
-        </>
-      ) : (
-        <>
-          <div className="env-readout">
-            {/* Влага — единственная реальная угроза филаменту, поэтому она главная. */}
-            <div className={`env-humidity${wet ? " is-wet" : ""}`}>
+  // Растянутый вид (под слотами): числа разнесены по ширине блока, а шкала
+  // влаги тянется во всю ширину — по ряду слотов, катушки которых она бережёт.
+  if (spread) {
+    return (
+      <div className="min-w-0">
+        {showName && <div className="mb-2 font-semibold break-words text-primary">{sensor.name}</div>}
+        {error ? errorEl : (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2.5">
               {humidityHead}
-              {gauge}
+              {tempEl}
+              {foot}
             </div>
-            {/* Температура — контекст, держим тихой. */}
+            {humidity != null && gauge("mt-3.5 h-1.5")}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // Встроенный вид (ячейка в списке мест) — данные лежат как данные, без коробки.
+  // Обычный вид — отдельная плашка; при высокой влажности подсвечивается.
+  return (
+    <div
+      className={cx(
+        "min-w-0",
+        !inline && "rounded-xl p-3 ring-1 ring-inset",
+        !inline && (wet ? "bg-warning-primary ring-utility-yellow-200" : "bg-secondary_alt ring-secondary"),
+      )}
+    >
+      {showName && <div className="mb-2 font-semibold break-words text-primary">{sensor.name}</div>}
+      {error ? errorEl : (
+        <>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {/* Влага — единственная реальная угроза филаменту, поэтому она главная. */}
+            <div className="min-w-24">
+              {humidityHead}
+              {humidity != null && gauge("mt-2 h-1.5")}
+            </div>
             {tempEl}
           </div>
-          {foot}
+          {foot && <div className={inline ? "mt-1.5" : "mt-2"}>{foot}</div>}
         </>
       )}
     </div>

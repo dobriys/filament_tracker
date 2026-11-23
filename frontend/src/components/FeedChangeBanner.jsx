@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { AlertTriangle, XClose } from "@untitledui/icons";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { api } from "../api/client.js";
 import { t } from "../i18n.js";
-import Icon from "./Icon.jsx";
 import SpoolPicker from "./SpoolPicker.jsx";
+import { Notice } from "./ft/printer.jsx";
 import { slotLabel } from "../utils/slots.js";
 
 // «Подача изменилась — подтвердите катушки».
@@ -76,28 +79,28 @@ export default function FeedChangeBanner({ printer, change, onConfirmed }) {
   if (!change) return null;
 
   return (
-    <div className="feed-change">
-      <div className="feed-change-head">
-        <Icon name="alert" size={16} />
-        <div>
-          <b>
+    <div className="mb-3 rounded-xl bg-warning-primary p-4 ring-1 ring-utility-yellow-200 ring-inset">
+      <div className="flex items-start gap-3 text-warning-primary">
+        <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="m-0 text-sm font-semibold">
             {direct
               ? `${mmuName} ${t("отключена")} — ${t("печать идёт с отдельной катушки")}`
               : `${mmuName} ${t("снова подключена")}`}
-          </b>
-          <div className="muted feed-change-sub">
+          </p>
+          <p className="m-0 mt-1 text-sm text-secondary">
             {direct
               ? t("Подтвердите, какая катушка стоит снаружи на держателе. Слоты хаба скрыты, привязки сохранены.")
               : t("Подтвердите, какие катушки стоят в слотах.")}{" "}
             {t("Автосписание на паузе до подтверждения.")}
-          </div>
+          </p>
         </div>
       </div>
 
-      <div className="feed-change-slots">
+      <div className="mt-4 flex flex-col gap-3">
         {slots.map((s) => (
-          <div key={s.id} className="feed-change-slot">
-            <span className="muted">{slotLabel(s)}</span>
+          <div key={s.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 sm:grid-cols-[minmax(90px,130px)_minmax(0,1fr)_auto]">
+            <span className="col-span-2 text-sm text-secondary sm:col-span-1">{slotLabel(s)}</span>
             <SpoolPicker
               spools={spools}
               profiles={profiles}
@@ -108,26 +111,26 @@ export default function FeedChangeBanner({ printer, change, onConfirmed }) {
               placeholder={t("— слот пуст —")}
               onSelect={(id) => setPicks((p) => ({ ...p, [s.id]: id }))}
             />
-            {picks[s.id] && (
-              <button
-                className="secondary feed-change-clear"
-                disabled={busy}
-                title={t("Слот пуст")}
+            {picks[s.id] ? (
+              <ButtonUtility
+                size="sm"
+                color="secondary"
+                icon={XClose}
+                isDisabled={busy}
+                tooltip={t("Слот пуст")}
                 onClick={() => setPicks((p) => ({ ...p, [s.id]: null }))}
-              >
-                ×
-              </button>
-            )}
+              />
+            ) : <span className="size-8" aria-hidden="true" />}
           </div>
         ))}
         {slots.length === 0 && (
-          <div className="muted">{t("У принтера нет слотов — подтвердите смену режима.")}</div>
+          <p className="m-0 text-sm text-secondary">{t("У принтера нет слотов — подтвердите смену режима.")}</p>
         )}
       </div>
 
-      {err && <div className="error">{err}</div>}
-      <div className="feed-change-actions">
-        <button onClick={confirm} disabled={busy}>{t("Подтвердить")}</button>
+      {err && <Notice tone="error" className="mt-4">{err}</Notice>}
+      <div className="mt-4">
+        <Button size="md" isLoading={busy} onClick={confirm}>{t("Подтвердить")}</Button>
       </div>
     </div>
   );

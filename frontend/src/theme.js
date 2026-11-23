@@ -1,7 +1,14 @@
-// Переключение темы. Палитры заданы в styles.css: :root — светлая,
-// [data-theme="dark"] — тёмная. Атрибут ставится на <html>; выбор
-// сохраняется в localStorage и применяется без перезагрузки.
+// Переключение темы. Токены Untitled UI переключаются классом dark-mode на
+// <html>; атрибут data-theme ставим рядом — по нему тему удобно читать из
+// кода и инструментов отладки. Выбор хранится в localStorage и применяется
+// без перезагрузки.
 const KEY = "ft_theme";
+
+function apply(v) {
+  const root = document.documentElement;
+  root.dataset.theme = v;
+  root.classList.toggle("dark-mode", v === "dark");
+}
 
 export function getTheme() {
   return localStorage.getItem(KEY) === "dark" ? "dark" : "light";
@@ -9,8 +16,8 @@ export function getTheme() {
 
 export function setTheme(v) {
   localStorage.setItem(KEY, v);
-  document.documentElement.dataset.theme = v;
+  apply(v);
 }
 
 // применить сохранённую тему при загрузке модуля
-document.documentElement.dataset.theme = getTheme();
+apply(getTheme());

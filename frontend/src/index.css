@@ -1,0 +1,105 @@
+/* Стили приложения — это Tailwind CSS 4 и токены Untitled UI (см. styles/).
+   Порядок слоёв: тема, сброс браузерных стилей, компоненты, утилиты. */
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "./styles/theme.css";
+@import "./styles/ft-theme.css";
+@import "./styles/typography.css";
+
+@plugin "@tailwindcss/typography";
+@plugin "tailwindcss-react-aria-components";
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:where(.dark-mode, .dark-mode *));
+@custom-variant label (& [data-label]);
+@custom-variant focus-input-within (&:has(input:focus));
+
+@utility scrollbar-hide {
+    &::-webkit-scrollbar {
+        display: none;
+        -webkit-appearance: none;
+    }
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+@utility transition-inherit-all {
+    transition-property: inherit;
+    transition-duration: inherit;
+    transition-timing-function: inherit;
+}
+
+html,
+body {
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-variant-ligatures: contextual;
+    font-kerning: normal;
+}
+
+/* Фон и цвет текста страницы: видны за краем каркаса при прокрутке и на
+   странице входа; тёмная тема меняет их вместе с токенами. */
+body {
+    background-color: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+}
+
+/* Колонка контента по центру, но левый край — всегда на целом пикселе.
+   Обычный mx-auto при нечётном остатке ширины ставит колонку на полпикселя,
+   и тонкие рамки у правого края (плитки слотов, поля ввода) пропадают.
+   Где round() не поддерживается, остаётся обычное центрирование. */
+@utility shell-center {
+    margin-inline: auto;
+    margin-left: max(0px, round(down, calc((100% - 1280px) / 2), 1px));
+}
+
+/* Тонкие рамки (ring-1) — контуром, а не тенью.
+   Untitled UI рисует рамки тенью box-shadow. Safari на экране без Retina
+   теряет такую линию, если край элемента попадает на дробный пиксель (в сетках
+   это сплошь и рядом), — пропадает правая/нижняя граница. Контур (outline)
+   браузер всегда прижимает к целым пикселям. Вид тот же: цвет берём из
+   --tw-ring-color, у ring-inset контур утоплен внутрь на 1px, как и тень.
+   В фокусе с клавиатуры правило отключается — там работают свои outline-утилиты. */
+@layer utilities {
+    .ring-1:not(:focus-visible, [data-focus-visible]) {
+        --tw-ring-shadow: 0 0 #0000;
+        outline: 1px solid var(--tw-ring-color, currentcolor);
+        outline-offset: 0;
+    }
+    .ring-1.ring-inset:not(:focus-visible, [data-focus-visible]) {
+        outline-offset: -1px;
+    }
+}
+
+/* Полоса «прогресс неизвестен» (подготовка печати): бегунок вместо шкалы. */
+@keyframes progress-slide {
+    0% { margin-left: -35%; }
+    100% { margin-left: 100%; }
+}
+@utility animate-progress-slide {
+    animation: progress-slide 1.6s ease-in-out infinite;
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+        margin-left: 0;
+    }
+}
+
+details summary::-webkit-details-marker {
+    display: none;
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type="number"] {
+    -moz-appearance: textfield;
+}
+input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+}

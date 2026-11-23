@@ -1075,6 +1075,12 @@ function spoolsRoute(M, parts, query, body) {
     };
   }
   if (parts[1] === "import-spoolman") return { imported: 6, skipped: 2, total: 8 };
+  // Страница, на которую ведёт QR с этикетки: катушка по qr_token.
+  if (parts[1] === "by-qr" && M === "GET") {
+    const byToken = db.spools.find((s) => s.qr_token === parts[2]);
+    if (!byToken) throw notFound("Катушка не найдена");
+    return buildCard(byToken);
+  }
 
   // элемент
   const id = parts[1];

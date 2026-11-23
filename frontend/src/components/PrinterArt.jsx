@@ -1,6 +1,6 @@
 import { useState } from "react";
+import { Disc01, LayersTwo01, Package, Thermometer01 } from "@untitledui/icons";
 import { t } from "../i18n.js";
-import Icon from "./Icon.jsx";
 
 // Slug принтера для файла иллюстрации: тот же формат, что и key пресета на
 // бэке (printer_presets._preset). Свой SVG для модели кладётся в
@@ -33,7 +33,7 @@ const BRAND_ACCENT = {
 };
 
 export function brandAccent(brand) {
-  return BRAND_ACCENT[(brand || "").trim().toLowerCase()] || "var(--accent)";
+  return BRAND_ACCENT[(brand || "").trim().toLowerCase()] || "var(--color-fg-brand-primary)";
 }
 
 // Силуэт FDM-принтера, тонированный цветом бренда. Меняется по возможностям:
@@ -61,7 +61,7 @@ export function PrinterArt({ caps = {}, brand, model, size = 92 }) {
         height={size}
         alt={t("Иллюстрация принтера")}
         onError={() => setFailedSlug(slug)}
-        style={{ flex: "0 0 auto", objectFit: "contain" }}
+        className="shrink-0 object-contain"
       />
     );
   }
@@ -83,7 +83,7 @@ export function PrinterArt({ caps = {}, brand, model, size = 92 }) {
 
   return (
     <svg width={size} height={(size * 104) / 132} viewBox="0 0 132 104" fill="none"
-      role="img" aria-label={t("Иллюстрация принтера")} style={{ flex: "0 0 auto" }}>
+      role="img" aria-label={t("Иллюстрация принтера")} className="shrink-0">
       {enclosed && (
         <rect x="12" y="12" width="80" height="82" rx="11"
           fill={accent} fillOpacity="0.06" stroke={accent} strokeOpacity="0.45" strokeWidth="2" />
@@ -129,6 +129,8 @@ export function PrinterArt({ caps = {}, brand, model, size = 92 }) {
   );
 }
 
+const CHIP_ICON = { slots: LayersTwo01, spool: Disc01, flame: Thermometer01, box: Package };
+
 // Значки возможностей принтера — компактная сводка «что умеет».
 export function CapabilityChips({ caps = {} }) {
   const chips = [];
@@ -139,10 +141,15 @@ export function CapabilityChips({ caps = {} }) {
   if (caps.has_chamber) chips.push(["box", t("Камера")]);
   if (chips.length === 0) return null;
   return (
-    <div className="cap-chips">
-      {chips.map(([icon, label]) => (
-        <span key={label} className="cap-chip"><Icon name={icon} size={13} /> {label}</span>
-      ))}
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {chips.map(([icon, label]) => {
+        const Glyph = CHIP_ICON[icon];
+        return (
+          <span key={label} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary ring-1 ring-secondary ring-inset">
+            <Glyph className="size-3.5 text-fg-quaternary" aria-hidden="true" /> {label}
+          </span>
+        );
+      })}
     </div>
   );
 }

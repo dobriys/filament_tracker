@@ -1,13 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams, useLocation, Link } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, useLocation } from "react-router-dom";
+import { Button as AriaButton } from "react-aria-components";
+import { Camera01, SearchLg } from "@untitledui/icons";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
+import { TextArea } from "@/components/base/textarea/textarea";
+import { Card, CardHeader, PageHeader, RemainingBar, SpoolSwatch } from "../components/ft/ui.jsx";
+import { ColorField, NONE, Pick, SectionLabel, SpecGroupsForm, plain } from "../components/ft/form.jsx";
+import { Notice } from "../components/ft/printer.jsx";
 import { api } from "../api/client.js";
 import { SPEC_GROUPS, SPEC_FIELDS, MATERIALS } from "../specFields.js";
 import { t } from "../i18n.js";
 import { lowThresholdFor } from "../utils/spools.js";
-import Icon from "../components/Icon.jsx";
 import { locationPath } from "../utils/locations.js";
 
 const DIAMETERS = ["1.75", "2.85", "3.0"];
+const CURRENCIES = ["RUB", "USD", "EUR"];
 
 const EMPTY = {
   label: "", manufacturer: "", sku: "", photo: "",
@@ -73,8 +81,9 @@ export default function SpoolForm() {
     }
   }, [id]);
 
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-  const setSpec = (k) => (e) => setForm({ ...form, specs: { ...form.specs, [k]: e.target.value } });
+  // Поля Untitled UI отдают в onChange уже значение, а не событие.
+  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  const setSpec = (k) => (v) => setForm((f) => ({ ...f, specs: { ...f.specs, [k]: v } }));
 
   // --- каталог филаментов: поиск и предзаполнение ---
   const [catalogQ, setCatalogQ] = useState("");
@@ -121,7 +130,8 @@ export default function SpoolForm() {
   async function onPhoto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setForm({ ...form, photo: await resizeImage(file) });
+    const photo = await resizeImage(file);
+    setForm((f) => ({ ...f, photo }));
   }
 
   const num = (v) => (v === "" || v == null ? null : Number(v));
@@ -142,9 +152,11 @@ export default function SpoolForm() {
     return Object.keys(out).length ? out : null;
   }
   function toggleMulti(key, opt) {
-    const cur = Array.isArray(form.specs?.[key]) ? form.specs[key] : [];
-    const next = cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt];
-    setForm({ ...form, specs: { ...form.specs, [key]: next } });
+    setForm((f) => {
+      const cur = Array.isArray(f.specs?.[key]) ? f.specs[key] : [];
+      const next = cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt];
+      return { ...f, specs: { ...f.specs, [key]: next } };
+    });
   }
   async function save() {
     setError(null);
@@ -184,211 +196,185 @@ export default function SpoolForm() {
   const remaining = grossInput == null ? capacity : Math.max(0, grossInput - tare);
   const pct = Math.max(0, Math.min(1, remaining / capacity));
   const benchys = Math.round(remaining / 30);
+  const low = remaining <= lowThresholdFor(capacity);
+
+  const materials = MATERIALS.includes(form.material) ? MATERIALS : [form.material, ...MATERIALS];
+  const locItems = [{ id: NONE, label: t("— не указано —") }, ...locations.map((l) => ({ id: l.id, label: locationPath(locations, l.id) }))];
+  const heading = editing ? t("Редактирование катушки") : t("Новая катушка");
 
   return (
     <div>
-      <Link to="/spools">{t("← К инвентарю")}</Link>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "6px 0 16px" }}>
-        <h2 style={{ margin: 0 }}>{editing ? t("Редактирование катушки") : t("Новая катушка")}</h2>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="secondary" onClick={() => navigate(-1)}>{t("Отмена")}</button>
-          <button onClick={save}>{t("Сохранить")}</button>
-        </div>
-      </div>
-      {error && <div className="error" style={{ marginBottom: 12 }}>{error}</div>}
+      <PageHeader
+        breadcrumbs={[{ label: t("Катушки"), href: "/spools" }, { label: heading }]}
+        title={heading}
+        actions={
+          <>
+            <Button size="md" color="secondary" onClick={() => navigate(-1)}>{t("Отмена")}</Button>
+            <Button size="md" onClick={save}>{t("Сохранить")}</Button>
+          </>
+        }
+      />
+      {error && <Notice tone="error" className="mb-6" onClose={() => setError(null)}>{error}</Notice>}
 
       {/* Подбор из каталога */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h3 className="card-title">{t("Подобрать из каталога")}</h3>
-        <div className="card-sub">{t("Начните вводить бренд или материал — поля подставятся автоматически (можно править).")}</div>
-        <div style={{ position: "relative", maxWidth: 480 }}>
-          <input value={catalogQ} onChange={(e) => searchCatalog(e.target.value)} placeholder={t("например LIDER-3D, Bambu PLA, PETG…")} />
-          {catalogResults.length > 0 && (
-            <div className="kebab-menu" style={{ left: 0, right: 0, maxWidth: 480, maxHeight: 280, overflowY: "auto" }}>
-              {catalogResults.map((p) => (
-                <button type="button" key={p.id || p.catalog_id} onClick={() => pickCatalog(p)}>
-                  <strong>{[p.brand, p.name].filter(Boolean).join(" ")}</strong>
-                  <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
-                    {p.material}{p.nozzle_temp_max ? ` · ${t("сопло")} ~${p.nozzle_temp_max}°C` : ""}{p.source === "spoolmandb" ? " · SpoolmanDB" : ""}
-                  </span>
-                </button>
-              ))}
-            </div>
+      <Card className="mb-6">
+        <CardHeader
+          title={t("Подобрать из каталога")}
+          description={t("Начните вводить бренд или материал — поля подставятся автоматически (можно править).")}
+        />
+        <div className="p-5">
+          <div className="relative max-w-xl">
+            <Input size="sm" icon={SearchLg} value={catalogQ} onChange={searchCatalog} placeholder={t("например LIDER-3D, Bambu PLA, PETG…")} />
+            {catalogResults.length > 0 && (
+              <div className="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-lg bg-primary p-1 shadow-lg ring-1 ring-secondary">
+                {catalogResults.map((p) => (
+                  <AriaButton
+                    key={p.id || p.catalog_id}
+                    onPress={() => pickCatalog(p)}
+                    className="flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-md bg-transparent px-3 py-2 text-left outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2"
+                  >
+                    <span className="text-sm font-medium text-primary">{[p.brand, p.name].filter(Boolean).join(" ")}</span>
+                    <span className="text-xs text-tertiary">
+                      {p.material}{p.nozzle_temp_max ? ` · ${t("сопло")} ~${p.nozzle_temp_max}°C` : ""}{p.source === "spoolmandb" ? " · SpoolmanDB" : ""}
+                    </span>
+                  </AriaButton>
+                ))}
+              </div>
+            )}
+          </div>
+          {form.filament_profile_id && (
+            <p className="mt-3 text-sm text-tertiary">{t("Данные подставлены из каталога. Цвет и вес укажите сами.")}</p>
           )}
         </div>
-        {form.filament_profile_id && <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>{t("Данные подставлены из каталога. Цвет и вес укажите сами.")}</div>}
-      </div>
+      </Card>
 
-      <div className="form-grid">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* Левая колонка */}
-        <div>
-          <div className="card">
-            <h3 className="card-title">{t("Общая информация")}</h3>
-            <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader title={t("Общая информация")} />
+            <div className="flex flex-col gap-5 p-5 sm:flex-row">
               <div>
-                <label>{t("Фото катушки")}</label>
-                <div className="photo-drop" onClick={() => photoRef.current.click()}>
-                  {form.photo ? <img src={form.photo} alt="" /> : <><Icon name="camera" size={22} /><div>{t("Загрузить")}</div></>}
-                </div>
-                <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onPhoto} />
+                <p className="mb-1.5 text-sm font-medium text-secondary">{t("Фото катушки")}</p>
+                <AriaButton
+                  onPress={() => photoRef.current?.click()}
+                  aria-label={t("Фото катушки")}
+                  className="flex size-28 cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-dashed border-primary bg-secondary_alt text-sm text-tertiary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
+                >
+                  {form.photo
+                    ? <img src={form.photo} alt="" className="size-full object-cover" />
+                    : <><Camera01 className="size-6 text-fg-quaternary" aria-hidden="true" /><span>{t("Загрузить")}</span></>}
+                </AriaButton>
+                <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={onPhoto} />
               </div>
-              <div style={{ flex: 1 }}>
-                <label>{t("Название катушки")} <span className="req">*</span></label>
-                <input value={form.label} onChange={set("label")} placeholder={t("например Ocean Blue Silk")} />
-                <div className="field-2" style={{ marginTop: 10 }}>
-                  <div><label>{t("Производитель")}</label><input value={form.manufacturer} onChange={set("manufacturer")} placeholder="PolyMaker" /></div>
-                  <div><label>{t("SKU / Артикул")}</label><input value={form.sku} onChange={set("sku")} placeholder={t("Необязательно")} /></div>
+              <div className="flex min-w-0 flex-1 flex-col gap-4">
+                <Input size="sm" isRequired label={t("Название катушки")} value={form.label} onChange={set("label")} placeholder={t("например Ocean Blue Silk")} />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Input size="sm" label={t("Производитель")} value={form.manufacturer} onChange={set("manufacturer")} placeholder="PolyMaker" />
+                  <Input size="sm" label={t("SKU / Артикул")} value={form.sku} onChange={set("sku")} placeholder={t("Необязательно")} />
                 </div>
               </div>
             </div>
-          </div>
+          </Card>
 
-          <div className="card">
-            <h3 className="card-title">{t("Материал и характеристики")}</h3>
-            <div className="field-2" style={{ marginTop: 12 }}>
-              <div>
-                <label>{t("Тип материала")} <span className="req">*</span></label>
-                <select value={form.material} onChange={set("material")}>
-                  {(MATERIALS.includes(form.material) ? MATERIALS : [form.material, ...MATERIALS]).map((m) => <option key={m}>{m}</option>)}
-                </select>
-              </div>
-              <div>
-                <label>{t("Цвет")} <span className="req">*</span></label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input type="color" style={{ width: 44, padding: 2 }} value={form.color_hex} onChange={set("color_hex")} />
-                  <input value={form.color_hex} onChange={set("color_hex")} />
-                </div>
-                <input style={{ marginTop: 8 }} value={form.color_name} onChange={set("color_name")} placeholder={t("Название цвета")} />
+          <Card>
+            <CardHeader title={t("Материал и характеристики")} />
+            <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
+              <Pick label={t("Тип материала")} value={form.material} onChange={set("material")} items={plain(materials)} />
+              <Pick label={t("Диаметр")} value={form.diameter_mm} onChange={set("diameter_mm")}
+                items={DIAMETERS.map((d) => ({ id: d, label: `${d} ${t("мм")}` }))} />
+              <ColorField label={t("Цвет")} value={form.color_hex} onChange={set("color_hex")} />
+              <Input size="sm" label={t("Название цвета")} value={form.color_name} onChange={set("color_name")} placeholder={t("Название цвета")} />
+              {/* Подписи длинные и переносятся по-разному, поэтому поля выравниваем по низу. */}
+              <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2 sm:items-end">
+                <Input size="sm" type="number" label={`${t("Вес филамента нетто (полная катушка)")}, ${t("г")}`}
+                  value={form.initial_filament_weight_g} onChange={set("initial_filament_weight_g")} placeholder="1000" />
+                <Input size="sm" type="number" label={`${t("Вес пустой катушки (тара)")}, ${t("г")}`}
+                  value={form.empty_spool_weight_g} onChange={set("empty_spool_weight_g")} placeholder="200" />
               </div>
             </div>
-            <div className="field-2" style={{ marginTop: 10 }}>
-              <div>
-                <label>{t("Диаметр")} <span className="req">*</span></label>
-                <select value={form.diameter_mm} onChange={set("diameter_mm")}>{DIAMETERS.map((d) => <option key={d} value={d}>{d}{" "}{t("мм")}</option>)}</select>
-              </div>
-              <div>
-                <label>{t("Вес филамента нетто (полная катушка)")}</label>
-                <div className="unit-input"><input type="number" value={form.initial_filament_weight_g} onChange={set("initial_filament_weight_g")} placeholder="1000" /><span className="unit">{t("г")}</span></div>
-              </div>
-            </div>
-            <div className="field-2" style={{ marginTop: 10 }}>
-              <div>
-                <label>{t("Вес пустой катушки (тара)")}</label>
-                <div className="unit-input"><input type="number" value={form.empty_spool_weight_g} onChange={set("empty_spool_weight_g")} placeholder="200" /><span className="unit">{t("г")}</span></div>
-              </div>
-            </div>
-          </div>
+          </Card>
 
-          <div className="card">
-            <h3 className="card-title">{t("Учёт и покупка")}</h3>
-            <div className="field-2" style={{ marginTop: 12 }}>
-              <div>
-                <label>{t("Текущий вес катушки целиком (на весах)")} <span className="req">*</span></label>
-                <div className="unit-input"><input type="number" value={form.current_weight_g} onChange={set("current_weight_g")} placeholder="1232" /><span className="unit">{t("г")}</span></div>
-                {grossInput != null && tare > 0 && (
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                    − {t("тара")} {tare.toFixed(0)}{t("г")} → {remaining.toFixed(0)}{t("г")} {t("чистого филамента")}
-                  </div>
-                )}
-              </div>
-              <div>
-                <label>{t("Место хранения")}</label>
-                <select value={form.location_id} onChange={set("location_id")}>
-                  <option value="">{t("— не указано —")}</option>
-                  {locations.map((l) => <option key={l.id} value={l.id}>{locationPath(locations, l.id)}</option>)}
-                </select>
+          <Card>
+            <CardHeader title={t("Учёт и покупка")} />
+            <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
+              <Input size="sm" type="number" className="sm:col-span-2" label={`${t("Текущий вес катушки целиком (на весах)")}, ${t("г")}`}
+                value={form.current_weight_g} onChange={set("current_weight_g")} placeholder="1232"
+                hint={grossInput != null && tare > 0
+                  ? `− ${t("тара")} ${tare.toFixed(0)}${t("г")} → ${remaining.toFixed(0)}${t("г")} ${t("чистого филамента")}`
+                  : undefined} />
+              <Pick label={t("Место хранения")} value={form.location_id || NONE}
+                onChange={(k) => set("location_id")(k === NONE ? "" : k)} items={locItems} />
+              <Input size="sm" type="date" label={t("Дата покупки")} value={form.purchase_date} onChange={set("purchase_date")} />
+              <div className="flex items-end gap-2">
+                <Input size="sm" type="number" label={t("Цена")} value={form.price} onChange={set("price")} placeholder="0" className="flex-1" />
+                <Pick aria-label={t("Валюта")} value={form.currency} onChange={set("currency")} items={plain(CURRENCIES)} className="w-28" />
               </div>
             </div>
-            <div className="field-2" style={{ marginTop: 10 }}>
-              <div><label>{t("Дата покупки")}</label><input type="date" value={form.purchase_date} onChange={set("purchase_date")} /></div>
-              <div>
-                <label>{t("Цена")}</label>
-                <div className="unit-input">
-                  <input type="number" value={form.price} onChange={set("price")} placeholder="0" />
-                  <select style={{ width: 80 }} value={form.currency} onChange={set("currency")}><option>RUB</option><option>USD</option><option>EUR</option></select>
-                </div>
-              </div>
-            </div>
-          </div>
+          </Card>
         </div>
 
         {/* Правая колонка */}
-        <div>
-          <div className="card">
-            <div className="kpi-label">{t("ПРЕДПРОСМОТР СТАТУСА")}</div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: 8 }}>
-              <div><span style={{ fontSize: 40, fontWeight: 700 }}>{Math.round(pct * 100)}%</span> <span className="muted">{t("остаток")}</span></div>
+        <div className="flex flex-col gap-6">
+          <Card className="p-5">
+            <SectionLabel>{t("ПРЕДПРОСМОТР СТАТУСА")}</SectionLabel>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="text-display-lg font-semibold text-primary tabular-nums">{Math.round(pct * 100)}%</span>
+                <span className="ml-2 text-sm text-tertiary">{t("остаток")}</span>
+              </div>
               {form.photo
-                ? <img src={form.photo} alt="" style={{ width: 70, height: 70, borderRadius: 10, objectFit: "cover" }} />
-                : <div style={{ width: 70, height: 70, borderRadius: 10, background: form.color_hex, border: "1px solid var(--border)" }} />}
+                ? <img src={form.photo} alt="" className="size-14 rounded-xl object-cover ring-1 ring-secondary" />
+                : <SpoolSwatch color={form.color_hex} size="lg" />}
             </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", fontWeight: 600, marginTop: 4 }}>{remaining.toFixed(0)}{t("г /")}{" "}{capacity.toFixed(0)}{t("г")}</div>
-            <div className="progress" style={{ marginTop: 8, height: 12 }}><div style={{ width: `${Math.round(pct * 100)}%`, background: remaining <= lowThresholdFor(capacity) ? "var(--danger)" : "var(--accent)" }} /></div>
-            <div className="muted" style={{ marginTop: 12, fontSize: 13 }}>{t("⏱ Хватит примерно на ~")}{benchys}{" "}{t("стандартных Benchy.")}</div>
-          </div>
+            <RemainingBar
+              className="mt-4"
+              grams={remaining.toFixed(0)}
+              pct={pct}
+              color={low ? "var(--color-utility-red-500, #f04438)" : form.color_hex}
+            />
+            <p className="mt-1 text-right text-sm text-tertiary tabular-nums">{t("из")} {capacity.toFixed(0)} {t("г")}</p>
+            <p className="mt-3 text-sm text-tertiary">{t("⏱ Хватит примерно на ~")}{benchys}{" "}{t("стандартных Benchy.")}</p>
+          </Card>
 
-          <div className="card">
-            <h3 className="card-title">{t("Штрихкод")}</h3>
-            <div className="card-sub">{t("Штрихкод производителя (необязательно).")}</div>
-            <input value={form.barcode} onChange={set("barcode")} placeholder={t("Введите код…")} />
-          </div>
+          <Card>
+            <CardHeader title={t("Штрихкод")} description={t("Штрихкод производителя (необязательно).")} />
+            <div className="p-5">
+              <Input size="sm" aria-label={t("Штрихкод")} value={form.barcode} onChange={set("barcode")} placeholder={t("Введите код…")} />
+            </div>
+          </Card>
 
-          <div className="card">
-            <h3 className="card-title">{t("Переопределения печати")}</h3>
-            <div className="card-sub">{t("Необязательно: настройки именно для этой катушки.")}</div>
-            <div className="field-2">
-              <div><label>{t("Сопло")}</label><div className="unit-input"><input type="number" value={form.hotend_temp} onChange={set("hotend_temp")} placeholder="210" /><span className="unit">°C</span></div></div>
-              <div><label>{t("Стол")}</label><div className="unit-input"><input type="number" value={form.bed_temp} onChange={set("bed_temp")} placeholder="60" /><span className="unit">°C</span></div></div>
+          <Card>
+            <CardHeader title={t("Переопределения печати")} description={t("Необязательно: настройки именно для этой катушки.")} />
+            <div className="grid grid-cols-2 gap-4 p-5">
+              <Input size="sm" type="number" label={`${t("Сопло")}, °C`} value={form.hotend_temp} onChange={set("hotend_temp")} placeholder="210" />
+              <Input size="sm" type="number" label={`${t("Стол")}, °C`} value={form.bed_temp} onChange={set("bed_temp")} placeholder="60" />
+              <Input size="sm" type="number" label={`${t("Обдув")}, %`} value={form.fan_speed} onChange={set("fan_speed")} placeholder="100" />
+              <Input size="sm" type="number" label="Flow Rate, %" value={form.flow_rate} onChange={set("flow_rate")} placeholder="95" />
+              <Input size="sm" type="number" label="Pressure Advance (K)" step="0.001" className="col-span-2 sm:col-span-1"
+                value={String(form.specs?.pressure_advance ?? "")} onChange={setSpec("pressure_advance")} placeholder="0.02" />
             </div>
-            <div className="field-2" style={{ marginTop: 10 }}>
-              <div><label>{t("Обдув")}</label><div className="unit-input"><input type="number" value={form.fan_speed} onChange={set("fan_speed")} placeholder="100" /><span className="unit">%</span></div></div>
-              <div><label>Flow Rate</label><div className="unit-input"><input type="number" value={form.flow_rate} onChange={set("flow_rate")} placeholder="95" /><span className="unit">%</span></div></div>
-            </div>
-            <div className="field-2" style={{ marginTop: 10 }}>
-              <div><label>Pressure Advance (K)</label><input type="number" step="0.001" value={form.specs?.pressure_advance ?? ""} onChange={setSpec("pressure_advance")} placeholder="0.02" /></div>
-            </div>
-          </div>
+          </Card>
 
-          <div className="card">
-            <h3 className="card-title">{t("Заметки")}</h3>
-            <textarea rows={4} value={form.notes} onChange={set("notes")} placeholder={t("Комментарии к катушке…")} />
-          </div>
+          <Card>
+            <CardHeader title={t("Заметки")} />
+            <div className="p-5">
+              <TextArea size="sm" aria-label={t("Заметки")} rows={4} value={form.notes} onChange={set("notes")} placeholder={t("Комментарии к катушке…")} />
+            </div>
+          </Card>
         </div>
       </div>
 
       {/* Расширенные характеристики филамента */}
-      <div className="card" style={{ marginTop: 16 }}>
-        <h3 className="card-title">{t("Характеристики филамента")}</h3>
-        <div className="card-sub">{t("Дополнительные данные профиля (как на 3dfilamentprofiles.com). Все поля необязательны.")}</div>
-        {SPEC_GROUPS.map((g) => (
-          <div key={g.title} style={{ marginTop: 14 }}>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>{g.title}</div>
-            <div className="spec-form-grid">
-              {g.fields.filter((f) => f.type !== "multiselect").map((f) => (
-                <div key={f.key}>
-                  <label>{f.label}{f.unit ? `, ${f.unit}` : ""}</label>
-                  <input type={f.type} value={form.specs?.[f.key] ?? ""} onChange={setSpec(f.key)} placeholder={f.placeholder || ""} />
-                </div>
-              ))}
-            </div>
-            {g.fields.filter((f) => f.type === "multiselect").map((f) => (
-              <div key={f.key} style={{ marginTop: 10 }}>
-                <label>{f.label}</label>
-                <div className="chip-select">
-                  {f.options.map((opt) => {
-                    const on = Array.isArray(form.specs?.[f.key]) && form.specs[f.key].includes(opt);
-                    return (
-                      <button type="button" key={opt} className={`chip ${on ? "chip-on" : ""}`} onClick={() => toggleMulti(f.key, opt)}>
-                        {on ? "✓ " : ""}{opt}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+      <Card className="mt-6">
+        <CardHeader
+          title={t("Характеристики филамента")}
+          description={t("Дополнительные данные профиля (как на 3dfilamentprofiles.com). Все поля необязательны.")}
+        />
+        <div className="p-5">
+          <SpecGroupsForm groups={SPEC_GROUPS} specs={form.specs} setSpec={setSpec} toggleMulti={toggleMulti} />
+        </div>
+      </Card>
     </div>
   );
 }

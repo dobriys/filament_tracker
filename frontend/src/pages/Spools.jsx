@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { Archive, Copy01, Edit01, Grid01, List, MarkerPin01, Plus, Printer, SearchLg, Trash01 } from "@untitledui/icons";
+import { Table, TableCard } from "@/components/application/table/table";
+import { Badge } from "@/components/base/badges/badges";
+import { ButtonGroup, ButtonGroupItem } from "@/components/base/button-group/button-group";
+import { Button } from "@/components/base/buttons/button";
+import { Dropdown } from "@/components/base/dropdown/dropdown";
+import { Input } from "@/components/base/input/input";
+import { Select } from "@/components/base/select/select";
+import { Card, EmptyNote, PageHeader, RemainingBar, SpoolStatusBadge, SpoolSwatch } from "../components/ft/ui.jsx";
 import { api } from "../api/client.js";
 import { MATERIALS } from "../specFields.js";
 import { t } from "../i18n.js";
 import { slotLabel } from "../utils/slots.js";
-import Icon from "../components/Icon.jsx";
 import { locationPath } from "../utils/locations.js";
 import { lowThresholdFor, spoolTitle } from "../utils/spools.js";
 
@@ -15,21 +23,21 @@ const STATUS_LABELS = {
   empty: t("закончилась"),
   archived: t("архив"),
 };
+const ALL = "__all";
 
 export default function Spools() {
   const [spools, setSpools] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [locations, setLocations] = useState([]);
-  const [selected, setSelected] = useState({});
+  const [selectedKeys, setSelectedKeys] = useState(new Set());
   // На узких экранах сетка (карточки) читается лучше «списка»-таблицы.
   const [view, setView] = useState(
     typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches ? "grid" : "list"
   );
   const [search, setSearch] = useState("");
-  const [matFilter, setMatFilter] = useState("");
-  const [locFilter, setLocFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [menu, setMenu] = useState(null);
+  const [matFilter, setMatFilter] = useState(ALL);
+  const [locFilter, setLocFilter] = useState(ALL);
+  const [statusFilter, setStatusFilter] = useState(ALL);
   const [slotMap, setSlotMap] = useState({}); // spool_id -> "Printer / Slot N"
   const navigate = useNavigate();
 
@@ -65,15 +73,13 @@ export default function Spools() {
     const low = s.status === "empty" || remaining <= lowThresholdFor(capacity);
     const brand = s.manufacturer || p?.brand;
     const name = p?.name || s.label;
-    const dia = s.diameter_mm || p?.diameter_mm;
     return {
-      p, remaining, pct, low, photo: s.photo,
+      p, remaining, pct, low,
       title: spoolTitle(brand, name),
       sku: s.sku || s.label || "",
       material: s.material || p?.material || "—",
       colorName: s.color_name || p?.color_name || "",
       colorHex: s.color_hex || p?.color_hex,
-      diameter: dia ? `${Number(dia)}mm` : "—",
       locName: s.location_id ? locMap[s.location_id]?.name : null,
       slotLabel: slotMap[s.id] || null,
     };
@@ -84,10 +90,10 @@ export default function Spools() {
       .map((s) => ({ s, e: enrich(s) }))
       .filter(({ s, e }) => {
         // По умолчанию скрываем архив; показываем, только если выбран статус «архив».
-        if (!statusFilter && s.status === "archived") return false;
-        if (matFilter && e.material !== matFilter) return false;
-        if (locFilter && s.location_id !== locFilter) return false;
-        if (statusFilter && s.status !== statusFilter) return false;
+        if (statusFilter === ALL && s.status === "archived") return false;
+        if (matFilter !== ALL && e.material !== matFilter) return false;
+        if (locFilter !== ALL && s.location_id !== locFilter) return false;
+        if (statusFilter !== ALL && s.status !== statusFilter) return false;
         if (search) {
           const q = search.toLowerCase();
           if (!`${e.title} ${e.sku} ${e.material} ${e.colorName}`.toLowerCase().includes(q)) return false;
@@ -96,194 +102,214 @@ export default function Spools() {
       });
   }, [spools, profMap, locMap, slotMap, matFilter, locFilter, statusFilter, search]);
 
-  const selectedIds = Object.keys(selected).filter((id) => selected[id]);
-  const allVisibleSelected = rows.length > 0 && rows.every(({ s }) => selected[s.id]);
-  function toggleAll() {
-    const next = { ...selected };
-    const v = !allVisibleSelected;
-    rows.forEach(({ s }) => { next[s.id] = v; });
-    setSelected(next);
-  }
+  const selectedIds = [...selectedKeys].filter((id) => rows.some(({ s }) => s.id === id));
+  const onSelectionChange = (keys) => setSelectedKeys(keys === "all" ? new Set(rows.map(({ s }) => s.id)) : new Set(keys));
+  const clearSelection = () => setSelectedKeys(new Set());
+
   async function printA4() {
     await api.download("/api/spools/labels.pdf", {
       method: "POST", body: { spool_ids: selectedIds, format: "card" }, filename: "labels-a4.pdf",
     });
   }
-  async function archive(id) {
-    setMenu(null);
-    await api.patch(`/api/spools/${id}`, { status: "archived" });
-    load();
-  }
-  async function unarchive(id) {
-    setMenu(null);
-    await api.patch(`/api/spools/${id}`, { status: "in_use" });
-    load();
-  }
+  async function archive(id) { await api.patch(`/api/spools/${id}`, { status: "archived" }); load(); }
+  async function unarchive(id) { await api.patch(`/api/spools/${id}`, { status: "in_use" }); load(); }
   async function duplicate(id) {
-    setMenu(null);
     const copy = await api.post(`/api/spools/${id}/duplicate?new_color=true`);
     navigate(`/spools/${copy.id}/edit`);
   }
   async function deleteSpool(id) {
-    setMenu(null);
     if (!window.confirm(t("Удалить катушку? Действие необратимо (история списаний по ней тоже удалится)."))) return;
     await api.del(`/api/spools/${id}`);
     load();
   }
   async function bulkArchive() {
     await Promise.all(selectedIds.map((id) => api.patch(`/api/spools/${id}`, { status: "archived" })));
-    setSelected({}); load();
+    clearSelection(); load();
   }
   async function bulkDelete() {
     if (!window.confirm(`${t("Удалить выбранные катушки")} (${selectedIds.length})? ${t("Необратимо.")}`)) return;
     await Promise.all(selectedIds.map((id) => api.del(`/api/spools/${id}`)));
-    setSelected({}); load();
+    clearSelection(); load();
   }
 
   // Шкала остатка окрашена самим филаментом: полоса показывает, сколько
-  // осталось именно этого цвета. Ниже порога цвет перебивается статусным —
-  // тревога должна читаться раньше материала. Порог один и тот же на всё
-  // приложение (см. utils/spools.js), процентных ступеней тут больше нет:
-  // они срабатывали вразнобой со статусом на катушках нестандартного веса.
-  const barColor = (e) => (e.low ? "var(--danger)" : e.colorHex || "var(--muted-2)");
+  // осталось именно этого цвета. Ниже порога цвет перебивается красным —
+  // тревога должна читаться раньше материала. Порог один на всё приложение
+  // (см. utils/spools.js).
+  const barColor = (e) => (e.low ? "var(--color-utility-red-500, #f04438)" : e.colorHex || "var(--color-bg-quaternary)");
+
+  const matItems = [{ id: ALL, label: t("Материал: все") }, ...MATERIALS.map((m) => ({ id: m, label: m }))];
+  const locItems = [{ id: ALL, label: t("Место: все") }, ...locations.map((l) => ({ id: l.id, label: locationPath(locations, l.id) }))];
+  const statusItems = [{ id: ALL, label: t("Статус: активные") }, ...Object.entries(STATUS_LABELS).map(([k, v]) => ({ id: k, label: v }))];
+
+  const where = (e, iconOnly) =>
+    e.slotLabel ? (
+      <span className="inline-flex max-w-36 items-center gap-1 rounded-full bg-utility-brand-50 px-2 py-0.5 text-xs font-medium text-utility-brand-700 ring-1 ring-utility-brand-200 ring-inset" title={e.slotLabel}>
+        <Printer className="size-3 shrink-0" aria-hidden="true" />
+        <span className="truncate">{e.slotLabel}</span>
+      </span>
+    ) : e.locName ? (
+      <span className="inline-flex items-center gap-1.5 text-sm text-secondary">
+        <MarkerPin01 className="size-4 text-fg-quaternary" aria-hidden="true" /> {e.locName}
+      </span>
+    ) : (
+      <span className="text-sm text-quaternary">{iconOnly ? t("не указано") : "—"}</span>
+    );
+
+  const rowMenu = (s) => (
+    <Dropdown.Root>
+      <Dropdown.DotsButton />
+      <Dropdown.Popover className="w-min">
+        <Dropdown.Menu
+          onAction={(key) => {
+            if (key === "edit") navigate(`/spools/${s.id}/edit`);
+            else if (key === "copy") duplicate(s.id);
+            else if (key === "archive") (s.status === "archived" ? unarchive(s.id) : archive(s.id));
+            else if (key === "delete") deleteSpool(s.id);
+          }}
+        >
+          <Dropdown.Item id="edit" icon={Edit01}><span className="pr-4">{t("Редактировать")}</span></Dropdown.Item>
+          <Dropdown.Item id="copy" icon={Copy01}><span className="pr-4">{t("Дублировать (новый цвет)")}</span></Dropdown.Item>
+          <Dropdown.Item id="archive" icon={Archive}>
+            <span className="pr-4">{s.status === "archived" ? t("Из архива") : t("В архив")}</span>
+          </Dropdown.Item>
+          <Dropdown.Separator />
+          <Dropdown.Item id="delete" icon={Trash01}><span className="pr-4">{t("Удалить")}</span></Dropdown.Item>
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown.Root>
+  );
 
   return (
-    <div onClick={() => setMenu(null)}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div>
-          <h2 style={{ marginBottom: 2 }}>{t("Катушки")}</h2>
-          <div className="muted">{t("Управление катушками и отслеживание остатка.")}</div>
-        </div>
-        <button onClick={() => navigate("/spools/new")}><Icon name="plus" /> {t("Добавить катушку")}</button>
-      </div>
+    <div>
+      <PageHeader
+        title={t("Катушки")}
+        subtitle={t("Управление катушками и отслеживание остатка.")}
+        badge={<Badge size="sm" color="brand" type="pill-color">{rows.length}</Badge>}
+        actions={
+          <>
+            <ButtonGroup
+              size="md"
+              aria-label={t("Вид")}
+              selectionMode="single"
+              disallowEmptySelection
+              selectedKeys={[view]}
+              onSelectionChange={(keys) => setView([...keys][0] || "list")}
+            >
+              <ButtonGroupItem id="list" iconLeading={List}>{t("Список")}</ButtonGroupItem>
+              <ButtonGroupItem id="grid" iconLeading={Grid01}>{t("Сетка")}</ButtonGroupItem>
+            </ButtonGroup>
+            <Button size="md" iconLeading={Plus} onClick={() => navigate("/spools/new")}>{t("Добавить катушку")}</Button>
+          </>
+        }
+      />
 
-      {/* Тулбар */}
-      <div className="inv-toolbar" style={{ marginTop: 16 }}>
-        <input className="inv-search" placeholder={t("Поиск по названию или метке…")} value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="filter-chip" value={matFilter} onChange={(e) => setMatFilter(e.target.value)}>
-          <option value="">{t("Материал: все")}</option>
-          {MATERIALS.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-        <select className="filter-chip" value={locFilter} onChange={(e) => setLocFilter(e.target.value)}>
-          <option value="">{t("Место: все")}</option>
-          {locations.map((l) => <option key={l.id} value={l.id}>{locationPath(locations, l.id)}</option>)}
-        </select>
-        <select className="filter-chip" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">{t("Статус: активные")}</option>
-          {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+      {/* Фильтры */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Input
+          size="sm"
+          icon={SearchLg}
+          placeholder={t("Поиск по названию или метке…")}
+          value={search}
+          onChange={setSearch}
+          className="w-full sm:w-72"
+        />
+        <Select size="sm" aria-label={t("Материал")} items={matItems} selectedKey={matFilter} onSelectionChange={(k) => setMatFilter(String(k))} className="w-full sm:w-44">
+          {(item) => <Select.Item id={item.id}>{item.label}</Select.Item>}
+        </Select>
+        <Select size="sm" aria-label={t("Место")} items={locItems} selectedKey={locFilter} onSelectionChange={(k) => setLocFilter(String(k))} className="w-full sm:w-52">
+          {(item) => <Select.Item id={item.id}>{item.label}</Select.Item>}
+        </Select>
+        <Select size="sm" aria-label={t("Статус")} items={statusItems} selectedKey={statusFilter} onSelectionChange={(k) => setStatusFilter(String(k))} className="w-full sm:w-52">
+          {(item) => <Select.Item id={item.id}>{item.label}</Select.Item>}
+        </Select>
+
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           {selectedIds.length > 0 && (
             <>
-              <span className="muted" style={{ fontSize: "var(--fs-3)" }}>{t("Выбрано:")}{" "}{selectedIds.length}</span>
-              <button className="secondary" onClick={printA4}>{t("Печать A4")}</button>
-              <button className="secondary" onClick={bulkArchive}>{t("В архив")}</button>
-              <button className="danger" onClick={bulkDelete}>{t("Удалить")}</button>
+              <span className="text-sm text-tertiary">{t("Выбрано:")} {selectedIds.length}</span>
+              <Button size="sm" color="secondary" onClick={printA4}>{t("Печать A4")}</Button>
+              <Button size="sm" color="secondary" onClick={bulkArchive}>{t("В архив")}</Button>
+              <Button size="sm" color="primary-destructive" onClick={bulkDelete}>{t("Удалить")}</Button>
             </>
           )}
-          <div className="seg">
-            <button className={view === "list" ? "active" : ""} onClick={() => setView("list")}><Icon name="list" size={15} /> {t("Список")}</button>
-            <button className={view === "grid" ? "active" : ""} onClick={() => setView("grid")}><Icon name="grid" size={15} /> {t("Сетка")}</button>
-          </div>
         </div>
       </div>
 
       {view === "list" ? (
-        <div className="card" style={{ padding: 0, overflow: "visible" }}>
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 36, paddingLeft: 16 }}><input type="checkbox" style={{ width: "auto" }} checked={allVisibleSelected} onChange={toggleAll} /></th>
-                <th>{t("Катушка")}</th>
-                <th>{t("Материал")}</th>
-                <th>{t("Цвет")}</th>
-                <th>RGB</th>
-                <th>{t("Где находится")}</th>
-                <th style={{ width: 200 }}>{t("Остаток")}</th>
-                <th style={{ width: 90 }}>{t("Действия")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ s, e }) => (
-                <tr key={s.id} className="inv-row" style={{ "--fil": e.colorHex || "var(--border)" }}>
-                  {/* Полоса реального цвета филамента по левому краю строки —
-                      по ней полку с катушками читают так же, как в жизни. */}
-                  <td className="fil-edge" style={{ paddingLeft: 16 }}><input type="checkbox" style={{ width: "auto" }} checked={!!selected[s.id]} onChange={(ev) => setSelected({ ...selected, [s.id]: ev.target.checked })} /></td>
-                  <td>
-                    <Link to={`/spools/${s.id}`}>{e.title}</Link>
-                  </td>
-                  <td><span className="mat-pill">{e.material}</span></td>
-                  <td>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span className="swatch" style={{ background: e.colorHex || "var(--muted)" }} />
-                      <span style={{ fontSize: "var(--fs-3)" }}>{e.colorName || "—"}</span>
-                    </div>
-                  </td>
-                  <td className="muted mono" style={{ fontSize: "var(--fs-3)" }}>{e.colorHex || "—"}</td>
-                  <td style={{ fontSize: "var(--fs-3)" }}>
-                    {e.slotLabel
-                      ? <span className="badge in_use"><Icon name="printer" size={13} /> {e.slotLabel}</span>
-                      : e.locName
-                      ? <span className="inline-ico"><Icon name="pin" size={14} /> {e.locName}</span>
-                      : <span className="muted">—</span>}
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-3)" }}>
-                      <span className="mono">{e.remaining.toFixed(0)}{" "}{t("г")}</span>
-                      <span className="muted mono">{Math.round(e.pct * 100)}%</span>
-                    </div>
-                    <div className="progress" style={{ marginTop: 6 }}><div style={{ width: `${Math.round(e.pct * 100)}%`, background: barColor(e) }} /></div>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: 6 }} onClick={(ev) => ev.stopPropagation()}>
-                      <button className="icon-btn" title={t("Редактировать")} onClick={() => navigate(`/spools/${s.id}/edit`)}><Icon name="pencil" /></button>
-                      <div className="kebab-wrap">
-                        <button className="icon-btn" title={t("Ещё")} onClick={(ev) => { ev.stopPropagation(); setMenu(menu === s.id ? null : s.id); }}>⋮</button>
-                        {menu === s.id && (
-                          <div className="kebab-menu" onClick={(ev) => ev.stopPropagation()}>
-                            <button onClick={() => duplicate(s.id)}>{t("Дублировать (новый цвет)")}</button>
-                            {s.status === "archived"
-                              ? <button onClick={() => unarchive(s.id)}>{t("Из архива")}</button>
-                              : <button onClick={() => archive(s.id)}>{t("В архив")}</button>}
-                            <button onClick={() => deleteSpool(s.id)}>{t("Удалить")}</button>
-                          </div>
-                        )}
+        <TableCard.Root>
+          <Table
+            size="sm"
+            aria-label={t("Катушки")}
+            selectionMode="multiple"
+            selectedKeys={selectedKeys}
+            onSelectionChange={onSelectionChange}
+            onRowAction={(key) => navigate(`/spools/${key}`)}
+          >
+            <Table.Header>
+              <Table.Head id="spool" isRowHeader label={t("Катушка")} className="w-full" />
+              <Table.Head id="material" label={t("Материал")} className="px-3" />
+              <Table.Head id="status" label={t("Статус")} className="px-3" />
+              <Table.Head id="where" label={t("Где находится")} className="px-3" />
+              <Table.Head id="left" label={t("Остаток")} className="min-w-40 px-3" />
+              <Table.Head id="actions" className="px-3" />
+            </Table.Header>
+            <Table.Body items={rows} renderEmptyState={() => <EmptyNote>{t("Ничего не найдено")}</EmptyNote>}>
+              {({ s, e }) => (
+                <Table.Row id={s.id}>
+                  <Table.Cell>
+                    <div className="flex items-center gap-3">
+                      <SpoolSwatch color={e.colorHex} />
+                      <div className="min-w-0">
+                        <p className="max-w-56 truncate text-sm font-medium text-primary">{e.title}</p>
+                        <p className="max-w-56 truncate text-sm text-tertiary">
+                          {[e.colorName, e.colorHex].filter(Boolean).join(" · ") || "—"}
+                        </p>
                       </div>
                     </div>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && <tr><td colSpan={8} className="muted" style={{ padding: 20 }}>{t("Ничего не найдено")}</td></tr>}
-            </tbody>
-          </table>
-        </div>
+                  </Table.Cell>
+                  <Table.Cell className="px-3"><Badge size="sm" color="gray" type="pill-color">{e.material}</Badge></Table.Cell>
+                  <Table.Cell className="px-3"><SpoolStatusBadge status={s.status} label={STATUS_LABELS[s.status] || s.status} /></Table.Cell>
+                  <Table.Cell className="px-3"><div className="max-w-36">{where(e)}</div></Table.Cell>
+                  <Table.Cell className="px-3">
+                    <RemainingBar grams={e.remaining.toFixed(0)} pct={e.pct} color={barColor(e)} />
+                  </Table.Cell>
+                  <Table.Cell className="px-3">
+                    <div className="flex justify-end">{rowMenu(s)}</div>
+                  </Table.Cell>
+                </Table.Row>
+              )}
+            </Table.Body>
+          </Table>
+        </TableCard.Root>
       ) : (
-        <div className="inv-grid">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map(({ s, e }) => (
-            <div key={s.id} className="card spool-card" style={{ "--fil": e.colorHex || "var(--border)" }} onClick={() => navigate(`/spools/${s.id}`)}>
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <input type="checkbox" style={{ width: "auto" }} checked={!!selected[s.id]} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setSelected({ ...selected, [s.id]: ev.target.checked })} />
+            <Card
+              key={s.id}
+              role="link"
+              tabIndex={0}
+              onClick={() => navigate(`/spools/${s.id}`)}
+              onKeyDown={(ev) => { if (ev.key === "Enter") navigate(`/spools/${s.id}`); }}
+              className="flex cursor-pointer flex-col gap-4 p-4 transition duration-100 ease-linear hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+            >
+              <div className="flex items-start gap-3">
+                <SpoolSwatch color={e.colorHex} size="lg" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-md font-semibold text-primary">{e.title}</p>
+                  <p className="mt-0.5 text-sm text-tertiary">{[e.colorName, e.colorHex].filter(Boolean).join(" · ") || "—"}</p>
+                </div>
+                <div onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>{rowMenu(s)}</div>
               </div>
-              <div style={{ fontWeight: 600 }}>{e.title}</div>
-              <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
-                <span className="mat-pill">{e.material}</span>
-                <span className="swatch" style={{ background: e.colorHex || "var(--muted)" }} />
-                <span style={{ fontSize: "var(--fs-3)" }}>{e.colorName}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge size="sm" color="gray" type="pill-color">{e.material}</Badge>
+                <SpoolStatusBadge status={s.status} label={STATUS_LABELS[s.status] || s.status} />
               </div>
-              <div style={{ marginTop: 8, fontSize: "var(--fs-2)" }}>
-                {e.slotLabel
-                  ? <span className="badge in_use"><Icon name="printer" size={13} /> {e.slotLabel}</span>
-                  : e.locName
-                  ? <span className="muted inline-ico"><Icon name="pin" size={14} /> {e.locName}</span>
-                  : <span className="muted inline-ico"><Icon name="pin" size={14} /> {t("не указано")}</span>}
-              </div>
-              <div style={{ marginTop: "auto", paddingTop: 10, display: "flex", justifyContent: "space-between", fontSize: "var(--fs-3)" }}>
-                <span className="mono">{e.remaining.toFixed(0)}{" "}{t("г")}</span><span className="muted mono">{Math.round(e.pct * 100)}%</span>
-              </div>
-              <div className="progress" style={{ marginTop: 6 }}><div style={{ width: `${Math.round(e.pct * 100)}%`, background: barColor(e) }} /></div>
-            </div>
+              <div>{where(e, true)}</div>
+              <RemainingBar grams={e.remaining.toFixed(0)} pct={e.pct} color={barColor(e)} className="mt-auto" />
+            </Card>
           ))}
-          {rows.length === 0 && <div className="muted">{t("Ничего не найдено")}</div>}
+          {rows.length === 0 && <p className="text-sm text-tertiary">{t("Ничего не найдено")}</p>}
         </div>
       )}
     </div>

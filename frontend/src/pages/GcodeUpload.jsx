@@ -1,5 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Button as AriaButton } from "react-aria-components";
+import { Upload01 } from "@untitledui/icons";
+import { Table, TableCard } from "@/components/application/table/table";
+import { Button } from "@/components/base/buttons/button";
+import { Card, PageHeader, SpoolSwatch } from "../components/ft/ui.jsx";
+import { NONE, Pick } from "../components/ft/form.jsx";
+import { Notice, Stat } from "../components/ft/printer.jsx";
 import { api } from "../api/client.js";
 import { t } from "../i18n.js";
 
@@ -9,16 +16,17 @@ function fmtTime(sec) {
   const m = Math.floor((sec % 3600) / 60);
   return `${h ? h + t("ч") + " " : ""}${m}${t("м")}`;
 }
-const Swatch = ({ hex }) => (
-  <span style={{ display: "inline-block", width: 12, height: 12, borderRadius: 3, background: hex || "#666", border: "1px solid var(--border)", marginRight: 6, verticalAlign: "middle" }} />
-);
+// «Слайсер:» → «Слайсер»: подпись плитки без двоеточия, перевод тот же.
+const bare = (s) => s.replace(/:\s*$/, "");
 
 export default function GcodeUpload() {
   const [printers, setPrinters] = useState([]);
   const [printerId, setPrinterId] = useState("");
   const [parsed, setParsed] = useState(null);
+  const [fileName, setFileName] = useState("");
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const fileRef = useRef();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -28,6 +36,7 @@ export default function GcodeUpload() {
   async function onFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setFileName(file.name);
     setError(null); setParsed(null); setBusy(true);
     try {
       setParsed(await api.postFile("/api/gcode/parse", file));
@@ -43,51 +52,80 @@ export default function GcodeUpload() {
     } catch (err) { setError(err.message); }
   }
 
+  const printerItems = [{ id: NONE, label: t("— без привязки —") }, ...printers.map((p) => ({ id: p.id, label: p.name }))];
+
   return (
     <div>
-      <h2>{t("Загрузка gcode")}</h2>
+      <PageHeader title={t("Загрузка gcode")} />
 
-      <div className="card">
-        <div className="row">
+      <Card className="mb-6">
+        <div className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-2">
+          <Pick
+            label={t("Принтер (необязательно — подставит катушки из слотов)")}
+            value={printerId || NONE}
+            onChange={(k) => setPrinterId(k === NONE ? "" : k)}
+            items={printerItems}
+          />
           <div>
-            <label>{t("Принтер (необязательно — подставит катушки из слотов)")}</label>
-            <select value={printerId} onChange={(e) => setPrinterId(e.target.value)}>
-              <option value="">{t("— без привязки —")}</option>
-              {printers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label>{t("Файл .gcode / .bgcode")}</label>
-            <input type="file" accept=".gcode,.bgcode,.g,.gco" onChange={onFile} />
+            <p className="mb-1.5 text-sm font-medium text-secondary">{t("Файл .gcode / .bgcode")}</p>
+            <AriaButton
+              onPress={() => fileRef.current?.click()}
+              className="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-dashed border-primary bg-secondary_alt px-4 py-2 text-left text-sm outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              <Upload01 className="size-5 shrink-0 text-fg-quaternary" aria-hidden="true" />
+              <span className="truncate text-secondary">{fileName || t("Выбрать файл…")}</span>
+            </AriaButton>
+            <input ref={fileRef} type="file" accept=".gcode,.bgcode,.g,.gco" className="hidden" onChange={onFile} />
           </div>
         </div>
-        {busy && <div className="muted">{t("Обработка…")}</div>}
-        {error && <div className="error">{error}</div>}
-      </div>
+        {busy && <p className="m-0 px-5 pb-5 text-sm text-tertiary">{t("Обработка…")}</p>}
+        {error && <div className="px-5 pb-5"><Notice tone="error" onClose={() => setError(null)}>{error}</Notice></div>}
+      </Card>
 
       {parsed && (
-        <div className="card">
-          <div className="row" style={{ marginBottom: 8 }}>
-            <div><span className="muted">{t("Слайсер:")}</span> {parsed.slicer_name || "?"} {parsed.slicer_version || ""}</div>
-            <div><span className="muted">{t("Время:")}</span> {fmtTime(parsed.estimated_print_time_sec)}</div>
-            <div><span className="muted">{t("Смен филамента:")}</span> {parsed.filament_change_count ?? "—"}</div>
-            <div><span className="muted">{t("Итого:")}</span> {parsed.total_filament_used_g?.toFixed(2)}{" "}{t("г")}</div>
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label={bare(t("Слайсер:"))}>{`${parsed.slicer_name || "?"} ${parsed.slicer_version || ""}`}</Stat>
+            <Stat label={bare(t("Время:"))}>{fmtTime(parsed.estimated_print_time_sec)}</Stat>
+            <Stat label={bare(t("Смен филамента:"))}>{parsed.filament_change_count ?? "—"}</Stat>
+            <Stat label={bare(t("Итого:"))}>
+              {parsed.total_filament_used_g != null ? `${parsed.total_filament_used_g.toFixed(2)} ${t("г")}` : "—"}
+            </Stat>
           </div>
-          <table style={{ marginTop: 4 }}>
-            <thead><tr><th>{t("Инструмент")}</th><th>{t("Материал")}</th><th>{t("Цвет")}</th><th>{t("Расход, г")}</th><th>{t("Расход, мм")}</th></tr></thead>
-            <tbody>
-              {parsed.tools.map((t) => (
-                <tr key={t.tool_index}>
-                  <td>Tool {t.tool_index}</td>
-                  <td>{t.material || "—"}</td>
-                  <td>{t.color_hex && <Swatch hex={t.color_hex} />}{t.color_hex || ""}</td>
-                  <td>{t.used_g != null ? t.used_g.toFixed(2) : "—"}</td>
-                  <td>{t.used_mm != null ? t.used_mm.toFixed(0) : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <button style={{ marginTop: 12 }} onClick={createAndConsume}>{t("Создать печать и списать →")}</button>
+
+          <TableCard.Root>
+            <Table size="sm" aria-label={t("Инструмент")}>
+              <Table.Header>
+                <Table.Head id="tool" isRowHeader label={t("Инструмент")} />
+                <Table.Head id="material" label={t("Материал")} className="px-3" />
+                <Table.Head id="color" label={t("Цвет")} className="w-full px-3" />
+                <Table.Head id="g" label={t("Расход, г")} className="px-3" />
+                <Table.Head id="mm" label={t("Расход, мм")} className="px-3" />
+              </Table.Header>
+              <Table.Body items={parsed.tools.map((tool) => ({ ...tool, id: tool.tool_index }))}>
+                {(tool) => (
+                  <Table.Row id={tool.id}>
+                    <Table.Cell className="font-medium whitespace-nowrap text-primary">Tool {tool.tool_index}</Table.Cell>
+                    <Table.Cell className="px-3">{tool.material || "—"}</Table.Cell>
+                    <Table.Cell className="px-3">
+                      {tool.color_hex ? (
+                        <span className="inline-flex items-center gap-2">
+                          <SpoolSwatch color={tool.color_hex} size="sm" />
+                          <span className="font-mono text-sm text-tertiary">{tool.color_hex}</span>
+                        </span>
+                      ) : "—"}
+                    </Table.Cell>
+                    <Table.Cell className="px-3 tabular-nums">{tool.used_g != null ? tool.used_g.toFixed(2) : "—"}</Table.Cell>
+                    <Table.Cell className="px-3 tabular-nums">{tool.used_mm != null ? tool.used_mm.toFixed(0) : "—"}</Table.Cell>
+                  </Table.Row>
+                )}
+              </Table.Body>
+            </Table>
+          </TableCard.Root>
+
+          <div>
+            <Button size="md" onClick={createAndConsume}>{t("Создать печать и списать →")}</Button>
+          </div>
         </div>
       )}
     </div>

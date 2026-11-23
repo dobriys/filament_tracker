@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Copy01, Plus, Trash01 } from "@untitledui/icons";
+import { Table, TableCard } from "@/components/application/table/table";
+import { Badge } from "@/components/base/badges/badges";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { Dropdown } from "@/components/base/dropdown/dropdown";
+import { Input } from "@/components/base/input/input";
+import { Card, CardHeader, EmptyNote, PageHeader } from "../components/ft/ui.jsx";
+import { NONE, Pick } from "../components/ft/form.jsx";
+import { Notice } from "../components/ft/printer.jsx";
 import { api } from "../api/client.js";
 import { compute, machineRate, resolveRates, DEFAULTS, DEFAULT_MARGINS, PRINTER_KEYS } from "../cost.js";
 import { CURRENCIES, currencySign, fmtMoney } from "../format.js";
 import { dateLocale, t } from "../i18n.js";
-import Icon from "../components/Icon.jsx";
-import Hint from "../components/Hint.jsx";
 
 // Сколько строк показываем в списках по умолчанию — как в исходной таблице.
 const HARDWARE_ROWS = 3;
@@ -108,60 +116,91 @@ function fmtDate(iso) {
   }
 }
 
+// Сетка строки списка: на телефоне название на всю ширину, ниже кол-во, цена и
+// сумма; от sm — всё в одну линию под общей шапкой.
+const ITEM_COLS =
+  "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-x-3 gap-y-2 sm:grid-cols-[minmax(0,1fr)_80px_104px_88px_36px]";
+
 // Строка списка «кол-во × цена»: комплектующие и упаковка устроены одинаково.
 function ItemRows({ items, onChange, currency, addLabel }) {
   const setRow = (i, patch) =>
     onChange(items.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
   return (
-    <>
-      <table className="cards-mobile">
-        <thead>
-          <tr>
-            <th>{t("Название")}</th>
-            <th style={{ width: 110 }}>{t("Кол-во")}</th>
-            <th style={{ width: 130 }}>{t("Цена за штуку")}</th>
-            <th style={{ width: 110 }}>{t("Сумма")}</th>
-            <th style={{ width: 44 }} />
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((row, i) => (
-            <tr key={i}>
-              <td data-label={t("Название")}>
-                <input
-                  value={row.name}
-                  placeholder={t("например, винт M3×12")}
-                  onChange={(e) => setRow(i, { name: e.target.value })}
-                />
-              </td>
-              <td data-label={t("Кол-во")}>
-                <input type="number" min="0" step="any" value={row.qty}
-                  onChange={(e) => setRow(i, { qty: e.target.value })} />
-              </td>
-              <td data-label={t("Цена за штуку")}>
-                <input type="number" min="0" step="any" value={row.unit_cost}
-                  onChange={(e) => setRow(i, { unit_cost: e.target.value })} />
-              </td>
-              <td data-label={t("Сумма")} className="mono">
-                {fmtMoney(Number(row.qty || 0) * Number(row.unit_cost || 0), currency)}
-              </td>
-              <td data-label="">
-                <button
-                  className="icon-btn"
-                  title={t("Убрать строку")}
-                  onClick={() => onChange(items.filter((_, idx) => idx !== i))}
-                >
-                  <Icon name="trash" size={15} />
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <button className="secondary" style={{ marginTop: 8 }} onClick={() => onChange([...items, emptyRow()])}>
-        {addLabel}
-      </button>
-    </>
+    <div className="flex flex-col gap-4">
+      {/* Подписи колонок — только на широком экране; на телефоне подписано каждое поле */}
+      <div className={`${ITEM_COLS} hidden text-sm font-medium text-secondary sm:grid`}>
+        <span>{t("Название")}</span>
+        <span>{t("Кол-во")}</span>
+        <span>{t("Цена за штуку")}</span>
+        <span>{t("Сумма")}</span>
+        <span />
+      </div>
+      {items.map((row, i) => (
+        <div key={i} className={`grid ${ITEM_COLS} items-end`}>
+          <Input
+            size="sm"
+            label={t("Название")}
+            value={row.name}
+            placeholder={t("например, винт M3×12")}
+            onChange={(v) => setRow(i, { name: v })}
+            className="col-span-2 sm:col-span-1 sm:**:data-label:hidden"
+          />
+          <Input
+            size="sm"
+            type="number"
+            min="0"
+            step="any"
+            label={t("Кол-во")}
+            value={row.qty}
+            onChange={(v) => setRow(i, { qty: v })}
+            className="sm:**:data-label:hidden"
+          />
+          <Input
+            size="sm"
+            type="number"
+            min="0"
+            step="any"
+            label={t("Цена за штуку")}
+            value={row.unit_cost}
+            onChange={(v) => setRow(i, { unit_cost: v })}
+            className="sm:**:data-label:hidden"
+          />
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-secondary sm:hidden">{t("Сумма")}</span>
+            <span className="flex h-9 items-center text-sm font-medium whitespace-nowrap text-primary tabular-nums">
+              {fmtMoney(Number(row.qty || 0) * Number(row.unit_cost || 0), currency)}
+            </span>
+          </div>
+          <div className="col-start-3 row-start-1 self-end sm:col-start-auto sm:row-start-auto">
+            <ButtonUtility
+              size="sm"
+              color="tertiary"
+              icon={Trash01}
+              tooltip={t("Убрать строку")}
+              onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+            />
+          </div>
+        </div>
+      ))}
+      <div>
+        <Button size="sm" color="secondary" iconLeading={Plus} onClick={() => onChange([...items, emptyRow()])}>
+          {addLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Строка разбивки себестоимости: что это и сколько. */
+function CostLine({ label, hint, value }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-3">
+      <div className="min-w-0">
+        <p className="m-0 text-sm font-medium text-primary">{label}</p>
+        <p className="m-0 text-sm text-tertiary">{hint}</p>
+      </div>
+      <p className="m-0 text-sm font-semibold whitespace-nowrap text-primary tabular-nums">{value}</p>
+    </div>
   );
 }
 
@@ -306,7 +345,7 @@ export default function CostEstimate() {
 
   async function remove() {
     if (!id) return;
-    if (!confirm(t("Удалить этот расчёт?"))) return;
+    if (!window.confirm(t("Удалить этот расчёт?"))) return;
     try {
       await api.del(`/api/cost-estimates/${id}`);
       loadSaved();
@@ -316,276 +355,265 @@ export default function CostEstimate() {
 
   const rate = machineRate(rates);
 
+  const jobItems = [
+    { id: NONE, label: t("— заполнить вручную —") },
+    ...jobs.map((j) => ({
+      id: j.id,
+      label: `${(j.file_name || t("без файла")).split("/").pop()} · ${fmtDate(j.completed_at || j.created_at)}${j.consumed_g != null ? ` · ${j.consumed_g.toFixed(0)} ${t("г")}` : ""}`,
+    })),
+  ];
+  const printerItems = [{ id: NONE, label: t("— общие настройки —") }, ...printers.map((p) => ({ id: p.id, label: p.name }))];
+  const currencyItems = CURRENCIES.map((c) => ({ id: c, label: `${c} ${currencySign(c)}` }));
+
   return (
     <div>
-      <h2>{t("Расчёт стоимости печати")}</h2>
-      <p className="muted">
-        {t("Полная себестоимость изделия: филамент, электричество, износ принтера, ваше время и упаковка — и цена, которая оставляет нужную наценку.")}
-      </p>
-
-      {error && <div className="error">{error}</div>}
-
-      <div className="card">
-        <h3 className="card-title">{t("Исходные данные")}</h3>
-        <div className="row">
-          <label>
-            {t("Взять из печати")}
-            <select value={jobId} onChange={(e) => pickJob(e.target.value)}>
-              <option value="">{t("— заполнить вручную —")}</option>
-              {jobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {(j.file_name || t("без файла")).split("/").pop()} · {fmtDate(j.completed_at || j.created_at)}
-                  {j.consumed_g != null ? ` · ${j.consumed_g.toFixed(0)} ${t("г")}` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t("Принтер")}
-            <Hint text={t("Чьи тарифы пойдут в стоимость машиночаса. Задаются на странице «Принтеры» → «Себестоимость». Без принтера берутся значения по умолчанию.")} />
-            <select value={printerId} onChange={(e) => setPrinterId(e.target.value)}>
-              <option value="">{t("— общие настройки —")}</option>
-              {printers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </label>
-        </div>
-
-        <div className="row">
-          <label>
-            {t("Название изделия")}
-            <input value={form.part_name} onChange={(e) => set({ part_name: e.target.value })} />
-          </label>
-          <label>
-            {t("Версия")}
-            <input value={form.revision} placeholder="V1" onChange={(e) => set({ revision: e.target.value })} />
-          </label>
-          <label>
-            {t("Дата")}
-            <input type="date" value={form.date} onChange={(e) => set({ date: e.target.value })} />
-          </label>
-          <label>
-            {t("Материал")}
-            <input value={form.material} placeholder="PETG" onChange={(e) => set({ material: e.target.value })} />
-          </label>
-          <label>
-            {t("Валюта")}
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-              {CURRENCIES.map((c) => (
-                <option key={c} value={c}>{c} {currencySign(c)}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="muted" style={{ fontSize: 12 }}>
-          {/* Курса у приложения нет, и заводить его ради подписи не стоит:
-              валюта здесь говорит, в чём заданы числа, а не пересчитывает их. */}
-          {t("Смена валюты не пересчитывает числа — она только подписывает суммы. Все цифры, включая параметры принтера, должны быть в одной валюте.")}
-        </div>
-
-        <div className="row">
-          <label>
-            {label("Цена филамента, %s/кг")}
-            <Hint text={t("Во сколько вам обошёлся килограмм этого пластика. Если взять данные из готовой печати, цена подставится по фактически списанным катушкам.")} />
-            <input type="number" min="0" step="any" value={form.filament_price_per_kg}
-              onChange={(e) => { set({ filament_price_per_kg: e.target.value }); setPriceFromJob(null); }} />
-          </label>
-          <label>
-            {t("Филамента на изделие, г")}
-            <input type="number" min="0" step="any" value={form.filament_g}
-              onChange={(e) => set({ filament_g: e.target.value })} />
-          </label>
-          <label>
-            {t("Время печати, ч")}
-            <Hint text={t("Сколько принтер печатает всю партию. Из этих часов и тарифов принтера получается стоимость машиночаса — износ плюс электричество.")} />
-            <input type="number" min="0" step="any" value={form.print_time_h}
-              onChange={(e) => set({ print_time_h: e.target.value })} />
-          </label>
-          <label>
-            {t("Работа руками, мин")}
-            <Hint text={t("Ваше время на всю партию: снять со стола, убрать поддержки, зашкурить, собрать, упаковать. Время печати сюда не входит — принтер работает сам.")} />
-            <input type="number" min="0" step="any" value={form.labor_min}
-              onChange={(e) => set({ labor_min: e.target.value })} />
-          </label>
-          <label>
-            {label("Ставка труда, %s/ч")}
-            <Hint text={t("Во сколько вы оцениваете свой час работы. Умножается на «работу руками» — на время печати не влияет.")} />
-            <input type="number" min="0" step="any" value={form.labor_per_hour}
-              onChange={(e) => set({ labor_per_hour: e.target.value })} />
-          </label>
-          <label>
-            {t("Расход филамента, ×")}
-            <Hint text={t("Насколько пластика уходит больше, чем весит сама деталь: юбка, поддержки, продувка при смене цвета, неудачные попытки. 1.1 значит «прибавить 10 %»; 1 — считать ровно по весу детали.")} />
-            <input type="number" min="1" step="0.05" value={form.material_efficiency}
-              onChange={(e) => set({ material_efficiency: e.target.value })} />
-          </label>
-          <label>
-            {t("Штук в партии")}
-            <Hint text={t("Сколько изделий печатается за раз. Умножается только филамент: время печати и работа руками задаются сразу на всю партию.")} />
-            <input type="number" min="1" step="1" value={form.qty}
-              onChange={(e) => set({ qty: e.target.value })} />
-          </label>
-        </div>
-        {priceFromJob && (
-          <div className="muted" style={{ fontSize: 12 }}>
-            {t("Цена филамента посчитана по фактически списанным катушкам.")}
-            {priceFromJob.partial && ` ${t("(часть катушек без цены — итог занижен)")}`}
-          </div>
-        )}
-      </div>
-
-      <div className="card">
-        <h3 className="card-title">{t("Комплектующие")}</h3>
-        <p className="muted" style={{ fontSize: 12 }}>
-          {t("Всё, что входит в изделие кроме филамента: крепёж, магниты, вставки, электроника.")}
-        </p>
-        <ItemRows
-          items={form.hardware}
-          onChange={(hardware) => set({ hardware })}
-          currency={currency}
-          addLabel={t("Добавить комплектующее")}
-        />
-      </div>
-
-      <div className="card">
-        <h3 className="card-title">{t("Упаковка и доставка")}</h3>
-        <p className="muted" style={{ fontSize: 12 }}>
-          {t("Коробка, плёнка, скотч, вкладыш — и почтовые расходы, если доставка за ваш счёт.")}
-        </p>
-        <ItemRows
-          items={form.packaging}
-          onChange={(packaging) => set({ packaging })}
-          currency={currency}
-          addLabel={t("Добавить упаковку")}
-        />
-      </div>
-
-      <div className="printer-lifetime">
-        <div className="printer-lifetime-head">
-          <div>
-            <div className="printer-lifetime-title">{t("Себестоимость")}</div>
-            <div className="printer-lifetime-subtitle">
-              {t("Час печати обходится в")}{" "}{fmtMoney(rate.total_per_hour, currency)}
-              {printer ? ` · ${printer.name}` : ""}
-            </div>
-          </div>
-        </div>
-        <div className="printer-lifetime-body">
-          <div className="printer-lifetime-hero">
-            <span>{t("Полная себестоимость")}</span>
-            <b>{fmtMoney(totals.landed_total, currency)}</b>
-            <em>{t("за всю партию")}</em>
-          </div>
-          <div className="printer-lifetime-grid">
-            <div className="printer-lifetime-stat">
-              <span>{t("Материалы")}</span>
-              <b>{fmtMoney(totals.materials_total, currency)}</b>
-              <em>{t("филамент и комплектующие")}</em>
-            </div>
-            <div className="printer-lifetime-stat">
-              <span>{t("Работа руками")}</span>
-              <b>{fmtMoney(totals.labor_total, currency)}</b>
-              <em>{fmtMoney(rates.labor_per_hour, currency)}{" "}{t("в час")}</em>
-            </div>
-            <div className="printer-lifetime-stat">
-              <span>{t("Принтер")}</span>
-              <b>{fmtMoney(totals.machine_total, currency)}</b>
-              <em>{t("износ и электричество")}</em>
-            </div>
-            <div className="printer-lifetime-stat">
-              <span>{t("Упаковка")}</span>
-              <b>{fmtMoney(totals.packaging_total, currency)}</b>
-              <em>{t("и доставка")}</em>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {stale && (
-        <div className="card" style={{ borderColor: "var(--hot)" }}>
-          <div className="row" style={{ alignItems: "center" }}>
-            <div>
-              {t("Расчёт считается по параметрам принтера на момент сохранения — с тех пор их поменяли.")}
-            </div>
-            <button className="secondary" onClick={refreshRates}>{t("Пересчитать по тарифам принтера")}</button>
-          </div>
-        </div>
-      )}
-
-      <div className="card">
-        <h3 className="card-title">{t("Цена по наценке")}</h3>
-        <p className="muted" style={{ fontSize: 12 }}>
-          {t("Наценка считается от цены продажи: при 60 % себестоимость составляет 40 % от неё.")}
-        </p>
-        <div className="row">
-          {form.margins.map((m, i) => (
-            <label key={i}>
-              {t("Наценка, %")}
-              {i === 0 && (
-                <Hint text={t("Доля цены продажи, которая остаётся вам сверх себестоимости. При 60 % себестоимость составляет 40 % цены, то есть цена = себестоимость ÷ 0,4. Это не «накрутка сверху»: наценка 100 % невозможна.")} />
-              )}
-              <input type="number" min="0" max="99" step="any" value={m}
-                onChange={(e) => set({ margins: form.margins.map((x, idx) => (idx === i ? e.target.value : x)) })} />
-              <b className="mono" style={{ display: "block", marginTop: 6, fontSize: "var(--fs-5)" }}>
-                {fmtMoney(totals.prices[i]?.price, currency) || "—"}
-              </b>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="row" style={{ alignItems: "flex-end" }}>
-          <label style={{ flex: "1 1 100%" }}>
-            {t("Заметки")}
-            <input value={form.notes} onChange={(e) => set({ notes: e.target.value })} />
-          </label>
-        </div>
-        <div className="row" style={{ marginTop: 10 }}>
-          <button onClick={() => save()} disabled={busy}>
-            {id ? t("Сохранить") : t("Сохранить расчёт")}
-          </button>
-          {id && (
-            <>
-              <button className="secondary" onClick={() => save({ asNew: true })} disabled={busy}>
-                {t("Сохранить как новый")}
-              </button>
-              <button className="secondary" onClick={remove}>{t("Удалить")}</button>
-              <button className="secondary" onClick={() => navigate("/cost")}>{t("Новый расчёт")}</button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="card">
-        <h3 className="card-title">{t("Сохранённые расчёты")}</h3>
-        <table className="cards-mobile">
-          <thead>
-            <tr>
-              <th>{t("Название")}</th>
-              <th>{t("Версия")}</th>
-              <th>{t("Себестоимость")}</th>
-              <th>{t("Изменён")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {saved.map((e) => (
-              <tr
-                key={e.id}
-                onClick={() => navigate(`/cost/${e.id}`)}
-                style={{ cursor: "pointer", fontWeight: e.id === id ? 700 : 400 }}
-              >
-                <td data-label={t("Название")}>{e.name}</td>
-                <td data-label={t("Версия")} className="muted">{e.revision || "—"}</td>
-                <td data-label={t("Себестоимость")} className="mono">{fmtMoney(e.landed_cost, e.currency)}</td>
-                <td data-label={t("Изменён")} className="muted">{fmtDate(e.updated_at)}</td>
-              </tr>
-            ))}
-            {saved.length === 0 && (
-              <tr><td colSpan={4} className="muted">{t("Пока нет сохранённых расчётов")}</td></tr>
+      <PageHeader
+        title={t("Расчёт стоимости печати")}
+        subtitle={t("Полная себестоимость изделия: филамент, электричество, износ принтера, ваше время и упаковка — и цена, которая оставляет нужную наценку.")}
+        actions={
+          <>
+            {id && (
+              <>
+                <Button size="md" color="secondary" iconLeading={Plus} onClick={() => navigate("/cost")}>{t("Новый расчёт")}</Button>
+                <Dropdown.Root>
+                  <Dropdown.DotsButton />
+                  <Dropdown.Popover className="w-min">
+                    <Dropdown.Menu
+                      onAction={(key) => {
+                        if (key === "new") save({ asNew: true });
+                        else if (key === "delete") remove();
+                      }}
+                    >
+                      <Dropdown.Item id="new" icon={Copy01}><span className="pr-4">{t("Сохранить как новый")}</span></Dropdown.Item>
+                      <Dropdown.Separator />
+                      <Dropdown.Item id="delete" icon={Trash01}><span className="pr-4">{t("Удалить")}</span></Dropdown.Item>
+                    </Dropdown.Menu>
+                  </Dropdown.Popover>
+                </Dropdown.Root>
+              </>
             )}
-          </tbody>
-        </table>
+            <Button size="md" isLoading={busy} onClick={() => save()}>
+              {id ? t("Сохранить") : t("Сохранить расчёт")}
+            </Button>
+          </>
+        }
+      />
+
+      {error && <Notice tone="error" className="mb-6" onClose={() => setError(null)}>{error}</Notice>}
+
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+        {/* Слева — что вводим */}
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader title={t("Исходные данные")} />
+            <div className="flex flex-col gap-5 p-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Pick
+                  label={t("Взять из печати")}
+                  value={jobId || NONE}
+                  onChange={(k) => pickJob(k === NONE ? "" : k)}
+                  items={jobItems}
+                />
+                <Pick
+                  label={t("Принтер")}
+                  tooltip={t("Чьи тарифы пойдут в стоимость машиночаса. Задаются на странице «Принтеры» → «Себестоимость». Без принтера берутся значения по умолчанию.")}
+                  value={printerId || NONE}
+                  onChange={(k) => setPrinterId(k === NONE ? "" : k)}
+                  items={printerItems}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input size="sm" label={t("Название изделия")} value={form.part_name} onChange={(v) => set({ part_name: v })} />
+                <Input size="sm" label={t("Версия")} value={form.revision} placeholder="V1" onChange={(v) => set({ revision: v })} />
+                <Input size="sm" type="date" label={t("Дата")} value={form.date} onChange={(v) => set({ date: v })} />
+                <Input size="sm" label={t("Материал")} value={form.material} placeholder="PETG" onChange={(v) => set({ material: v })} />
+                <Pick label={t("Валюта")} value={currency} onChange={setCurrency} items={currencyItems} />
+              </div>
+              {/* Курса у приложения нет, и заводить его ради подписи не стоит:
+                  валюта здесь говорит, в чём заданы числа, а не пересчитывает их. */}
+              <p className="m-0 -mt-2 text-sm text-tertiary">
+                {t("Смена валюты не пересчитывает числа — она только подписывает суммы. Все цифры, включая параметры принтера, должны быть в одной валюте.")}
+              </p>
+
+              <div className="grid grid-cols-1 gap-4 border-t border-secondary pt-5 sm:grid-cols-2">
+                <Input
+                  size="sm" type="number" min="0" step="any"
+                  label={label("Цена филамента, %s/кг")}
+                  tooltip={t("Во сколько вам обошёлся килограмм этого пластика. Если взять данные из готовой печати, цена подставится по фактически списанным катушкам.")}
+                  value={form.filament_price_per_kg}
+                  onChange={(v) => { set({ filament_price_per_kg: v }); setPriceFromJob(null); }}
+                />
+                <Input
+                  size="sm" type="number" min="0" step="any"
+                  label={t("Филамента на изделие, г")}
+                  value={form.filament_g}
+                  onChange={(v) => set({ filament_g: v })}
+                />
+                <Input
+                  size="sm" type="number" min="0" step="any"
+                  label={t("Время печати, ч")}
+                  tooltip={t("Сколько принтер печатает всю партию. Из этих часов и тарифов принтера получается стоимость машиночаса — износ плюс электричество.")}
+                  value={form.print_time_h}
+                  onChange={(v) => set({ print_time_h: v })}
+                />
+                <Input
+                  size="sm" type="number" min="0" step="any"
+                  label={t("Работа руками, мин")}
+                  tooltip={t("Ваше время на всю партию: снять со стола, убрать поддержки, зашкурить, собрать, упаковать. Время печати сюда не входит — принтер работает сам.")}
+                  value={form.labor_min}
+                  onChange={(v) => set({ labor_min: v })}
+                />
+                <Input
+                  size="sm" type="number" min="0" step="any"
+                  label={label("Ставка труда, %s/ч")}
+                  tooltip={t("Во сколько вы оцениваете свой час работы. Умножается на «работу руками» — на время печати не влияет.")}
+                  value={form.labor_per_hour}
+                  onChange={(v) => set({ labor_per_hour: v })}
+                />
+                <Input
+                  size="sm" type="number" min="1" step="0.05"
+                  label={t("Расход филамента, ×")}
+                  tooltip={t("Насколько пластика уходит больше, чем весит сама деталь: юбка, поддержки, продувка при смене цвета, неудачные попытки. 1.1 значит «прибавить 10 %»; 1 — считать ровно по весу детали.")}
+                  value={form.material_efficiency}
+                  onChange={(v) => set({ material_efficiency: v })}
+                />
+                <Input
+                  size="sm" type="number" min="1" step="1"
+                  label={t("Штук в партии")}
+                  tooltip={t("Сколько изделий печатается за раз. Умножается только филамент: время печати и работа руками задаются сразу на всю партию.")}
+                  value={form.qty}
+                  onChange={(v) => set({ qty: v })}
+                />
+              </div>
+              {priceFromJob && (
+                <p className="m-0 -mt-2 text-sm text-tertiary">
+                  {t("Цена филамента посчитана по фактически списанным катушкам.")}
+                  {priceFromJob.partial && ` ${t("(часть катушек без цены — итог занижен)")}`}
+                </p>
+              )}
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title={t("Комплектующие")}
+              description={t("Всё, что входит в изделие кроме филамента: крепёж, магниты, вставки, электроника.")}
+            />
+            <div className="p-5">
+              <ItemRows
+                items={form.hardware}
+                onChange={(hardware) => set({ hardware })}
+                currency={currency}
+                addLabel={t("Добавить комплектующее")}
+              />
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title={t("Упаковка и доставка")}
+              description={t("Коробка, плёнка, скотч, вкладыш — и почтовые расходы, если доставка за ваш счёт.")}
+            />
+            <div className="p-5">
+              <ItemRows
+                items={form.packaging}
+                onChange={(packaging) => set({ packaging })}
+                currency={currency}
+                addLabel={t("Добавить упаковку")}
+              />
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <Input size="sm" label={t("Заметки")} value={form.notes} onChange={(v) => set({ notes: v })} />
+          </Card>
+        </div>
+
+        {/* Справа — что получилось; при прокрутке остаётся на виду */}
+        <div className="flex flex-col gap-6 lg:sticky lg:top-6">
+          <Card>
+            <CardHeader
+              title={t("Себестоимость")}
+              description={`${t("Час печати обходится в")} ${fmtMoney(rate.total_per_hour, currency)}${printer ? ` · ${printer.name}` : ""}`}
+            />
+            <div className="p-5">
+              <p className="m-0 text-sm font-medium text-tertiary">{t("Полная себестоимость")}</p>
+              <p className="m-0 mt-1 text-display-md font-semibold tracking-tight text-primary tabular-nums">{fmtMoney(totals.landed_total, currency)}</p>
+              <p className="m-0 mt-0.5 text-sm text-tertiary">{t("за всю партию")}</p>
+              <div className="mt-4 divide-y divide-secondary border-t border-secondary">
+                <CostLine label={t("Материалы")} hint={t("филамент и комплектующие")} value={fmtMoney(totals.materials_total, currency)} />
+                <CostLine
+                  label={t("Работа руками")}
+                  hint={`${fmtMoney(rates.labor_per_hour, currency)} ${t("в час")}`}
+                  value={fmtMoney(totals.labor_total, currency)}
+                />
+                <CostLine label={t("Принтер")} hint={t("износ и электричество")} value={fmtMoney(totals.machine_total, currency)} />
+                <CostLine label={t("Упаковка")} hint={t("и доставка")} value={fmtMoney(totals.packaging_total, currency)} />
+              </div>
+            </div>
+          </Card>
+
+          {stale && (
+            <Notice
+              tone="warning"
+              actions={<Button size="sm" color="secondary" onClick={refreshRates}>{t("Пересчитать по тарифам принтера")}</Button>}
+            >
+              {t("Расчёт считается по параметрам принтера на момент сохранения — с тех пор их поменяли.")}
+            </Notice>
+          )}
+
+          <Card>
+            <CardHeader
+              title={t("Цена по наценке")}
+              description={t("Наценка считается от цены продажи: при 60 % себестоимость составляет 40 % от неё.")}
+            />
+            <div className="grid grid-cols-2 gap-4 p-5">
+              {form.margins.map((m, i) => (
+                <div key={i}>
+                  <Input
+                    size="sm" type="number" min="0" max="99" step="any"
+                    label={t("Наценка, %")}
+                    tooltip={i === 0 ? t("Доля цены продажи, которая остаётся вам сверх себестоимости. При 60 % себестоимость составляет 40 % цены, то есть цена = себестоимость ÷ 0,4. Это не «накрутка сверху»: наценка 100 % невозможна.") : undefined}
+                    value={m}
+                    onChange={(v) => set({ margins: form.margins.map((x, idx) => (idx === i ? v : x)) })}
+                  />
+                  <p className="m-0 mt-2 text-lg font-semibold text-primary tabular-nums">
+                    {fmtMoney(totals.prices[i]?.price, currency) || "—"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
       </div>
+
+      <TableCard.Root className="mt-6">
+        <TableCard.Header
+          title={t("Сохранённые расчёты")}
+          badge={<Badge size="sm" color="brand" type="pill-color">{saved.length}</Badge>}
+        />
+        <Table size="sm" aria-label={t("Сохранённые расчёты")} onRowAction={(key) => navigate(`/cost/${key}`)}>
+          <Table.Header>
+            <Table.Head id="name" isRowHeader label={t("Название")} className="w-full" />
+            <Table.Head id="revision" label={t("Версия")} className="px-3" />
+            <Table.Head id="landed" label={t("Себестоимость")} className="px-3" />
+            <Table.Head id="updated" label={t("Изменён")} className="px-3" />
+          </Table.Header>
+          <Table.Body items={saved} renderEmptyState={() => <EmptyNote>{t("Пока нет сохранённых расчётов")}</EmptyNote>}>
+            {(e) => (
+              <Table.Row id={e.id}>
+                <Table.Cell>
+                  <span className={e.id === id ? "font-semibold text-brand-secondary" : "font-medium text-primary"}>{e.name}</span>
+                </Table.Cell>
+                <Table.Cell className="px-3 text-tertiary">{e.revision || "—"}</Table.Cell>
+                <Table.Cell className="px-3 whitespace-nowrap tabular-nums">{fmtMoney(e.landed_cost, e.currency)}</Table.Cell>
+                <Table.Cell className="px-3 whitespace-nowrap text-tertiary">{fmtDate(e.updated_at)}</Table.Cell>
+              </Table.Row>
+            )}
+          </Table.Body>
+        </Table>
+      </TableCard.Root>
     </div>
   );
 }
