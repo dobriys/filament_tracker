@@ -115,3 +115,48 @@ def test_archived_spool_is_never_touched():
     s = _spool(0, status="archived")
     recompute_status(s, 100)
     assert s.status == "archived"
+
+
+# --- статус сразу при создании ------------------------------------------
+
+
+class _FakeDb:
+    """Ровно то, что нужно create_spool: добавить, сбросить, сохранить."""
+
+    def __init__(self):
+        self.added = []
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    def flush(self):
+        pass
+
+    def commit(self):
+        pass
+
+    def refresh(self, obj):
+        pass
+
+
+@pytest.mark.parametrize(
+    "left, expected",
+    [
+        (60, "almost_empty"),  # початая катушка с остатком ниже порога
+        (0, "empty"),
+        (1000, "new"),         # полная — остаётся «новой», пока не печатали
+    ],
+)
+def test_created_spool_gets_status_from_its_remainder(monkeypatch, left, expected):
+    """Раньше статус при создании всегда был «новая» и менялся только после
+    первого события — катушка с 60 г висела «новой»."""
+    from app.services import spool_service
+
+    monkeypatch.setattr(spool_service, "low_threshold", lambda db, spool: 100)
+    owner = SimpleNamespace(id=None)
+    spool = spool_service.create_spool(
+        _FakeDb(),
+        owner=owner,
+        data={"initial_filament_weight_g": 1000, "current_weight_g": left},
+    )
+    assert spool.status == expected

@@ -150,6 +150,9 @@ def create_spool(
         status="new",
         qr_token=generate_qr_token(),
     )
+    # Початая катушка может прийти уже с малым остатком — статус сразу по нему,
+    # а не «новая» до первого события. Полная остаётся «новой».
+    recompute_status(spool, low_threshold(db, spool))
     db.add(spool)
     db.flush()  # получить spool.id
 
